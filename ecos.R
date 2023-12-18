@@ -1,5 +1,6 @@
 import::from(stringr, str_detect)
 import::from(readxl, read_excel)
+import::from(shinyjs, useShinyjs, extendShinyjs, js)
 library(dplyr)
 library(shiny)
 library(ecos)
@@ -8,8 +9,6 @@ library(miniUI)
 yaml::read_yaml('config.yaml', 
                 readLines.warn = F)$ecos |> 
   ecos.setKey()
-
-table_list <- statTableList() |> tibble() 
 
 find_stat <- function(name=''){
   
@@ -46,9 +45,14 @@ save_items <- function(df){
     saveRDS('ecos_item.rds')
 }
 
-myHelloGadget = function(v){
+myHelloGadget = function(){
   ui = miniPage(
-    gadgetTitleBar("ECOS items"),
+    useShinyjs(),
+    extendShinyjs(
+      text =  "shinyjs.closeWindow = function() { window.close(); }",
+      functions = c("closeWindow")
+    ),
+    miniTitleBar("ECOS items"),
     miniTabstripPanel(
       miniTabPanel(
         "통계표목록",
@@ -74,6 +78,8 @@ myHelloGadget = function(v){
   )
   
   server = function(input, output, session){
+    
+    table_list <- statTableList() |> tibble() 
     
     values <- reactiveValues(name='', 
                              code_list='',
@@ -117,10 +123,18 @@ myHelloGadget = function(v){
       values$cyl <- input$cyl_in
     })
     
-    observeEvent(input$done, {
-      returnValue = 1 # return 값 설정 가능
-      stopApp(returnValue)
-    })
+    session$onSessionEnded(
+      function(){
+        returnValue = 1
+        stopApp(returnValue)
+      }
+    )
+    
+    # observeEvent(input$done, {
+    #   returnValue = 1 # return 값 설정 가능
+    #   js$closeWindow()
+    #   stopApp(returnValue)
+    # })
   }
   runGadget(ui,server, 
             viewer=browserViewer())
