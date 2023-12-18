@@ -13,7 +13,7 @@ table_list <- statTableList() |> tibble()
 
 find_stat <- function(name=''){
   
-  if(name == '') table_list
+  if(is.null(name)||name == '') table_list
   else{
     table_list|> 
     filter(str_detect(stat_name, name), 
@@ -21,11 +21,22 @@ find_stat <- function(name=''){
   }
 }
 
-find_items <- function(code, item='', cyl=''){
-  df <- statItemList(code) |> tibble()
-  if(item!='') df <- df |> filter(item_name==item)
-  if(cyl!='') df <- df |> filter(cycle==cyl)
-  df |> select(item_name, stat_code, item_code, cycle)
+find_items <- function(code='', item='전체', cyl='전체'){
+  
+  if(is.null(code)||code == '') {
+    tibble(item_name='',stat_code='',item_code='',cycle='')
+  }
+  else {
+    df <- statItemList(code) |> tibble()
+  
+    if(is.null(item)||item=='전체'){}
+    else df <- df |> filter(item_name==item)
+    
+    if(is.null(cyl)||cyl=='전체'){} 
+    else df <- df |> filter(cycle==cyl)
+  
+    df |> select(item_name, stat_code, item_code, cycle)
+  }
 }
 
 save_items <- function(df){
@@ -35,88 +46,75 @@ save_items <- function(df){
     saveRDS('ecos_item.rds')
 }
 
-
-saveRDS(df, 'df.rds')
-
-find_stat('시장금리')
-find_items('817Y002')
-
-readRDS('ecos_item.rds')
-
-name <- '국고채(10년)'
-item_table <- read_excel('ecos.xlsx')
-item_info <- item_table |> 
-  filter(통계항목명 = name)
-
-code = '721Y001'
-item1 = '5050000'
-cyl = "M"
-
-  
-
-
-start <-  NULL
-end <-  NULL
-if(is.null(start)) start <- df_item$start_time
-if(is.null(end)) end <- df_item$end_time
-cnt <- df_item$data_cnt
-cyl <- df_item$cycle
-
-statSearch(stat_code=code, item_code1=item1, cycle=cyl, 
-           start_time=start, end_time=end, count=100) |> tibble() |> View()
-
-
-
 myHelloGadget = function(v){
   ui = miniPage(
     gadgetTitleBar("ECOS items"),
-    miniContentPanel(
-      fillCol(
-        uiOutput('in_ui'),
-        tableOutput('tbl'),
-        textOutput('num')
+    miniTabstripPanel(
+      miniTabPanel(
+        "통계표목록",
+        icon=icon('table'),
+        miniContentPanel(
+          fillCol(
+            uiOutput('in_ui'),
+            tableOutput('tbl')
+          )
+        )           
+      ),
+      miniTabPanel(
+        "아이템목록",
+        icon=icon('table'),
+        miniContentPanel(
+          fillCol(
+            uiOutput('in_ui2'),
+            tableOutput('tbl2')
+          )
+        )
       )
     )
   )
   
   server = function(input, output, session){
     
-    values <- reactiveValues(code='', item='', cyl='')
+    values <- reactiveValues(name='', 
+                             code_list='',
+                             code='', 
+                             item_list='전체',
+                             item='전체', 
+                             cyl_list='전체',
+                             cyl='전체')
     
     output$in_ui <- renderUI({
+      textInput('name','검색어', values$name)
+    })
+    
+    observe({
+      values$name <- input$name
+      df <- find_stat(input$name)
+      output$tbl <- renderTable(df)
+      values$code_list <- c('', df$stat_code)
+      values$code <- input$code_in
+    })
+    
+    output$in_ui2 <- renderUI({
       fillRow(
-        textInput('name','검색어'),
-        actionButton('btn1','입력'),
-        selectizeInput('code_in','통계표코드', values$code),
-        selectizeInput('item_in','아이템이름', values$item),
-        selectizeInput('cyl_in','아이템이름', values$cyl),
-        actionButton('btn2','입력'),
-        actionButton('btn3','초기화')
+        selectizeInput('code_in','통계표코드', 
+                       values$code_list, values$code),
+        selectizeInput('item_in','아이템이름', 
+                       values$item_list, values$item),
+        selectizeInput('cyl_in','데이터주기', 
+                       values$cyl_list, values$cyl)
       )
     })
     
-    observeEvent(input$btn1,{
-      df <- find_stat(input$name)
-      output$tbl <- renderTable(df)
-      values$code <- df$stat_code
-    })
 
-    observeEvent(input$btn2,{
-      df <- find_items(input$code_in, input$item_in, input$cyl_in)
-      output$tbl <- renderTable(df)
-      values$code <- c('', unique(df$stat_code))
-      values$item <- c('', unique(df$item_name))
-      values$cyl <- c('', unique(df$cycle))
-      
-    })
-    
-    observeEvent(input$btn3,{
-      df <- find_items(input$code_in, input$item_in, input$cyl_in)
-      output$tbl <- renderTable(df)
-      values$code <- 
-      values$item <- c('', unique(df$item_name))
-      values$cyl <- c('', unique(df$cycle))
-      
+    observe({
+      df2 <- find_items(input$code_in, input$item_in, input$cyl_in)
+      output$tbl2 <- renderTable(df2)
+      values$code <- input$code_in
+      values$item_list <- c('전체', unique(df2$item_name))
+      values$item <- input$item_in
+      values$cyl_list <- c('전체', unique(df2$cycle))
+      values$cyl <- input$cyl_in
     })
     
     observeEvent(input$done, {
@@ -125,7 +123,7 @@ myHelloGadget = function(v){
     })
   }
   runGadget(ui,server, 
-            viewer=dialogViewer('ggg', width = 1200, height = 1000))
+            viewer=browserViewer())
 }
 
 myHelloGadget()
