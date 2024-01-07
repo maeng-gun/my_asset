@@ -1,13 +1,6 @@
 import::from(stringr, str_detect, str_extract)
-import::from(readxl, read_excel)
-import::from(shinyjs, useShinyjs, extendShinyjs, js)
-
-
 library(dplyr)
-library(shiny)
 library(ecos)
-library(miniUI)
-library(bs4Dash)
 
 yaml::read_yaml('config.yaml', 
                 readLines.warn = F)$ecos |> 
@@ -67,8 +60,8 @@ myHelloGadget = function(){
         "통계표목록",
         icon=icon('table'),
         miniContentPanel(
-          column(4,textInput('name','검색어')),
-          column(8,tableOutput('tbl'))
+          column(3,textInput('name','검색어')),
+          column(9,tableOutput('tbl'))
         )           
       ),
       miniTabPanel(
