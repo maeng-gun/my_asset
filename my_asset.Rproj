@@ -13,7 +13,3 @@ RnwWeave: Sweave
 LaTeX: pdfLaTeX
 
 UseNativePipeOperator: Yes
-
-PythonType: conda
-PythonVersion: 3.8.17
-PythonPath: C:/Users/maeng-gun/.conda/envs/auto_invest/python.exe

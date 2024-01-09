@@ -40,7 +40,7 @@ Ecos <- R6Class(
       else {
         statItemList(code) |> 
           tibble() |> 
-          select(stat_name, item_name, stat_code, item_code, cycle:new_name) |> 
+          select(stat_name, item_name, stat_code, item_code, cycle:data_cnt) |> 
           mutate(stat_name = stringr::str_extract(stat_name,"(?<=\\.\\s).*"))
       }
     },

@@ -22,6 +22,11 @@ sidebar <- dashboardSidebar(
             text = "한국은행 지표선정",
             icon = icon(name = "hand-pointer"),
             tabName = "ecos_stat"
+        ),
+        menuItem(
+          text = "포트폴리오 운용현황",
+          icon = icon(name = "sack-dollar"),
+          tabName = "pf_bs_pl"
         )
     )
 )
@@ -74,6 +79,14 @@ body <- dashboardBody(
                     )
                 )
             )
+        ),
+        tabItem(
+          tabName = 'pf_bs_pl',
+          box(
+            status='primary',
+            width=12,
+            title="포트폴리오"
+          )
         )
     )
 )
@@ -147,7 +160,7 @@ server <- function(input, output, session) {
         }, error = function(e) {
             rv$df2 <- ec$find_items('전체')
         })
-        
+      
         rv$df5 <- rv$df2
 
         updateSelectizeInput(session, 'item_in',
