@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/asset_allocation.iml" filepath="$PROJECT_DIR$/.idea/asset_allocation.iml" />
+      <module fileurl="file://$PROJECT_DIR$/py/.idea/py.iml" filepath="$PROJECT_DIR$/py/.idea/py.iml" />
     </modules>
   </component>
 </project>

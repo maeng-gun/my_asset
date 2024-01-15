@@ -1,7 +1,7 @@
 library(shiny)
 library(bs4Dash)
 import::from(shinyWidgets, sendSweetAlert, useSweetAlert)
-# import::from(shinyjs, useShinyjs, extendShinyjs, js)
+import::from(shinyjs, useShinyjs, extendShinyjs, js)
 
 # <User Interface> ####
 
@@ -28,11 +28,19 @@ sidebar <- dashboardSidebar(
           icon = icon(name = "sack-dollar"),
           tabName = "pf_bs_pl"
         )
-    )
+    ),
+    br(),
+    actionButton('close_win',
+                 label = '프로그램 종료',
+                 width='90%',
+                 status='primary')
 )
 
 # 3. 대쉬보드 본문####
 body <- dashboardBody(
+    useShinyjs(),
+    extendShinyjs(text = "shinyjs.closeWindow = function() { window.close(); }", 
+                  functions = c("closeWindow")),
     useSweetAlert(),
     tabItems(
         tabItem(
@@ -52,8 +60,8 @@ body <- dashboardBody(
                     title = "통계표 조회",
                     icon=icon('table-list'),
                     fluidRow(
-                        column(2,textInput('name','검색어')),
-                        column(10,tableOutput('ecos_stat_tables'))
+                        column(3,textInput('name','검색어')),
+                        column(9,tableOutput('ecos_stat_tables'))
                     )
                 ),
                 # 탭 - 아이템 추가====
@@ -214,6 +222,11 @@ server <- function(input, output, session) {
         output$selected_item <- renderTable(rv$df_s)
         output$ecos_stat_tables <- renderTable(rv$df)
         output$ecos_item_tables <- renderTable(rv$df5)
+    })
+    
+    observeEvent(input$close_win,{
+      js$closeWindow()
+      stopApp()
     })
 }
 
