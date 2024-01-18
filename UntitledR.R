@@ -103,19 +103,3 @@ MyClass <- R6Class(
   public = list(
     a=1,
     # 메서드
-    initialize = function() {
-      self$a <- 1
-      self$b <- self$a + 1
-    }
-  )
-)
-
-# 객체 생성
-my_object <- MyClass$new()
-
-MyClass
-my_object
-
-# 속성 확인
-print(my_object$a)  # 1
-print(my_object$b)  # 
