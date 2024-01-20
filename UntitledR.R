@@ -10,16 +10,15 @@ get_config <- function(){
 AutoInvest <- R6Class(
   classname = 'AutoInvest',
   public=list(
-    
-    # 속성 선언
-    token_tmp=NULL, APP_KEY=NULL, APP_SECRET=NULL, ACCT=NULL, 
+    # 속성 설정
+    APP_KEY=NULL, APP_SECRET=NULL, ACCT=NULL, 
     URL_BASE=NULL, MY_AGENT=NULL, base_headers=NULL,
     token_headers=NULL,
     
     # 속성 초기화
-    initialize = function(account="my"){
+    initialize=function(account="my"){
       cfg <- get_config()
-      self$token_tmp <- paste0("KIS", account)
+      token_tmp <- paste0("KIS", account)
       
       if (!file.exists(token_tmp)) {
         file.create(token_tmp)
@@ -42,42 +41,8 @@ AutoInvest <- R6Class(
         "appsecret" = self$APP_SECRET,
         self$base_headers
       )
-    },
-    
-    #메서드(1)
-    save_token = function(my_token, my_expired, token_tmp) {
-      valid_date <- 
-        as.POSIXct(my_expired, format='%Y-%m-%d %H:%M:%S', tz='UTC')
-      writeLines(c(paste('token:', my_token),
-                   paste('valid-date:', 
-                         format(valid_date, '%Y-%m-%d %H:%M:%S'))),
-                 self$token_tmp)
+      
     }
-    
-    read_token <- function(token_tmp) {
-      tryCatch({
-        # 토큰이 저장된 파일 읽기
-        tkg_tmp <- yaml::read_yaml(token_tmp, encoding='UTF-8')
-        
-        # 토큰 만료 일,시간
-        exp_dt <- format(as.POSIXct(tkg_tmp$`valid-date`), '%Y-%m-%d %H:%M:%S')
-        # 현재일자,시간
-        now_dt <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-        
-        # 저장된 토큰 만료일자 체크 (만료일시 > 현재일시 인경우 보관 토큰 리턴)
-        if (exp_dt > now_dt) {
-          return(tkg_tmp$token)
-        } else {
-          cat('Need new token: ', tkg_tmp$`valid-date`, '\n')
-          return(NULL)
-        }
-      }, error = function(e) {
-        cat('read token error: ', e, '\n')
-        return(NULL)
-      })
-    }
-    
-    
   )
 )
 
