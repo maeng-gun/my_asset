@@ -262,7 +262,6 @@ class MyAssets:
         self.plot_pie = None
         self.plot_pie2 = None
         self.plot_pie3 = None
-
         self.class_returns = None
 
     def get_daily_trading(self):
