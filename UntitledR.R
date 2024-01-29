@@ -45,6 +45,7 @@ MyAssets <- R6Class(
       self$ex_jpy <- get_exchange_rate('엔')/100
       
       self$daily_trading <- self$get_daily_trading()
+      self$bs_pl_book <- self$get_bs_pl()
     },
     
     #(메서드) 일일거래내역 산출====
@@ -118,7 +119,8 @@ MyAssets <- R6Class(
       cash_w <- trade %>%
         filter(통화 == '원화') %>%
         group_by(거래일자, 계좌) %>%
-        summarise(현금 = sum(현금수입 + 입출금 - 현금지출)) %>%
+        summarise(현금 = sum(현금수입 + 입출금 - 현금지출),
+                  .groups = 'keep') %>%
         pivot_wider(names_from = 계좌, values_from = 현금) |> 
         ungroup()
       
@@ -129,52 +131,66 @@ MyAssets <- R6Class(
         mutate(across(-거래일자, cummean))
       
       
-      ##########################여기부터 코딩시작########################
-      
-      
       cash_d <- trade %>%
         filter(통화 == '달러') %>%
         group_by(거래일자, 계좌) %>%
-        summarise(현금 = sum(현금수입 + 입출금 - 현금지출)) %>%
-        pivot_wider(names_from = 계좌, values_from = 현금) %>%
-        mutate(across(everything(), cumsum)) %>%
-        mutate(across(everything(), cummean))
+        summarise(현금 = sum(현금수입 + 입출금 - 현금지출), 
+                  .groups = 'keep') %>%
+        pivot_wider(names_from = 계좌, values_from = 현금) |> 
+        ungroup()
+      
+      cash_d_b <- cash_d %>%
+        mutate(across(-거래일자, cumsum))
+      
+      cash_d_e <- cash_d_b %>%
+        mutate(across(-거래일자, cummean))
       
       cash_y <- trade %>%
         filter(통화 == '엔화') %>%
         group_by(거래일자, 계좌) %>%
-        summarise(현금 = sum(현금수입 + 입출금 - 현금지출)) %>%
+        summarise(현금 = sum(현금수입 + 입출금 - 현금지출), 
+                  .groups = 'keep') %>%
         pivot_wider(names_from = 계좌, values_from = 현금) %>%
-        mutate(across(everything(), cumsum)) %>%
-        mutate(across(everything(), cummean))
+        ungroup()
       
-      bs_pl <- bs_pl %>%
-        left_join(cash_w, by = c('거래일자', '계좌')) %>%
-        left_join(cash_d, by = c('거래일자', '계좌')) %>%
-        left_join(cash_y, by = c('거래일자', '계좌')) %>%
-        mutate(
-          장부금액 = case_when(
-            종목명 %in% c('나무예수금', '한투예수금', '한투CMA예수금', '한투ISA예수금') ~ bs_pl$cash_w_b,
-            종목명 %in% c('불리오달러', '직접운용달러') ~ bs_pl$cash_d_b,
-            종목명 == '직접운용엔' ~ bs_pl$cash_y_b,
-            TRUE ~ 장부금액
-          ),
-          평잔 = case_when(
-            종목명 %in% c('나무예수금', '한투예수금', '한투CMA예수금', '한투ISA예수금') ~ bs_pl$cash_w_e,
-            종목명 %in% c('불리오달러', '직접운용달러') ~ bs_pl$cash_d_e,
-            종목명 == '직접운용엔' ~ bs_pl$cash_y_e,
-            TRUE ~ 평잔
-          )
-        ) %>%
-        mutate(
-          실현수익률 = ifelse(평잔 == 0, NA, 실현손익 / 평잔 * 100)
-        ) %>%
-        left_join(obj$assets %>%
-                    select(종목명, 자산군, 세부자산군, 세부자산군2), by = '종목명') %>%
+      cash_y_b <- cash_y %>%
+        mutate(across(-거래일자, cumsum))
+      
+      cash_y_e <- cash_y_b %>%
+        mutate(across(-거래일자, cummean))
+      
+      df <- bs_pl %>%
+        mutate(장부금액 = 
+                 replace(장부금액, 종목명=='나무예수금', cash_w_b$나무)) |> 
+        mutate(장부금액 = 
+                 replace(장부금액, 종목명=='한투예수금', cash_w_b$한투)) |> 
+        mutate(장부금액 = 
+                 replace(장부금액, 종목명=='한투CMA예수금', cash_w_b$한투CMA)) |> 
+        mutate(장부금액 = 
+                 replace(장부금액, 종목명=='한투ISA예수금', cash_w_b$한투ISA)) |> 
+        mutate(평잔 = 
+                 replace(평잔, 종목명=='나무예수금', cash_w_e$나무)) |> 
+        mutate(평잔 = 
+                 replace(평잔, 종목명=='한투예수금', cash_w_e$한투)) |> 
+        mutate(평잔 = 
+                 replace(평잔, 종목명=='한투CMA예수금', cash_w_e$한투CMA)) |> 
+        mutate(평잔 = 
+                 replace(평잔, 종목명=='한투ISA예수금', cash_w_e$한투ISA)) |> 
+        mutate(장부금액 = 
+                 replace(장부금액, 종목명=='불리오달러', cash_d_b$불리오)) |> 
+        mutate(장부금액 = 
+                 replace(장부금액, 종목명=='직접운용달러', cash_d_b$한투)) |> 
+        mutate(평잔 = 
+                 replace(평잔, 종목명=='불리오달러', cash_d_e$불리오)) |> 
+        mutate(평잔 = 
+                 replace(평잔, 종목명=='직접운용달러', cash_d_e$한투)) |> 
+        mutate(장부금액 = 
+                 replace(장부금액, 종목명=='직접운용엔', cash_y_b$한투)) |> 
+        mutate(평잔 = 
+                 replace(평잔, 종목명=='직접운용엔', cash_y_e$한투)) |> 
+        mutate(실현수익률 = 실현손익 / 평잔 * 100) |> 
+        left_join(select(self$assets, 종목명, 자산군, 세부자산군, 세부자산군2), by = '종목명') %>%
         arrange(종목명, 거래일자)
-      
-      obj$bs_pl_book <- bs_pl
-      return(obj$bs_pl_book)
     }
   )
 )
