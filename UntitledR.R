@@ -191,6 +191,8 @@ MyAssets <- R6Class(
         mutate(실현수익률 = 실현손익 / 평잔 * 100) |> 
         left_join(select(self$assets, 종목명, 자산군, 세부자산군, 세부자산군2), by = '종목명') %>%
         arrange(종목명, 거래일자)
-    }
+    },
+    
+    
   )
 )
