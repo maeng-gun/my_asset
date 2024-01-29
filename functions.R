@@ -155,7 +155,7 @@ AutoInvest <- R6Class(
       
       if (is.null(saved_token)) {  # 기존 발급 토큰 확인이 안되면 발급 처리
         path <- "oauth2/tokenP"
-        res <- self$POST_json(path, data)
+        res <- POST_json(path, data)
         
         if (res$status_code == 200) {  # 토큰 정상 발급
           my_token <- res$access_token

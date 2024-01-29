@@ -193,6 +193,47 @@ MyAssets <- R6Class(
         arrange(종목명, 거래일자)
     },
     
-    
+    #(메서드)평가금액 반영 잔액-손익 테이블 생성====
+    evaluate_bs_pl = function() {
+      
+      if (is.null(self$bl) && is.null(self$my)) {
+        self$bl <- AutoInvest$new('boolio')
+        self$my <- AutoInvest$new('my')
+      }
+      
+      price <- self$assets[self$assets$평가금액.notnull(), c('종목명', '평가금액')]
+      price <- data.frame(
+        price,
+        self$my$inquire_balance(),
+        self$my$inquire_balance_ovs(),
+        self$my$inquire_balance_ovs('JPY'),
+        self$bl$inquire_balance_ovs()
+      )[c('종목코드', '평가금액')]
+      price$평가금액 <- as.numeric(price$평가금액)
+      
+      if (is.null(self$bs_pl_book)) {
+        self$get_bs_pl()
+      }
+      
+      bs_pl <- merge(
+        self$bs_pl_book[self$bs_pl_book$거래일자 == as.character(self$today, format="%Y-%m-%d"), ],
+        price,
+        by='종목코드',
+        all.x=TRUE
+      )
+      bs_pl$평가금액[bs_pl$종목명 == '롯데케미칼'] <- as.integer(self$bl$get_current_price("011170")$stck_prpr) * 70
+      bs_pl$평가금액 <- ifelse(is.na(bs_pl$평가금액), bs_pl$장부금액, bs_pl$평가금액)
+      bs_pl$평가금액[bs_pl$종목명 == '달러자산'] <- round(sum(bs_pl$평가금액[bs_pl$통화 == '달러']) * self$ex_usd)
+      bs_pl$평가금액[bs_pl$종목명 == '엔화자산'] <- round(sum(bs_pl$평가금액[bs_pl$통화 == '엔화']) * self$ex_jpy)
+      
+      bs_pl$평가손익 <- bs_pl$평가금액 - bs_pl$장부금액
+      bs_pl$평가수익률 <- inf_to_nan(bs_pl$평가손익 / bs_pl$평잔 * 100)
+      bs_pl$총손익 <- bs_pl$실현손익 + bs_pl$평가손익
+      bs_pl$운용수익률 <- inf_to_nan(bs_pl$총손익 / bs_pl$평잔 * 100)
+      
+      self$bs_pl_mkt <- bs_pl[order(-bs_pl$통화, -bs_pl$평가금액), ]
+      rownames(self$bs_pl_mkt) <- NULL
+      return(self$bs_pl_mkt)
+    }
   )
 )
