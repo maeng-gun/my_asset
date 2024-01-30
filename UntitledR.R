@@ -1,10 +1,7 @@
-library(dplyr)
+source('functions.R', echo=F)
 library(lubridate)
 library(tidyr)
-# library(httr)
-# library(jsonlite)
 library(rvest)
-library(R6)
 library(readxl)
 
 get_exchange_rate <- function(cur='달러'){
@@ -44,8 +41,10 @@ MyAssets <- R6Class(
       self$ex_usd <- get_exchange_rate('달러')
       self$ex_jpy <- get_exchange_rate('엔')/100
       
-      self$daily_trading <- self$get_daily_trading()
-      self$bs_pl_book <- self$get_bs_pl()
+      self$daily_trading <- self$get_daily_trading()|> 
+        mutate(거래일자=as.Date(거래일자))
+      self$bs_pl_book <- self$get_bs_pl() |> 
+        mutate(거래일자=as.Date(거래일자))
     },
     
     #(메서드) 일일거래내역 산출====
@@ -231,8 +230,8 @@ MyAssets <- R6Class(
       bs_pl$총손익 <- bs_pl$실현손익 + bs_pl$평가손익
       bs_pl$운용수익률 <- inf_to_nan(bs_pl$총손익 / bs_pl$평잔 * 100)
       
-      self$bs_pl_mkt <- bs_pl[order(-bs_pl$통화, -bs_pl$평가금액), ]
-      rownames(self$bs_pl_mkt) <- NULL
+      bs_pl_mkt <- bs_pl[order(-bs_pl$통화, -bs_pl$평가금액), ]
+      rownames(bs_pl_mkt) <- NULL
       return(self$bs_pl_mkt)
     }
   )

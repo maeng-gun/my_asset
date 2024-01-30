@@ -112,6 +112,7 @@ AutoInvest <- R6Class(
     },
     
     #메서드(1) - 토큰 저장하기 ====
+    
     save_token = function(my_token, my_expired) {
       valid_date <- 
         as.POSIXct(my_expired, format='%Y-%m-%d %H:%M:%S', tz='UTC')
@@ -155,9 +156,9 @@ AutoInvest <- R6Class(
       
       if (is.null(saved_token)) {  # 기존 발급 토큰 확인이 안되면 발급 처리
         path <- "oauth2/tokenP"
-        res <- POST_json(path, data)
+        res <- self$POST_json(path, data)
         
-        if (res$status_code == 200) {  # 토큰 정상 발급
+        if (!is.null(res)) {  # 토큰 정상 발급
           my_token <- res$access_token
           my_expired <- res$access_token_token_expired
           self$save_token(my_token, my_expired)  # 새로 발급 받은 토큰 저장
@@ -196,9 +197,18 @@ AutoInvest <- R6Class(
       URL <- glue("{self$URL_BASE}/{path}")
       jbody <- toJSON(as.list(data), auto_unbox = T)
       headers2 <- c(self$base_headers, headers)
-      POST(URL, body = jbody, encode = "json",
-           add_headers(.headers = headers2)) |> 
-        content()
+      res <- POST(URL, body = jbody, encode = "json",
+           add_headers(.headers = headers2))
+      
+      if (res$status_code == 200) {
+        res <- res |> 
+          content("text", encoding = 'UTF-8') |> 
+          fromJSON()
+        return(res)
+      } else {
+        return(NULL)
+      }
+       
     },
     
     #메서드(6) - 자산별 잔고 ====
@@ -270,7 +280,7 @@ AutoInvest <- R6Class(
       headers <- c("tr_id" = "TTTS3012R", "custtype" = "P")
       
       self$GET_tbl(path, data, headers)$output1 |> 
-        tibble() |> 
+        tibble() |>
         select(ovrs_pdno, ovrs_item_name, 
                ovrs_stck_evlu_amt) |> 
         rename_with(~c('종목코드', '상품명', '평가금액'))
