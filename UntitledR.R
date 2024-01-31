@@ -1,10 +1,7 @@
-library(dplyr)
+source('functions.R', echo=F)
 library(lubridate)
 library(tidyr)
-# library(httr)
-# library(jsonlite)
 library(rvest)
-library(R6)
 library(readxl)
 
 get_exchange_rate <- function(cur='달러'){
@@ -44,8 +41,10 @@ MyAssets <- R6Class(
       self$ex_usd <- get_exchange_rate('달러')
       self$ex_jpy <- get_exchange_rate('엔')/100
       
-      self$daily_trading <- self$get_daily_trading()
+      self$daily_trading <- self$get_daily_trading()|> 
+        mutate(거래일자=as.Date(거래일자))
       self$bs_pl_book <- self$get_bs_pl()
+      self$bs_pl_mkt <- self$evaluate_bs_pl()
     },
     
     #(메서드) 일일거래내역 산출====
@@ -160,36 +159,24 @@ MyAssets <- R6Class(
         mutate(across(-거래일자, cummean))
       
       df <- bs_pl %>%
-        mutate(장부금액 = 
-                 replace(장부금액, 종목명=='나무예수금', cash_w_b$나무)) |> 
-        mutate(장부금액 = 
-                 replace(장부금액, 종목명=='한투예수금', cash_w_b$한투)) |> 
-        mutate(장부금액 = 
-                 replace(장부금액, 종목명=='한투CMA예수금', cash_w_b$한투CMA)) |> 
-        mutate(장부금액 = 
-                 replace(장부금액, 종목명=='한투ISA예수금', cash_w_b$한투ISA)) |> 
-        mutate(평잔 = 
-                 replace(평잔, 종목명=='나무예수금', cash_w_e$나무)) |> 
-        mutate(평잔 = 
-                 replace(평잔, 종목명=='한투예수금', cash_w_e$한투)) |> 
-        mutate(평잔 = 
-                 replace(평잔, 종목명=='한투CMA예수금', cash_w_e$한투CMA)) |> 
-        mutate(평잔 = 
-                 replace(평잔, 종목명=='한투ISA예수금', cash_w_e$한투ISA)) |> 
-        mutate(장부금액 = 
-                 replace(장부금액, 종목명=='불리오달러', cash_d_b$불리오)) |> 
-        mutate(장부금액 = 
-                 replace(장부금액, 종목명=='직접운용달러', cash_d_b$한투)) |> 
-        mutate(평잔 = 
-                 replace(평잔, 종목명=='불리오달러', cash_d_e$불리오)) |> 
-        mutate(평잔 = 
-                 replace(평잔, 종목명=='직접운용달러', cash_d_e$한투)) |> 
-        mutate(장부금액 = 
-                 replace(장부금액, 종목명=='직접운용엔', cash_y_b$한투)) |> 
-        mutate(평잔 = 
-                 replace(평잔, 종목명=='직접운용엔', cash_y_e$한투)) |> 
-        mutate(실현수익률 = 실현손익 / 평잔 * 100) |> 
-        left_join(select(self$assets, 종목명, 자산군, 세부자산군, 세부자산군2), by = '종목명') %>%
+        mutate(
+          장부금액 = replace(장부금액, 종목명=='나무예수금', cash_w_b$나무),
+          장부금액 = replace(장부금액, 종목명=='한투예수금', cash_w_b$한투),
+          장부금액 = replace(장부금액, 종목명=='한투CMA예수금', cash_w_b$한투CMA),
+          장부금액 = replace(장부금액, 종목명=='한투ISA예수금', cash_w_b$한투ISA),
+          평잔 = replace(평잔, 종목명=='나무예수금', cash_w_e$나무),
+          평잔 = replace(평잔, 종목명=='한투예수금', cash_w_e$한투),
+          평잔 = replace(평잔, 종목명=='한투CMA예수금', cash_w_e$한투CMA),
+          평잔 = replace(평잔, 종목명=='한투ISA예수금', cash_w_e$한투ISA),
+          장부금액 = replace(장부금액, 종목명=='불리오달러', cash_d_b$불리오),
+          장부금액 = replace(장부금액, 종목명=='직접운용달러', cash_d_b$한투),
+          평잔 = replace(평잔, 종목명=='불리오달러', cash_d_e$불리오),
+          평잔 = replace(평잔, 종목명=='직접운용달러', cash_d_e$한투), 
+          장부금액 = replace(장부금액, 종목명=='직접운용엔', cash_y_b$한투),
+          평잔 = replace(평잔, 종목명=='직접운용엔', cash_y_e$한투),
+          실현수익률 = 실현손익 / 평잔 * 100) |> 
+        left_join(select(self$assets, 종목코드, 자산군, 세부자산군, 세부자산군2), 
+                  by = '종목코드') %>%
         arrange(종목명, 거래일자)
     },
     
@@ -201,39 +188,98 @@ MyAssets <- R6Class(
         self$my <- AutoInvest$new('my')
       }
       
-      price <- self$assets[self$assets$평가금액.notnull(), c('종목명', '평가금액')]
-      price <- data.frame(
-        price,
-        self$my$inquire_balance(),
-        self$my$inquire_balance_ovs(),
-        self$my$inquire_balance_ovs('JPY'),
-        self$bl$inquire_balance_ovs()
-      )[c('종목코드', '평가금액')]
-      price$평가금액 <- as.numeric(price$평가금액)
+      price <- self$assets |> 
+        filter(평가금액!=0) |> 
+        select(종목코드, 상품명, 평가금액) |> 
+        bind_rows(
+          self$my$inquire_balance(),
+          self$my$inquire_balance_ovs(),
+          self$my$inquire_balance_ovs('JPY'),
+          self$bl$inquire_balance_ovs()) |> 
+        select(종목코드,평가금액)
       
-      if (is.null(self$bs_pl_book)) {
-        self$get_bs_pl()
+      p_lotte <- as.integer(self$bl$get_current_price("011170")$stck_prpr)
+      q_lotte <- filter(self$bs_pl_book, 
+                        종목명=='롯데케미칼', 
+                        거래일자 == self$today)$보유수량
+      
+      bs_pl <- self$bs_pl_book |> 
+        filter(거래일자 == self$today) |> 
+        left_join(price, by="종목코드") |> 
+        mutate(
+          평가금액 = replace(평가금액, 종목명 == '롯데케미칼', p_lotte*q_lotte),
+          평가금액 = ifelse(is.na(평가금액), 장부금액, 평가금액)
+        )
+      
+      dollar <-
+        (sum(filter(bs_pl, 통화 == '달러')$평가금액) * self$ex_usd) |> 
+        round()
+      
+      yen <-   
+        (sum(filter(bs_pl, 통화 == '엔화')$평가금액) * self$ex_jpy) |> 
+        round()
+      
+      bs_pl |> 
+        mutate(
+          평가금액 = replace(평가금액, 종목명 == '달러자산', dollar),
+          평가금액 = replace(평가금액, 종목명 == '엔화자산', yen),
+          평가손익 = 평가금액 - 장부금액,
+          평가수익률 = 평가손익 / 평잔 * 100,
+          총손익 = 실현손익 + 평가손익,
+          운용수익률 = 총손익 / 평잔 * 100
+        ) |> 
+        arrange(desc(통화), desc(평가금액))
+    },
+    
+    #(메서드)자산군별 수익률 현황====
+    get_class_returns = function(self) {
+      
+      df <- self$bs_pl_mkt
+      krw <- df %>% filter(통화 == '원화')
+      usd <- df %>% filter(통화 == '달러')
+      jpy <- df %>% filter(통화 == '엔화')
+      
+      get_class_returns_cur <- function(asset_returns) {
+        cur <- asset_returns$통화[1]
+        
+        class_returns <- asset_returns %>%
+          select(-(종목코드:보유수량), 
+                 -세부자산군2, -실현수익률, -평가수익률, -운용수익률) %>%
+          group_by(자산군, 세부자산군) %>%
+          summarise(across(everything(), sum, na.rm = TRUE),.groups='drop') |> 
+          mutate(통화 = cur, .before=1)
+        
+        class_returns |> 
+          add_row(통화 = cur, 자산군 = '전체', 세부자산군 = NA, 
+                  !!(class_returns |>
+                       select(-통화,-자산군,-세부자산군) |> 
+                       summarise(across(everything(),sum, na.rm=T)))) |> 
+          mutate(실현수익률 = 실현손익 / 평잔 * 100,
+                 평가수익률 = 평가손익 / 평잔 * 100,
+                 운용수익률 = 총손익 / 평잔 * 100)
       }
       
-      bs_pl <- merge(
-        self$bs_pl_book[self$bs_pl_book$거래일자 == as.character(self$today, format="%Y-%m-%d"), ],
-        price,
-        by='종목코드',
-        all.x=TRUE
-      )
-      bs_pl$평가금액[bs_pl$종목명 == '롯데케미칼'] <- as.integer(self$bl$get_current_price("011170")$stck_prpr) * 70
-      bs_pl$평가금액 <- ifelse(is.na(bs_pl$평가금액), bs_pl$장부금액, bs_pl$평가금액)
-      bs_pl$평가금액[bs_pl$종목명 == '달러자산'] <- round(sum(bs_pl$평가금액[bs_pl$통화 == '달러']) * self$ex_usd)
-      bs_pl$평가금액[bs_pl$종목명 == '엔화자산'] <- round(sum(bs_pl$평가금액[bs_pl$통화 == '엔화']) * self$ex_jpy)
+      krw_ret <- get_class_returns_cur(krw)
+      usd_ret <- get_class_returns_cur(usd)
+      jpy_ret <- get_class_returns_cur(jpy)
       
-      bs_pl$평가손익 <- bs_pl$평가금액 - bs_pl$장부금액
-      bs_pl$평가수익률 <- inf_to_nan(bs_pl$평가손익 / bs_pl$평잔 * 100)
-      bs_pl$총손익 <- bs_pl$실현손익 + bs_pl$평가손익
-      bs_pl$운용수익률 <- inf_to_nan(bs_pl$총손익 / bs_pl$평잔 * 100)
-      
-      self$bs_pl_mkt <- bs_pl[order(-bs_pl$통화, -bs_pl$평가금액), ]
-      rownames(self$bs_pl_mkt) <- NULL
-      return(self$bs_pl_mkt)
+      bind_rows(krw_ret, usd_ret, jpy_ret)
     }
   )
 )
+
+df <- self$bs_pl_mkt
+df2 <- df |> 
+  filter(평잔>0) |> 
+  group_by(통화) |>
+  summarise(
+    장부금액=sum(장부금액),
+    평가금액=sum(평가금액),
+    실현손익=sum(실현손익),
+    평가손익=sum(평가손익),
+    총손익 = sum(총손익)
+  ) |> 
+  mutate(
+    수익률 = 총손익/장부금액*100
+  )
+  
