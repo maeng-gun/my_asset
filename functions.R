@@ -112,6 +112,7 @@ AutoInvest <- R6Class(
     },
     
     #메서드(1) - 토큰 저장하기 ====
+    
     save_token = function(my_token, my_expired) {
       valid_date <- 
         as.POSIXct(my_expired, format='%Y-%m-%d %H:%M:%S', tz='UTC')
@@ -197,8 +198,8 @@ AutoInvest <- R6Class(
       jbody <- toJSON(as.list(data), auto_unbox = T)
       headers2 <- c(self$base_headers, headers)
       res <- POST(URL, body = jbody, encode = "json",
-                  add_headers(.headers = headers2))
-      
+           add_headers(.headers = headers2))
+
       if (res$status_code == 200) {
         res <- res |> 
           content("text", encoding = 'UTF-8') |> 
@@ -207,7 +208,6 @@ AutoInvest <- R6Class(
       } else {
         return(NULL)
       }
-      
     },
     
     #메서드(6) - 자산별 잔고 ====
