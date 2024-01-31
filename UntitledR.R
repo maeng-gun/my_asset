@@ -197,21 +197,12 @@ MyAssets <- R6Class(
           self$my$inquire_balance_ovs('JPY'),
           self$bl$inquire_balance_ovs()) |> 
         select(종목코드,평가금액)
-<<<<<<< HEAD
       
       p_lotte <- as.integer(self$bl$get_current_price("011170")$stck_prpr)
       q_lotte <- filter(self$bs_pl_book, 
                         종목명=='롯데케미칼', 
                         거래일자 == self$today)$보유수량
       
-=======
-
-      p_lotte <- as.integer(self$bl$get_current_price("011170")$stck_prpr)
-      q_lotte <- filter(self$bs_pl_book, 
-                        종목명=='롯데케미칼', 
-                        거래일자 == self$today)$보유수량
-      
->>>>>>> c81107a46c9dcb1f7033323fd42197671353fac2
       bs_pl <- self$bs_pl_book |> 
         filter(거래일자 == self$today) |> 
         left_join(price, by="종목코드") |> 
@@ -219,8 +210,7 @@ MyAssets <- R6Class(
           평가금액 = replace(평가금액, 종목명 == '롯데케미칼', p_lotte*q_lotte),
           평가금액 = ifelse(is.na(평가금액), 장부금액, 평가금액)
         )
-<<<<<<< HEAD
-      
+
       dollar <-
         (sum(filter(bs_pl, 통화 == '달러')$평가금액) * self$ex_usd) |> 
         round()
@@ -274,27 +264,6 @@ MyAssets <- R6Class(
       jpy_ret <- get_class_returns_cur(jpy)
       
       bind_rows(krw_ret, usd_ret, jpy_ret)
-=======
-      
-      dollar <-
-        (sum(filter(bs_pl, 통화 == '달러')$평가금액) * self$ex_usd) |> 
-        round()
-      
-      yen <-   
-        (sum(filter(bs_pl, 통화 == '엔화')$평가금액) * self$ex_jpy) |> 
-        round()
-
-      bs_pl |> 
-        mutate(
-          평가금액 = replace(평가금액, 종목명 == '달러자산', dollar),
-          평가금액 = replace(평가금액, 종목명 == '엔화자산', yen),
-          평가손익 = 평가금액 - 장부금액,
-          평가수익률 = 평가손익 / 평잔 * 100,
-          총손익 = 실현손익 + 평가손익,
-          운용수익률 = 총손익 / 평잔 * 100
-        ) |> 
-        arrange(desc(통화), desc(평가금액))
->>>>>>> c81107a46c9dcb1f7033323fd42197671353fac2
     }
   )
 )
