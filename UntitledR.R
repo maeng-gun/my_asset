@@ -268,18 +268,4 @@ MyAssets <- R6Class(
   )
 )
 
-df <- self$bs_pl_mkt
-df2 <- df |> 
-  filter(평잔>0) |> 
-  group_by(통화) |>
-  summarise(
-    장부금액=sum(장부금액),
-    평가금액=sum(평가금액),
-    실현손익=sum(실현손익),
-    평가손익=sum(평가손익),
-    총손익 = sum(총손익)
-  ) |> 
-  mutate(
-    수익률 = 총손익/장부금액*100
-  )
-  
+self <- MyAssets$new()
