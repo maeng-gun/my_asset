@@ -270,3 +270,70 @@ MyAssets <- R6Class(
 
 self <- MyAssets$new()
 
+compute_allocation <- function() {
+  
+  if (is.null(self$bs_pl_mkt)) {
+    self$evaluate_bs_pl()
+  }
+  
+  df <- self$bs_pl_mkt
+  usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)                    
+  jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)                    
+  
+  df <- df |> 
+    filter(자산군 != '외화자산') %>%
+    mutate(평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
+           평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval)) %>%
+    group_by(자산군, 세부자산군, 통화) %>%
+    summarize(평가금액 = sum(평가금액), .groups = 'drop') %>%
+    mutate(투자비중 = 평가금액 / sum(평가금액) * 100)
+  
+  self$allo0 <- df %>%
+    group_by(자산군) %>%
+    summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중))
+  
+  self$allo1 <- df %>%
+    add_row(자산군='합계', 평가금액=sum(df$평가금액), 투자비중=100) %>%
+    group_by(자산군) %>%
+    mutate(자산별비중 = 평가금액 / sum(평가금액) * 100)
+  
+  self$allo2 <- df %>%
+    group_by(통화) %>%
+    summarize(평가금액 = sum(평가금액))
+  
+  self$allo3 <- df %>%
+    group_by(통화, 자산군) %>%
+    summarize(평가금액 = sum(평가금액), 
+              투자비중 = sum(투자비중), .groups = 'drop') %>%
+    add_row(통화='합계', 평가금액 = sum(df$평가금액), 투자비중=100) %>%
+    group_by(통화) |> 
+    mutate(통화별비중 = 평가금액 / sum(평가금액) * 100)
+    
+  self$allo4 <- self$bs_pl_mkt %>%
+    filter(계좌 == '불리오') %>%
+    group_by(세부자산군, 세부자산군2) %>%
+    summarize(평가금액 = sum(평가금액), .groups = 'drop') %>%
+    mutate(투자비중 = 평가금액 / sum(평가금액) * 100)
+
+  self$allo5 <- self$allo4 %>%
+    group_by(세부자산군) %>%
+    summarize(평가금액 = sum(평가금액))
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
