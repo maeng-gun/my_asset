@@ -93,7 +93,8 @@ body <- dashboardBody(
           box(
             status='primary',
             width=12,
-            title="포트폴리오"
+            title="포트폴리오",
+            uiOutput("allo1")
           )
         )
     )
@@ -114,9 +115,11 @@ ui <- dashboardPage(
     
 server <- function(input, output, session) {
     
-    source("functions.R")
+    source("functions.R", echo=F)
     
     ec = Ecos$new()
+    ma = MyAssets$new()
+    
     rv <-  reactiveValues(
         name_in='전체',
         code='전체', df=NULL, df2=NULL, 
@@ -222,6 +225,15 @@ server <- function(input, output, session) {
         output$selected_item <- renderTable(rv$df_s)
         output$ecos_stat_tables <- renderTable(rv$df)
         output$ecos_item_tables <- renderTable(rv$df5)
+    })
+    
+    output$allo1 <- renderUI({
+      ma$allo1 |> 
+        flextable() |> 
+        theme_vanilla() |> 
+        merge_v(j=1:2) |> 
+        set_table_properties(layout='autofit',width=0.9) |> 
+        htmltools_value()
     })
     
     observeEvent(input$close_win,{
