@@ -8,7 +8,6 @@ library(lubridate)
 library(tidyr)
 library(rvest)
 library(readxl)
-library(flextable)
 
 import::from(stringr, str_detect, str_extract)
 

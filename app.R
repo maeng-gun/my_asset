@@ -1,5 +1,7 @@
 library(shiny)
 library(bs4Dash)
+library(waiter)
+library(flextable)
 import::from(shinyWidgets, sendSweetAlert, useSweetAlert)
 import::from(shinyjs, useShinyjs, extendShinyjs, js)
 
@@ -42,7 +44,9 @@ body <- dashboardBody(
     extendShinyjs(text = "shinyjs.closeWindow = function() { window.close(); }", 
                   functions = c("closeWindow")),
     useSweetAlert(),
+    useWaiter(),
     tabItems(
+        #_3-1) 한국은행 지표선정====
         tabItem(
             tabName = "ecos_stat",
             tabBox(
@@ -88,13 +92,29 @@ body <- dashboardBody(
                 )
             )
         ),
+        #_3-2) 포트폴리오 운용현황===
         tabItem(
           tabName = 'pf_bs_pl',
+          actionButton('kis','한투접속'),
+          br(),
+          br(),
           box(
+            id='pf_box1',
             status='primary',
             width=12,
             title="포트폴리오",
-            uiOutput("allo1")
+            fluidRow(
+              column(
+                width = 5,
+                uiOutput("allo0")
+              ),
+              column(
+                width = 7,
+                uiOutput("allo1")
+              )
+              
+            )
+            
           )
         )
     )
@@ -115,11 +135,11 @@ ui <- dashboardPage(
     
 server <- function(input, output, session) {
     
+    
     source("functions.R", echo=F)
     
     ec = Ecos$new()
-    ma = MyAssets$new()
-    
+
     rv <-  reactiveValues(
         name_in='전체',
         code='전체', df=NULL, df2=NULL, 
@@ -227,14 +247,40 @@ server <- function(input, output, session) {
         output$ecos_item_tables <- renderTable(rv$df5)
     })
     
-    output$allo1 <- renderUI({
-      ma$allo1 |> 
-        flextable() |> 
-        theme_vanilla() |> 
-        merge_v(j=1:2) |> 
-        set_table_properties(layout='autofit',width=0.9) |> 
-        htmltools_value()
+    #자산배분 현황 확인====
+    observeEvent(input$kis,{
+
+      w1 <- Waiter$new(
+        id='pf_box1',
+        html = tagList(spin_throbber(), "로딩중..."),
+        color = transparent(.5))
+      
+      w1$show()
+
+      ma = MyAssets$new()
+      
+      w1$hide()
+      
+      output$allo0 <- renderUI({
+        ma$allo0 |> 
+          flextable() |> 
+          theme_vanilla() |> 
+          # merge_v(j=1:2) |> 
+          set_table_properties(layout='autofit',width=0.9) |> 
+          htmltools_value()
+      })
+      
+      output$allo1 <- renderUI({
+        ma$allo1 |> 
+          flextable() |> 
+          theme_vanilla() |> 
+          merge_v(j=1:2) |> 
+          set_table_properties(layout='autofit',width=0.9) |> 
+          htmltools_value()
+      })
+      
     })
+    
     
     observeEvent(input$close_win,{
       js$closeWindow()
