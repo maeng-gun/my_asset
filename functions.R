@@ -322,14 +322,13 @@ MyAssets <- R6Class(
   
   public = list(
     today = NULL, year = NULL,
-    assets = NULL, ex_usd = NULL,
+    assets = NULL, pension = NULL, ex_usd = NULL,
     ex_jpy = NULL, daily_trading = NULL,
     bs_pl_book = NULL, bs_pl_mkt = NULL,
     bl = NULL, my = NULL, allo0 = NULL,
     allo1 = NULL, allo2 = NULL,
     allo3 = NULL, allo4 = NULL,
-    allo5 = NULL, plot_pie = NULL,
-    plot_pie2 = NULL, plot_pie3 = NULL,
+    allo5 = NULL, ret = NULL,
     
     #속성 초기화
     initialize = function(base_dt=NULL) {
@@ -340,15 +339,24 @@ MyAssets <- R6Class(
       }
       self$year <- year(self$today)
       self$assets <- read_excel('trade.xlsx', sheet = '자산정보')
+      self$pension <- read_excel('trade.xlsx', sheet = '연금종목정보')
       self$ex_usd <- get_exchange_rate('달러')
       self$ex_jpy <- get_exchange_rate('엔')/100
-      
       self$daily_trading <- self$get_daily_trading()|> 
         mutate(거래일자=as.Date(거래일자))
       self$bs_pl_book <- self$get_bs_pl()
       self$bs_pl_mkt <- self$evaluate_bs_pl()
       self$compute_allocation()
+      self$ret <- self$get_class_returns()
       
+    },
+    
+    #(메서드) 연금 일일거래내역 산출==== 
+    get_pension_daily = function(){
+      days <- seq(make_date(self$year,1,1), make_date(self$year,12,31),by='day')
+      nhb <- read_excel('trade.xlsx', sheet = '농협IRP')
+      shi <- read_excel('trade.xlsx', sheet = '삼성DC')
+      nhi <- read_excel('trade.xlsx', sheet = '엔투저축연금')
     },
     
     #(메서드) 일일거래내역 산출====
@@ -514,7 +522,11 @@ MyAssets <- R6Class(
         left_join(price, by="종목코드") |> 
         mutate(
           평가금액 = replace(평가금액, 종목명 == '롯데케미칼', p_lotte*q_lotte),
-          평가금액 = ifelse(is.na(평가금액), 장부금액, 평가금액)
+          평가금액 = ifelse(is.na(평가금액), 장부금액, 평가금액)) |> 
+        left_join(
+          (self$assets |> 
+             select(종목코드, 기초평가손익)),
+          by="종목코드"
         )
       
       dollar <-
@@ -529,16 +541,16 @@ MyAssets <- R6Class(
         mutate(
           평가금액 = replace(평가금액, 종목명 == '달러자산', dollar),
           평가금액 = replace(평가금액, 종목명 == '엔화자산', yen),
-          평가손익 = 평가금액 - 장부금액,
-          평가수익률 = 평가손익 / 평잔 * 100,
-          총손익 = 실현손익 + 평가손익,
-          운용수익률 = 총손익 / 평잔 * 100
+          평가손익증감 = 평가금액 - 장부금액,
+          운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
+          평가손익 = 기초평가손익 + 평가손익증감, 
+          평가수익률 = 평가손익 / (평가금액-평가손익) * 100
         ) |> 
         arrange(desc(통화), desc(평가금액))
     },
     
     #(메서드)자산군별 수익률 현황====
-    get_class_returns = function(self) {
+    get_class_returns = function() {
       
       df <- self$bs_pl_mkt
       krw <- df %>% filter(통화 == '원화')
@@ -550,9 +562,9 @@ MyAssets <- R6Class(
         
         class_returns <- asset_returns %>%
           select(-(종목코드:보유수량), 
-                 -세부자산군2, -실현수익률, -평가수익률, -운용수익률) %>%
+                 -세부자산군2, -실현수익률, -운용수익률, -평가수익률) %>%
           group_by(자산군, 세부자산군) %>%
-          summarise(across(everything(), sum, na.rm = TRUE),.groups='drop') |> 
+          summarise(across(everything(), ~sum(.x, na.rm = TRUE)),.groups='drop') |> 
           mutate(통화 = cur, .before=1)
         
         class_returns |> 
@@ -561,8 +573,8 @@ MyAssets <- R6Class(
                        select(-통화,-자산군,-세부자산군) |> 
                        summarise(across(everything(),sum, na.rm=T)))) |> 
           mutate(실현수익률 = 실현손익 / 평잔 * 100,
-                 평가수익률 = 평가손익 / 평잔 * 100,
-                 운용수익률 = 총손익 / 평잔 * 100)
+                 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
+                 평가수익률 = 평가손익 / (평가금액-평가손익) * 100)
       }
       
       krw_ret <- get_class_returns_cur(krw)

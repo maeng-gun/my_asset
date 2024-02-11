@@ -46,7 +46,7 @@ body <- dashboardBody(
     useSweetAlert(),
     useWaiter(),
     tabItems(
-        #_3-1) 한국은행 지표선정====
+        #_1) 한국은행 지표선정====
         tabItem(
             tabName = "ecos_stat",
             tabBox(
@@ -92,29 +92,73 @@ body <- dashboardBody(
                 )
             )
         ),
-        #_3-2) 포트폴리오 운용현황===
+        #_2) 포트폴리오 운용현황====
         tabItem(
           tabName = 'pf_bs_pl',
           actionButton('kis','한투접속'),
           br(),
           br(),
-          box(
+          tabBox(
             id='pf_box1',
-            status='primary',
             width=12,
-            title="포트폴리오",
-            fluidRow(
-              column(
-                width = 5,
-                uiOutput("allo0")
-              ),
-              column(
-                width = 7,
-                uiOutput("allo1")
-              )
-              
-            )
+            status='primary',
+            type='tabs',
             
+            #__a. 투자현황====
+            tabPanel(
+              title="투자현황",
+              h5("1. 자산군별 배분현황"),
+              br(),
+              fluidRow(
+                column(
+                  width = 4,
+                  uiOutput("allo0")
+                ),
+                column(
+                  width = 8,
+                  uiOutput("allo1")
+                )
+              ),
+              h5("2. 통화별 배분현황"),
+              br(),
+              fluidRow(
+                column(
+                  width = 4,
+                  uiOutput("allo2")
+                ),
+                column(
+                  width = 8,
+                  uiOutput("allo3")
+                )
+              ),
+              h5("3. 불리오 배분현황"),
+              br(),
+              fluidRow(
+                column(
+                  width = 4,
+                  uiOutput("allo5")
+                ),
+                column(
+                  width = 8,
+                  uiOutput("allo4")
+                )
+              )
+            ),
+            #__b. 손익현황====
+            tabPanel(
+              title="손익현황",
+              h5("1. 자산군별 손익현황"),
+              br(),
+              fluidRow(
+                uiOutput("class_ret")
+              ),
+              br(),
+              h5("2. 개별자산 손익현황"),
+              br(),
+              fluidRow(
+                uiOutput("bs_pl_mkt")
+              )
+            )
           )
         )
     )
@@ -249,10 +293,9 @@ server <- function(input, output, session) {
     
     #자산배분 현황 확인====
     observeEvent(input$kis,{
-
       w1 <- Waiter$new(
         id='pf_box1',
-        html = tagList(spin_throbber(), "로딩중..."),
+        html = tagList(spin_loader(), "로딩중..."),
         color = transparent(.5))
       
       w1$show()
@@ -261,21 +304,48 @@ server <- function(input, output, session) {
       
       w1$hide()
       
-      output$allo0 <- renderUI({
-        ma$allo0 |> 
+      render_allo <- function(df){
+        renderUI({
+          df |> flextable() |> 
+            theme_vanilla() |> 
+            merge_v(j=1:2) |>
+            set_table_properties(layout='autofit',width=0.9) |> 
+            htmltools_value()
+        })
+      }
+      
+      output$allo0 <- render_allo(ma$allo0)
+      output$allo1 <- render_allo(ma$allo1)
+      output$allo2 <- render_allo(ma$allo2)
+      output$allo3 <- render_allo(ma$allo3)
+      output$allo4 <- render_allo(ma$allo4)
+      output$allo5 <- render_allo(ma$allo5)
+      
+      output$class_ret <- renderUI({
+        ma$ret |> 
+          select(1:3,평가금액,실현손익, 평가손익증감, 평가손익, 
+                 실현수익률:평가수익률) |> 
           flextable() |> 
           theme_vanilla() |> 
-          # merge_v(j=1:2) |> 
-          set_table_properties(layout='autofit',width=0.9) |> 
+          merge_v(j=1:2) |>
+          set_table_properties(layout='autofit') |>
+          colformat_double(j=4:7, digits = 0) |>
+          colformat_double(j=8:10, digits = 2) |> 
           htmltools_value()
       })
       
-      output$allo1 <- renderUI({
-        ma$allo1 |> 
+      output$bs_pl_mkt <-renderUI({
+        ma$bs_pl_mkt |> 
+          select(통화, 자산군, 세부자산군, 종목명,
+                 보유수량,평가금액, 실현손익,평가손익증감, 평가손익,
+                 실현수익률,운용수익률,평가수익률) |>
+          arrange(통화,자산군,세부자산군) |> 
           flextable() |> 
           theme_vanilla() |> 
-          merge_v(j=1:2) |> 
-          set_table_properties(layout='autofit',width=0.9) |> 
+          merge_v(j=1:3) |>
+          set_table_properties(layout='autofit') |>
+          colformat_double(j=5:9, digits = 0) |>
+          colformat_double(j=10:12, digits = 2) |> 
           htmltools_value()
       })
       
