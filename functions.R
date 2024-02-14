@@ -8,8 +8,8 @@ library(lubridate)
 library(tidyr)
 library(rvest)
 library(readxl)
-
 import::from(stringr, str_detect, str_extract)
+
 
 get_config <- function(){
   yaml::read_yaml(file = 'config.yaml', 
