@@ -571,7 +571,7 @@ MyAssets <- R6Class(
           add_row(통화 = cur, 자산군 = '전체', 세부자산군 = NA, 
                   !!(class_returns |>
                        select(-통화,-자산군,-세부자산군) |> 
-                       summarise(across(everything(),sum, na.rm=T)))) |> 
+                       summarise(across(everything(), ~sum(.x, na.rm=T))))) |> 
           mutate(실현수익률 = 실현손익 / 평잔 * 100,
                  운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
                  평가수익률 = 평가손익 / (평가금액-평가손익) * 100)
