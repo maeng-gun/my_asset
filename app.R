@@ -5,7 +5,7 @@ library(flextable)
 import::from(shinyWidgets, sendSweetAlert, useSweetAlert)
 import::from(shinyjs, useShinyjs, extendShinyjs, js)
 
-# <User Interface> ####
+# <User Interface> ====
 
 # 1. 대쉬보드 헤더####
 header <- dashboardHeader(
@@ -46,20 +46,20 @@ body <- dashboardBody(
   useSweetAlert(),
   useWaiter(),
   tabItems(
-    #_1) 한국은행 지표선정====
+    ##1) 한국은행 지표선정====
     tabItem(
       tabName = "ecos_stat",
       tabBox(
         width=12,
         status='primary',
         type='tabs',
-        # 탭 - 선정 아이템====
+        ###a. 선정 아이템====
         tabPanel(
           title = "선정 아이템",
           icon=icon('square-check'),
           tableOutput('selected_item')
         ),
-        # 탭 - 통계표 조회====
+        ###b. 통계표 조회====
         tabPanel(
           title = "통계표 조회",
           icon=icon('table-list'),
@@ -68,7 +68,7 @@ body <- dashboardBody(
             column(9,tableOutput('ecos_stat_tables'))
           )
         ),
-        # 탭 - 아이템 추가====
+        ###c. 아이템 추가====
         tabPanel(
           title = "아이템 추가",
           icon=icon('square-plus'),
@@ -92,7 +92,7 @@ body <- dashboardBody(
         )
       )
     ),
-    #_2) 포트폴리오 운용현황====
+    ##2) 포트폴리오 운용현황====
     tabItem(
       tabName = 'pf_bs_pl',
       actionButton('kis','한투접속'),
@@ -104,7 +104,7 @@ body <- dashboardBody(
         status='primary',
         type='tabs',
         
-        #__a. 투자현황====
+        ###a. 투자현황====
         tabPanel(
           title="투자현황",
           h5("1. 자산군별 배분현황"),
@@ -144,7 +144,7 @@ body <- dashboardBody(
             )
           )
         ),
-        #__b. 손익현황====
+        ###b. 손익현황====
         tabPanel(
           title="손익현황",
           h5("1. 자산군별 손익현황"),
@@ -178,7 +178,7 @@ ui <- dashboardPage(
 # <Server> ====
 
 server <- function(input, output, session) {
-  
+
   
   source("functions.R", echo=F)
   
@@ -192,7 +192,8 @@ server <- function(input, output, session) {
     df_d=NULL
   )
   
-  #통계표 조회====
+  # 1) 한국은행 지표선정====
+  ## b. 통계표 조회====
   observeEvent(input$name,{
     rv$df <- ec$find_stat(input$name)
     updateSelectizeInput(session, 'name_in', 
@@ -201,9 +202,9 @@ server <- function(input, output, session) {
     
   })
   
-  #아이템 추가==== 
+  ## c. 아이템 추가==== 
   
-  # * 통계표 이름==== 
+  ### * 통계표 이름==== 
   observeEvent(input$name_in,{
     
     rv$name_in <- input$name_in
@@ -228,7 +229,7 @@ server <- function(input, output, session) {
                          selected = rv$code)
   })
   
-  # * 통계표 코드==== 
+  ### * 통계표 코드==== 
   observeEvent(input$code_in,{
     tryCatch({
       rv$df2 <- ec$find_items(input$code_in)
@@ -246,7 +247,7 @@ server <- function(input, output, session) {
                          selected = '전체')
   })
   
-  # * 아이템이름==== 
+  ### * 아이템이름==== 
   observeEvent(input$item_in,{
     if(is.null(input$item_in)||input$item_in=='전체'){
       rv$df3 <- rv$df2
@@ -264,7 +265,7 @@ server <- function(input, output, session) {
                          selected = '전체')        
   })
   
-  # * 데이터주기====    
+  ### * 데이터주기====    
   observeEvent(input$cyl_in,{
     if(is.null(input$cyl_in)||input$cyl_in=='전체'){
       rv$df4 <- rv$df3
@@ -278,7 +279,7 @@ server <- function(input, output, session) {
                          selected = input$cyl_in)
   })
   
-  # * 아이템 추가====    
+  ### * 아이템 추가====    
   observeEvent(input$add_item,{
     ec$save_items(rv$df5, input$ecos_name)
     sendSweetAlert(title="추가하였습니다!", type='success')
@@ -291,7 +292,8 @@ server <- function(input, output, session) {
     output$ecos_item_tables <- renderTable(rv$df5)
   })
   
-  #자산배분 현황 확인====
+  # 2) 포트폴리오 운용 현황====
+  
   observeEvent(input$kis,{
     w1 <- Waiter$new(
       id='pf_box1',
@@ -303,6 +305,8 @@ server <- function(input, output, session) {
     ma = MyAssets$new()
     
     w1$hide()
+  
+    ## a. 투자현황====
     
     render_allo <- function(df){
       renderUI({
@@ -320,6 +324,8 @@ server <- function(input, output, session) {
     output$allo3 <- render_allo(ma$allo3)
     output$allo4 <- render_allo(ma$allo4)
     output$allo5 <- render_allo(ma$allo5)
+    
+   # b. 손익현황====
     
     output$class_ret <- renderUI({
       ma$ret |> 
