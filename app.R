@@ -104,7 +104,7 @@ body <- dashboardBody(
         status='primary',
         type='tabs',
         
-        ###a. 투자현황====
+        ###a. 투자자산현황====
         tabPanel(
           title="투자현황",
           h5("1. 자산군별 배분현황"),
@@ -144,19 +144,62 @@ body <- dashboardBody(
             )
           )
         ),
-        ###b. 손익현황====
+        ###b. 투자손익현황====
         tabPanel(
-          title="손익현황",
+          title="투자손익현황",
           h5("1. 자산군별 손익현황"),
           br(),
           fluidRow(
-            uiOutput("class_ret")
+            uiOutput("class_ret_a")
           ),
           br(),
           h5("2. 개별자산 손익현황"),
           br(),
           fluidRow(
-            uiOutput("bs_pl_mkt")
+            uiOutput("bs_pl_mkt_a")
+          )
+        ),
+        ###c. 연금현황====
+        tabPanel(
+          title="연금현황",
+          h5("1. 자산군별 배분현황"),
+          br(),
+          fluidRow(
+            column(
+              width = 4,
+              uiOutput("allo6")
+            ),
+            column(
+              width = 8,
+              uiOutput("allo7")
+            )
+          ),
+          h5("2. 계좌별 배분현황"),
+          br(),
+          fluidRow(
+            column(
+              width = 4,
+              uiOutput("allo8")
+            ),
+            column(
+              width = 8,
+              uiOutput("allo9")
+            )
+          )
+        ),
+        ###d. 연금손익현황====
+        tabPanel(
+          title="연금손익현황",
+          h5("1. 자산군별 손익현황"),
+          br(),
+          fluidRow(
+            uiOutput("class_ret_p")
+          ),
+          br(),
+          h5("2. 개별자산 손익현황"),
+          br(),
+          fluidRow(
+            uiOutput("bs_pl_mkt_p")
           )
         )
       )
@@ -302,12 +345,10 @@ server <- function(input, output, session) {
     
     w1$show()
     
-    ma = MyAssets$new()
+    ma <- MyAssets$new()
     
     w1$hide()
   
-    ## a. 투자현황====
-    
     render_allo <- function(df){
       renderUI({
         df |> flextable() |> 
@@ -318,6 +359,9 @@ server <- function(input, output, session) {
       })
     }
     
+    
+    ## a. 투자자산현황====
+    
     output$allo0 <- render_allo(ma$allo0)
     output$allo1 <- render_allo(ma$allo1)
     output$allo2 <- render_allo(ma$allo2)
@@ -325,10 +369,10 @@ server <- function(input, output, session) {
     output$allo4 <- render_allo(ma$allo4)
     output$allo5 <- render_allo(ma$allo5)
     
-   # b. 손익현황====
+    # b. 투자손익현황====
     
-    output$class_ret <- renderUI({
-      ma$ret |> 
+    output$class_ret_a <- renderUI({
+      ma$ret_a |> 
         select(1:3,평가금액,실현손익, 평가손익증감, 평가손익, 
                실현수익률:평가수익률) |> 
         flextable() |> 
@@ -340,12 +384,48 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
-    output$bs_pl_mkt <-renderUI({
-      ma$bs_pl_mkt |> 
+    output$bs_pl_mkt_a <-renderUI({
+      ma$bs_pl_mkt_a |> 
         select(통화, 자산군, 세부자산군, 종목명,
                보유수량,평가금액, 실현손익,평가손익증감, 평가손익,
                실현수익률,운용수익률,평가수익률) |>
         arrange(통화,자산군,세부자산군) |> 
+        flextable() |> 
+        theme_vanilla() |> 
+        merge_v(j=1:3) |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=5:9, digits = 0) |>
+        colformat_double(j=10:12, digits = 2) |> 
+        htmltools_value()
+    })
+    
+    # c. 투자자산현황====
+    output$allo6 <- render_allo(ma$allo6)
+    output$allo7 <- render_allo(ma$allo7)
+    output$allo8 <- render_allo(ma$allo8)
+    output$allo9 <- render_allo(ma$allo9)
+    
+    # b. 투자손익현황====
+    
+    output$class_ret_p <- renderUI({
+      ma$ret_p |> 
+        select(1:3,평가금액,실현손익, 평가손익증감, 평가손익, 
+               실현수익률:평가수익률) |> 
+        flextable() |> 
+        theme_vanilla() |> 
+        merge_v(j=1:2) |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=4:7, digits = 0) |>
+        colformat_double(j=8:10, digits = 2) |> 
+        htmltools_value()
+    })
+    
+    output$bs_pl_mkt_p <-renderUI({
+      ma$bs_pl_mkt_p |> 
+        select(계좌, 자산군, 세부자산군, 종목명,
+               보유수량,평가금액, 실현손익,평가손익증감, 평가손익,
+               실현수익률,운용수익률,평가수익률) |>
+        arrange(계좌,자산군,세부자산군) |> 
         flextable() |> 
         theme_vanilla() |> 
         merge_v(j=1:3) |>
