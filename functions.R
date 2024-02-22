@@ -9,6 +9,7 @@ library(tidyr)
 library(rvest)
 library(readxl)
 library(RSQLite)
+library(dbx)
 import::from(stringr, str_detect, str_extract)
 
 
@@ -459,8 +460,7 @@ MyAssets <- R6Class(
       bs_pl <- bind_cols(bs_pl1, bs_pl2, bs_pl3) |> 
         left_join(select(codes, 종목코드, 자산군, 세부자산군, 세부자산군2), 
                   by = '종목코드') |>
-        arrange(종목명, 거래일자) |>
-        filter(평잔!=0)
+        arrange(종목명, 거래일자)
       
       
       ###(2) 예수금 & 평잔 처리====
@@ -572,10 +572,10 @@ MyAssets <- R6Class(
         filter(거래일자 == self$today) |> 
         left_join(price, by="종목코드") |> 
         mutate(
-          평가금액 = ifelse(is.na(평가금액), 장부금액, 평가금액)) |> 
-        left_join(
-          (self$assets |> select(종목코드, 기초평가손익)), 
-          by="종목코드")
+          평가금액 = ifelse(is.na(평가금액), 장부금액, 평가금액)) 
+        # left_join(
+        #   (self$assets |> select(종목코드, 기초평가손익)), 
+        #   by="종목코드")
       
       dollar <-
         (sum(filter(bs_pl, 통화 == '달러')$평가금액) * self$ex_usd) |> 
@@ -589,12 +589,13 @@ MyAssets <- R6Class(
         mutate(
           평가금액 = replace(평가금액, 종목명 == '달러자산', dollar),
           평가금액 = replace(평가금액, 종목명 == '엔화자산', yen),
-          평가손익증감 = 평가금액 - 장부금액,
-          운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
-          평가손익 = 기초평가손익 + 평가손익증감, 
-          평가수익률 = 평가손익 / (평가금액-평가손익) * 100
+          # 평가손익증감 = 평가금액 - 장부금액,
+          # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
+          평가손익 = 평가금액 - 장부금액, 
+          평가수익률 = 평가손익 / 장부금액 * 100
         ) |> 
-        arrange(desc(통화), desc(평가금액))
+        arrange(desc(통화), desc(평가금액)) |>
+        filter(평잔!=0)
     },
     
     ## 7.(메서드)연금 평가반영 잔액-손익 테이블 생성========
@@ -607,18 +608,19 @@ MyAssets <- R6Class(
         filter(거래일자 == self$today) |> 
         left_join(price, by="종목코드") |> 
         mutate(
-          평가손익증감 = 평가금액 - 장부금액,
-          운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
-          평가손익 = 기초평가손익 + 평가손익증감, 
-          평가수익률 = 평가손익 / (평가금액-평가손익) * 100
+          # 평가손익증감 = 평가금액 - 장부금액,
+          # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
+          평가손익 = 평가금액 - 장부금액, 
+          평가수익률 = 평가손익 / 장부금액 * 100
         ) |> 
-        arrange(desc(통화), desc(평가금액))
+        arrange(desc(통화), desc(평가금액)) |>
+        filter(평잔!=0)
     },
     
     ## 8.(메서드) 자산군별 수익률 현황====
     get_class_returns = function(mode='assets') {
       
-      ### 1) 통화별 수익률 산출함수====
+      ### 1) 통화별/계좌별 수익률 산출함수====
       get_class_returns <- function(asset_returns, total=F) {
         
         if(mode=='assets') {dist <- asset_returns$통화[1]}
@@ -629,7 +631,7 @@ MyAssets <- R6Class(
         
         class_returns <- asset_returns |> 
           select(-(종목코드:보유수량), -세부자산군2, 
-                 -실현수익률, -운용수익률, -평가수익률) |> 
+                 -실현수익률, -평가수익률) |> 
           group_by(자산군, 세부자산군) |> 
           summarise(across(everything(), ~sum(.x, na.rm = TRUE)),
                     .groups='drop') |> 
@@ -642,12 +644,12 @@ MyAssets <- R6Class(
                        summarise(across(everything(), 
                                         ~sum(.x, na.rm=T)))))|> 
           mutate(실현수익률 = 실현손익 / 평잔 * 100,
-                 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
-                 평가수익률 = 평가손익 / (평가금액-평가손익) * 100)
+                 # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
+                 평가수익률 = 평가손익 / 장부금액 * 100)
       }
       
     
-      ### 2) 투자자산 수익률====
+      ### 2) 자산 수익률====
       if(mode=='assets'){
         
         df <- self$bs_pl_mkt_a
@@ -798,6 +800,16 @@ MyData <- R6Class(
     ##2.(메서드) 테이블 추가 ====
     add_table = function(name, table){
       dbWriteTable(self$con, name, table)
+    },
+    
+    ##3.(메서드) 테이블 읽기 ====
+    read = function(name){
+      dbReadTable(self$con, name) |> tibble()
+    },
+    
+    ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
+    read_obj = function(name){
+      tbl(self$con, name)
     }
   )
 )

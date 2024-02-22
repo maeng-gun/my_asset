@@ -373,29 +373,29 @@ server <- function(input, output, session) {
     
     output$class_ret_a <- renderUI({
       ma$ret_a |> 
-        select(1:3,평가금액,실현손익, 평가손익증감, 평가손익, 
+        select(1:3,평가금액,실현손익, 평가손익, 
                실현수익률:평가수익률) |> 
         flextable() |> 
         theme_vanilla() |> 
         merge_v(j=1:2) |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=4:7, digits = 0) |>
-        colformat_double(j=8:10, digits = 2) |> 
+        colformat_double(j=4:6, digits = 0) |>
+        colformat_double(j=7:8, digits = 2) |> 
         htmltools_value()
     })
     
     output$bs_pl_mkt_a <-renderUI({
       ma$bs_pl_mkt_a |> 
         select(통화, 자산군, 세부자산군, 종목명,
-               보유수량,평가금액, 실현손익,평가손익증감, 평가손익,
-               실현수익률,운용수익률,평가수익률) |>
+               보유수량,평가금액, 실현손익,평가손익,
+               실현수익률, 평가수익률) |>
         arrange(통화,자산군,세부자산군) |> 
         flextable() |> 
         theme_vanilla() |> 
         merge_v(j=1:3) |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=5:9, digits = 0) |>
-        colformat_double(j=10:12, digits = 2) |> 
+        colformat_double(j=5:8, digits = 0) |>
+        colformat_double(j=9:10, digits = 2) |> 
         htmltools_value()
     })
     
@@ -409,29 +409,29 @@ server <- function(input, output, session) {
     
     output$class_ret_p <- renderUI({
       ma$ret_p |> 
-        select(1:3,평가금액,실현손익, 평가손익증감, 평가손익, 
+        select(1:3,평가금액,실현손익, 평가손익, 
                실현수익률:평가수익률) |> 
         flextable() |> 
         theme_vanilla() |> 
         merge_v(j=1:2) |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=4:7, digits = 0) |>
-        colformat_double(j=8:10, digits = 2) |> 
+        colformat_double(j=4:6, digits = 0) |>
+        colformat_double(j=7:8, digits = 2) |> 
         htmltools_value()
     })
     
     output$bs_pl_mkt_p <-renderUI({
       ma$bs_pl_mkt_p |> 
         select(계좌, 자산군, 세부자산군, 종목명,
-               보유수량,평가금액, 실현손익,평가손익증감, 평가손익,
-               실현수익률,운용수익률,평가수익률) |>
+               보유수량,평가금액, 실현손익, 평가손익,
+               실현수익률, 평가수익률) |>
         arrange(계좌,자산군,세부자산군) |> 
         flextable() |> 
         theme_vanilla() |> 
         merge_v(j=1:3) |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=5:9, digits = 0) |>
-        colformat_double(j=10:12, digits = 2) |> 
+        colformat_double(j=5:8, digits = 0) |>
+        colformat_double(j=9:10, digits = 2) |> 
         htmltools_value()
     })
     
