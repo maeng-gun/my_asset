@@ -363,7 +363,7 @@ server <- function(input, output, session) {
     df3=NULL, df4=NULL, df5=NULL,
     df_s=ec$read_items(),
     df_d=NULL,
-    df_tickers=NULL
+    tickers=NULL
   )
   
   # 1) 한국은행 지표선정====
@@ -453,79 +453,79 @@ server <- function(input, output, session) {
                          selected = input$cyl_in)
   })
   
-  ### * 아이템 추가====    
+  ## * 아이템 추가====
   observeEvent(input$add_item,{
     ec$save_items(rv$df5, input$ecos_name)
     sendSweetAlert(title="추가하였습니다!", type='success')
     rv$df_s <- ec$read_items()
   })
-  
+
   observe({
     output$selected_item <- renderTable(rv$df_s)
     output$ecos_stat_tables <- renderTable(rv$df)
     output$ecos_item_tables <- renderTable(rv$df5)
   })
-  
+
   # 2) 자산운용 내역 기록====
   observeEvent(input$type1,{
     if(input$type1 == "투자자산"){
-      rv$tickers <- md$read_table('assets')}
+      rv$tickers <- md$read('assets')}
     else {
-      rv$tickers <- md$read_table('pension')}
-    
+      rv$tickers <- md$read('pension')}
+
     output$ticker_table <- renderUI({
-      rv$tickers |> flextable() |> 
-        theme_vanilla() |> 
-        set_table_properties(layout='autofit') |> 
+      rv$tickers |> flextable() |>
+        theme_vanilla() |>
+        set_table_properties(layout='autofit') |>
         htmltools_value()
     })
-    
-    updateSelectInput(session, 'new1', 
+
+    updateSelectInput(session, 'new1',
                       choices = c('신규', rv$tickers$행번호),
                       selected = '신규')
   })
-  
-  
+
+
   observeEvent(input$new1,{
     if(input$new1 != "신규"){
       t_rows <- filter(rv$tickers, 행번호 == input$new1)
-      
+
       updateTextInput(session, 'account', value = t_rows$계좌)
       updateTextInput(session, 'ticker', value = t_rows$종목코드)
       updateTextInput(session, 'ass_name', value = t_rows$종목명)
-      updateAutonumericInput(session, 'eval_price', 
+      updateAutonumericInput(session, 'eval_price',
                              value = t_rows$평가금액)
       updateTextInput(session, 'comm_name', value = t_rows$상품명)
       updateTextInput(session, 'ass_cur', value = t_rows$통화)
       updateTextInput(session, 'ass_class', value = t_rows$자산군)
-      updateTextInput(session, 'ass_class1', 
+      updateTextInput(session, 'ass_class1',
                       value = t_rows$세부자산군)
-      updateTextInput(session, 'ass_class2', 
+      updateTextInput(session, 'ass_class2',
                       value = t_rows$세부자산군2)
-      updateAutonumericInput(session, 'init_e_pl', 
+      updateAutonumericInput(session, 'init_e_pl',
                              value = t_rows$기초평가손익)
     }
     else{
-      
+
       updateTextInput(session, 'account', value = '')
       updateTextInput(session, 'ticker', value = '')
       updateTextInput(session, 'ass_name', value = '')
-      updateAutonumericInput(session, 'eval_price', 
+      updateAutonumericInput(session, 'eval_price',
                              value = 0)
       updateTextInput(session, 'comm_name', value = '')
       updateTextInput(session, 'ass_cur', value = '')
       updateTextInput(session, 'ass_class', value = '')
-      updateTextInput(session, 'ass_class1', 
+      updateTextInput(session, 'ass_class1',
                       value = '')
-      updateTextInput(session, 'ass_class2', 
+      updateTextInput(session, 'ass_class2',
                       value = '')
-      updateAutonumericInput(session, 'init_e_pl', 
+      updateAutonumericInput(session, 'init_e_pl',
                              value = '')
-      
+
     }
   })
-  
-  
+
+
   
   # 3) 자산운용 현황====
   

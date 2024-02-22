@@ -805,11 +805,9 @@ MyData <- R6Class(
     ##3.(메서드) 테이블 읽기 ====
     
     read = function(name){
-      read_table = function(name){
         dbReadTable(self$con, name) |> tibble()
-        
-      }
     },
+    
     ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
     read_obj = function(name){
       tbl(self$con, name)
