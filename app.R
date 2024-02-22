@@ -2,7 +2,7 @@ library(shiny)
 library(bs4Dash)
 library(waiter)
 library(flextable)
-import::from(shinyWidgets, sendSweetAlert, useSweetAlert)
+library(shinyWidgets)
 import::from(shinyjs, useShinyjs, extendShinyjs, js)
 
 # <User Interface> ====
@@ -22,12 +22,18 @@ sidebar <- dashboardSidebar(
     sidebarHeader("경제지표"),
     menuItem(
       text = "한국은행 지표선정",
-      icon = icon(name = "hand-pointer"),
+      icon = icon("hand-pointer"),
       tabName = "ecos_stat"
     ),
+    sidebarHeader("포트폴리오 관리"),
     menuItem(
-      text = "포트폴리오 운용현황",
-      icon = icon(name = "sack-dollar"),
+      text = "자산운용 내역 기록",
+      icon = icon('receipt'),
+      tabName = 'trading_record'
+    ),
+    menuItem(
+      text = "자산운용 현황",
+      icon = icon("sack-dollar"),
       tabName = "pf_bs_pl"
     )
   ),
@@ -92,7 +98,129 @@ body <- dashboardBody(
         )
       )
     ),
-    ##2) 포트폴리오 운용현황====
+    ##2) 자산운용 내역 기록====
+    tabItem(
+      tabName = 'trading_record',
+      tabBox(
+        width=12,
+        status='primary',
+        type='tabs',
+        
+        ###a. 투자종목 관리====
+        tabPanel(
+          title="투자종목 관리",
+          fluidRow(
+            column(
+              width = 2,
+              box(
+                width = 12,
+                status = 'info',
+                solidHeader = T,
+                title = "입력사항",
+                collapsible = F,
+                selectInput(
+                  inputId = 'type1',
+                  label = "운용구분",
+                  choices = c("투자자산", "연금자산")
+                ),
+                selectInput(
+                  inputId = 'new1',
+                  label = "신규/수정",
+                  choices = "신규"
+                ),
+                textInput(
+                  inputId = 'account',
+                  label = "계좌",
+                  value = ""
+                ),
+                
+                textInput(
+                  inputId = 'ticker',
+                  label = "종목코드",
+                  value = ""
+                ),
+                textInput(
+                  inputId = 'ass_name',
+                  label = "종목명",
+                  value = ""
+                ),
+                autonumericInput(
+                  inputId = 'eval_price',
+                  label = "평가금액",
+                  value = 0
+                ),
+                textInput(
+                  inputId = 'comm_name',
+                  label = "상품명",
+                  value = ""
+                ),
+                textInput(
+                  inputId = 'ass_class',
+                  label = "자산군",
+                  value = ""
+                ),
+                textInput(
+                  inputId = 'ass_cur',
+                  label = "통화",
+                  value = ""
+                ),
+                textInput(
+                  inputId = 'ass_class1',
+                  label = "세부자산군",
+                  value = ""
+                ),
+                textInput(
+                  inputId = 'ass_class2',
+                  label = "세부자산군2",
+                  value = ""
+                ),
+                autonumericInput(
+                  inputId = 'init_e_pl',
+                  label = "기초평가손익",
+                  value = 0
+                ),
+                br(),
+                div(
+                  actionButton(
+                    inputId = "ticker_new",
+                    label = "추가",
+                    width = '30%', 
+                    status = "info"
+                  ),
+                  actionButton(
+                    inputId = "ticker_mod",
+                    label = "수정",
+                    width = '30%', 
+                    status = "success"
+                  ),
+                  actionButton(
+                    inputId = "ticker_del",
+                    label = "삭제",
+                    width = '30%', 
+                    status = "primary"
+                  ), style='text-align: center')
+                
+              )
+            ),
+            column(
+              width = 10,
+              uiOutput("ticker_table")
+            )
+          )
+        ),
+        
+        ###b. 투자자산 거래내역====
+        tabPanel(
+          title="투자자산 거래내역"
+        ),
+        
+        ###c. 연금자산 거래내역====
+        tabPanel(
+          title="연금자산 거래내역"
+        )
+      )
+    ),
+    ##3) 자산운용 현황====
     tabItem(
       tabName = 'pf_bs_pl',
       actionButton('kis','한투접속'),
@@ -227,12 +355,15 @@ server <- function(input, output, session) {
   
   ec = Ecos$new()
   
+  md = MyData$new('mydata.sqlite')
+  
   rv <-  reactiveValues(
     name_in='전체',
     code='전체', df=NULL, df2=NULL, 
     df3=NULL, df4=NULL, df5=NULL,
     df_s=ec$read_items(),
-    df_d=NULL
+    df_d=NULL,
+    df_tickers=NULL
   )
   
   # 1) 한국은행 지표선정====
@@ -335,7 +466,68 @@ server <- function(input, output, session) {
     output$ecos_item_tables <- renderTable(rv$df5)
   })
   
-  # 2) 포트폴리오 운용 현황====
+  # 2) 자산운용 내역 기록====
+  observeEvent(input$type1,{
+    if(input$type1 == "투자자산"){
+      rv$tickers <- md$read_table('assets')}
+    else {
+      rv$tickers <- md$read_table('pension')}
+    
+    output$ticker_table <- renderUI({
+      rv$tickers |> flextable() |> 
+        theme_vanilla() |> 
+        set_table_properties(layout='autofit') |> 
+        htmltools_value()
+    })
+    
+    updateSelectInput(session, 'new1', 
+                      choices = c('신규', rv$tickers$행번호),
+                      selected = '신규')
+  })
+  
+  
+  observeEvent(input$new1,{
+    if(input$new1 != "신규"){
+      t_rows <- filter(rv$tickers, 행번호 == input$new1)
+      
+      updateTextInput(session, 'account', value = t_rows$계좌)
+      updateTextInput(session, 'ticker', value = t_rows$종목코드)
+      updateTextInput(session, 'ass_name', value = t_rows$종목명)
+      updateAutonumericInput(session, 'eval_price', 
+                             value = t_rows$평가금액)
+      updateTextInput(session, 'comm_name', value = t_rows$상품명)
+      updateTextInput(session, 'ass_cur', value = t_rows$통화)
+      updateTextInput(session, 'ass_class', value = t_rows$자산군)
+      updateTextInput(session, 'ass_class1', 
+                      value = t_rows$세부자산군)
+      updateTextInput(session, 'ass_class2', 
+                      value = t_rows$세부자산군2)
+      updateAutonumericInput(session, 'init_e_pl', 
+                             value = t_rows$기초평가손익)
+    }
+    else{
+      
+      updateTextInput(session, 'account', value = '')
+      updateTextInput(session, 'ticker', value = '')
+      updateTextInput(session, 'ass_name', value = '')
+      updateAutonumericInput(session, 'eval_price', 
+                             value = 0)
+      updateTextInput(session, 'comm_name', value = '')
+      updateTextInput(session, 'ass_cur', value = '')
+      updateTextInput(session, 'ass_class', value = '')
+      updateTextInput(session, 'ass_class1', 
+                      value = '')
+      updateTextInput(session, 'ass_class2', 
+                      value = '')
+      updateAutonumericInput(session, 'init_e_pl', 
+                             value = '')
+      
+    }
+  })
+  
+  
+  
+  # 3) 자산운용 현황====
   
   observeEvent(input$kis,{
     w1 <- Waiter$new(
@@ -409,7 +601,7 @@ server <- function(input, output, session) {
     
     output$class_ret_p <- renderUI({
       ma$ret_p |> 
-        select(1:3,평가금액,실현손익, 평가손익, 
+        select(1:3,평가금액,실현손익, 평가손익,  
                실현수익률:평가수익률) |> 
         flextable() |> 
         theme_vanilla() |> 
@@ -424,7 +616,7 @@ server <- function(input, output, session) {
       ma$bs_pl_mkt_p |> 
         select(계좌, 자산군, 세부자산군, 종목명,
                보유수량,평가금액, 실현손익, 평가손익,
-               실현수익률, 평가수익률) |>
+               실현수익률,평가수익률) |>
         arrange(계좌,자산군,세부자산군) |> 
         flextable() |> 
         theme_vanilla() |> 

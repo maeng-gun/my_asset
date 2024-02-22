@@ -594,7 +594,7 @@ MyAssets <- R6Class(
           평가손익 = 평가금액 - 장부금액, 
           평가수익률 = 평가손익 / 장부금액 * 100
         ) |> 
-        arrange(desc(통화), desc(평가금액)) |>
+        arrange(desc(통화), desc(평가금액)) |> 
         filter(평잔!=0)
     },
     
@@ -610,10 +610,10 @@ MyAssets <- R6Class(
         mutate(
           # 평가손익증감 = 평가금액 - 장부금액,
           # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
-          평가손익 = 평가금액 - 장부금액, 
+          평가손익 = 평가금액 - 장부금액,
           평가수익률 = 평가손익 / 장부금액 * 100
         ) |> 
-        arrange(desc(통화), desc(평가금액)) |>
+        arrange(desc(통화), desc(평가금액)) |> 
         filter(평잔!=0)
     },
     
@@ -803,15 +803,16 @@ MyData <- R6Class(
     },
     
     ##3.(메서드) 테이블 읽기 ====
-    read = function(name){
-      dbReadTable(self$con, name) |> tibble()
-    },
     
+    read = function(name){
+      read_table = function(name){
+        dbReadTable(self$con, name) |> tibble()
+        
+      }
+    },
     ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
     read_obj = function(name){
       tbl(self$con, name)
     }
   )
 )
-
-self <- MyData$new('mydata.sqlite')
