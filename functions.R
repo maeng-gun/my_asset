@@ -373,10 +373,10 @@ MyAssets <- R6Class(
       krw2 <- read_excel('trade.xlsx', sheet = '한투원화')
       # krw3 <- read_excel('trade.xlsx', sheet = '한투CMA') #2023년까지만 사용
       krw4 <- read_excel('trade.xlsx', sheet = '한투ISA')
-      krw5 <- read_excel('trade.xlsx', sheet = '별도원화')
+      # krw5 <- read_excel('trade.xlsx', sheet = '별도원화')
       fiw <- read_excel('trade.xlsx', sheet = '외화자산평가') |> select(-c('외화입출금'))
       
-      trade <- bind_rows(usd1, usd2, jpy, krw2, krw4, krw5, fiw) |>
+      trade <- bind_rows(usd1, usd2, jpy, krw2, krw4, fiw) |>
         mutate(across(매입수량:누적,as.numeric)) |> 
         select(-종목명, -상품명)
       
