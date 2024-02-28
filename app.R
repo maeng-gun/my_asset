@@ -110,102 +110,111 @@ body <- dashboardBody(
         tabPanel(
           title="투자종목 관리",
           fluidRow(
-            column(
-              width = 2,
-              box(
-                width = 12,
-                status = 'info',
-                solidHeader = T,
-                title = "입력사항",
-                collapsible = F,
-                selectInput(
-                  inputId = 'type1',
-                  label = "운용구분",
-                  choices = c("투자자산", "연금자산")
-                ),
-                selectInput(
-                  inputId = 'new1',
-                  label = "신규/수정",
-                  choices = "신규"
-                ),
-                textInput(
-                  inputId = 'account',
-                  label = "계좌",
-                  value = ""
-                ),
-                
-                textInput(
-                  inputId = 'ticker',
-                  label = "종목코드",
-                  value = ""
-                ),
-                textInput(
-                  inputId = 'ass_name',
-                  label = "종목명",
-                  value = ""
-                ),
-                autonumericInput(
-                  inputId = 'eval_price',
-                  label = "평가금액",
-                  value = 0
-                ),
-                textInput(
-                  inputId = 'comm_name',
-                  label = "상품명",
-                  value = ""
-                ),
-                textInput(
-                  inputId = 'ass_class',
-                  label = "자산군",
-                  value = ""
-                ),
-                textInput(
-                  inputId = 'ass_cur',
-                  label = "통화",
-                  value = ""
-                ),
-                textInput(
-                  inputId = 'ass_class1',
-                  label = "세부자산군",
-                  value = ""
-                ),
-                textInput(
-                  inputId = 'ass_class2',
-                  label = "세부자산군2",
-                  value = ""
-                ),
-                autonumericInput(
-                  inputId = 'init_e_pl',
-                  label = "기초평가손익",
-                  value = 0
-                ),
-                br(),
-                div(
-                  actionButton(
-                    inputId = "ticker_new",
-                    label = "추가",
-                    width = '30%', 
-                    status = "info"
+            box(
+              width = 12,
+              status = 'info',
+              solidHeader = T,
+              title = "입력사항",
+              collapsible = F,
+              fluidRow(
+                column(
+                  width = 3,
+                  selectInput(
+                    inputId = 'type1',
+                    label = "운용구분",
+                    choices = c("투자자산", "연금자산")
                   ),
-                  actionButton(
-                    inputId = "ticker_mod",
-                    label = "수정",
-                    width = '30%', 
-                    status = "success"
+                  selectInput(
+                    inputId = 'new1',
+                    label = "신규/수정",
+                    choices = "신규"
                   ),
-                  actionButton(
-                    inputId = "ticker_del",
-                    label = "삭제",
-                    width = '30%', 
-                    status = "primary"
-                  ), style='text-align: center')
-                
-              )
-            ),
-            column(
-              width = 10,
-              uiOutput("ticker_table")
+                  textInput(
+                    inputId = 'account',
+                    label = "계좌",
+                    value = ""
+                  )
+                ),
+                column(
+                  width = 3,
+                  textInput(
+                    inputId = 'ticker',
+                    label = "종목코드",
+                    value = ""
+                  ),
+                  textInput(
+                    inputId = 'ass_name',
+                    label = "종목명",
+                    value = ""
+                  ),
+                  autonumericInput(
+                    inputId = 'eval_price',
+                    label = "평가금액",
+                    value = 0
+                  )
+                ),
+                column(
+                  width = 3,
+                  textInput(
+                    inputId = 'comm_name',
+                    label = "상품명",
+                    value = ""
+                  ),
+                  textInput(
+                    inputId = 'ass_class',
+                    label = "자산군",
+                    value = ""
+                  ),
+                  textInput(
+                    inputId = 'ass_cur',
+                    label = "통화",
+                    value = ""
+                  )
+                ),
+                column(
+                  width = 3,
+                  textInput(
+                    inputId = 'ass_class1',
+                    label = "세부자산군",
+                    value = ""
+                  ),
+                  textInput(
+                    inputId = 'ass_class2',
+                    label = "세부자산군2",
+                    value = ""
+                  ),
+                  autonumericInput(
+                    inputId = 'init_e_pl',
+                    label = "기초평가손익",
+                    value = 0
+                  )
+                )
+              ),
+              br(),
+              div(
+                actionButton(
+                  inputId = "ticker_new",
+                  label = "추가",
+                  width = '30%', 
+                  status = "info"
+                ),
+                actionButton(
+                  inputId = "ticker_mod",
+                  label = "수정",
+                  width = '30%', 
+                  status = "success"
+                ),
+                actionButton(
+                  inputId = "ticker_del",
+                  label = "삭제",
+                  width = '30%', 
+                  status = "primary"
+                ), style='text-align: center')
+              
             )
+          ),
+          fluidRow(
+            uiOutput("ticker_table")
           )
         ),
         

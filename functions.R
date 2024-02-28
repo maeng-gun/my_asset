@@ -29,6 +29,7 @@ get_exchange_rate <- function(cur='달러'){
     readr::parse_number()
 }
 
+#Ecos 클래스 정의====
 Ecos <- R6Class(
   "Ecos",
   
@@ -814,3 +815,35 @@ MyData <- R6Class(
     }
   )
 )
+
+get_holidays <- function(start_year, end_year){
+  service_key <- get_config()$holiday
+  request_url <- 'http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo'
+  
+  out <- tibble()
+  for (request_year in start_year:end_year) {
+    for (request_month in sprintf("%02d", 1:12)) {
+      x <- GET(url = request_url,
+               query = list(serviceKey = I(service_key),
+                            solYear = request_year,
+                            solMonth = request_month))
+      
+      # export data from json
+      x <- x %>% 
+        content(as = "text", encoding = "UTF-8") %>% 
+        fromJSON()
+      
+      if (x$response$body$items != "") {
+        x <- as_tibble(x$response$body$items$item)|> 
+          transmute(
+            기준일=as.Date(as.character(locdate), 
+                        format='%Y%m%d'), 
+            공휴일명=dateName)
+        
+        out <- out %>% 
+          bind_rows(x)
+      }
+    }
+  }
+  return(out)
+}
