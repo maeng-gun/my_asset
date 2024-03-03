@@ -105,7 +105,7 @@ body <- dashboardBody(
         width=12,
         status='primary',
         type='tabs',
-        
+
         ###a. 투자종목 관리====
         tabPanel(
           title="투자종목 관리",
@@ -116,80 +116,7 @@ body <- dashboardBody(
               solidHeader = T,
               title = "입력사항",
               collapsible = F,
-              fluidRow(
-                column(
-                  width = 3,
-                  selectInput(
-                    inputId = 'type1',
-                    label = "운용구분",
-                    choices = c("투자자산", "연금자산")
-                  ),
-                  selectInput(
-                    inputId = 'new1',
-                    label = "신규/수정",
-                    choices = "신규"
-                  ),
-                  textInput(
-                    inputId = 'account',
-                    label = "계좌",
-                    value = ""
-                  )
-                ),
-                column(
-                  width = 3,
-                  textInput(
-                    inputId = 'ticker',
-                    label = "종목코드",
-                    value = ""
-                  ),
-                  textInput(
-                    inputId = 'ass_name',
-                    label = "종목명",
-                    value = ""
-                  ),
-                  autonumericInput(
-                    inputId = 'eval_price',
-                    label = "평가금액",
-                    value = 0
-                  )
-                ),
-                column(
-                  width = 3,
-                  textInput(
-                    inputId = 'comm_name',
-                    label = "상품명",
-                    value = ""
-                  ),
-                  textInput(
-                    inputId = 'ass_class',
-                    label = "자산군",
-                    value = ""
-                  ),
-                  textInput(
-                    inputId = 'ass_cur',
-                    label = "통화",
-                    value = ""
-                  )
-                ),
-                column(
-                  width = 3,
-                  textInput(
-                    inputId = 'ass_class1',
-                    label = "세부자산군",
-                    value = ""
-                  ),
-                  textInput(
-                    inputId = 'ass_class2',
-                    label = "세부자산군2",
-                    value = ""
-                  ),
-                  autonumericInput(
-                    inputId = 'init_e_pl',
-                    label = "기초평가손익",
-                    value = 0
-                  )
-                )
-              ),
+              uiOutput('manage_ticker'),
               br(),
               div(
                 actionButton(
@@ -226,6 +153,36 @@ body <- dashboardBody(
         ###c. 연금자산 거래내역====
         tabPanel(
           title="연금자산 거래내역"
+        ),
+        
+        ###d. 구분항목 관리====
+        tabPanel(
+          title="구분항목 관리",
+          fluidRow(
+            column(
+              width = 2,
+              uiOutput('ass_account_list')
+            ),
+            column(
+              width = 2,
+              uiOutput('ass_cur_list')
+            ),
+            column(
+              width = 2,
+              uiOutput('ass_class_list')
+            ),
+            column(
+              width = 2,
+              uiOutput('ass_class1_list')
+            ),
+            column(
+              width = 2,
+              uiOutput('ass_class2_list')
+            ),
+            column(
+              width = 2
+            )
+          )
         )
       )
     ),
@@ -366,13 +323,14 @@ server <- function(input, output, session) {
   
   md = MyData$new('mydata.sqlite')
   
+  # 0) 반응성 값 초기화====
   rv <-  reactiveValues(
     name_in='전체',
     code='전체', df=NULL, df2=NULL, 
     df3=NULL, df4=NULL, df5=NULL,
     df_s=ec$read_items(),
-    df_d=NULL,
-    tickers=NULL
+    df_d=NULL, tickers=NULL, ticker_new=NULL,
+    ctg=readRDS("categories.rds")
   )
   
   # 1) 한국은행 지표선정====
@@ -476,65 +434,273 @@ server <- function(input, output, session) {
   })
 
   # 2) 자산운용 내역 기록====
-  observeEvent(input$type1,{
-    if(input$type1 == "투자자산"){
-      rv$tickers <- md$read('assets')}
-    else {
-      rv$tickers <- md$read('pension')}
+  
+  ## a. 투자종목 관리====
+  
+  ### * 메뉴 설정====
+  output$manage_ticker <- renderUI({
+    fluidRow(
+      column(
+        width = 2,
+        selectInput(
+          inputId = 'type1',
+          label = "운용구분",
+          choices = c("투자자산", "연금자산")
+        ),
+        selectInput(
+          inputId = 'new1',
+          label = "신규/수정",
+          choices = "신규"
+        )
+      ),
+      column(
+        width = 2,
+        selectInput(
+          inputId = 'ass_account',
+          label = "계좌",
+          choices = rv$ctg$ass_account
+        ),
+        textInput(
+          inputId = 'ticker',
+          label = "종목코드",
+          value = ""
+        )
+      ),
+      column(
+        width = 2,
+        textInput(
+          inputId = 'ass_name',
+          label = "종목명",
+          value = ""
+        ),
+        textInput(
+          inputId = 'comm_name',
+          label = "상품명",
+          value = ""
+        )
+      ),
+      column(
+        width = 2,
+        selectInput(
+          inputId = 'ass_class',
+          label = "자산군",
+          choices = rv$ctg$ass_class
+        ),
+        selectInput(
+          inputId = 'ass_class1',
+          label = "세부자산군",
+          choices = rv$ctg$ass_class1
+        )
+      ),
+      column(
+        width = 2,
+        selectInput(
+          inputId = 'ass_class2',
+          label = "세부자산군2",
+          choices = rv$ctg$ass_class2
+        ),
+        selectInput(
+          inputId = 'ass_cur',
+          label = "통화",
+          choices = rv$ctg$ass_cur
+        )
+      ),
+      column(
+        width = 2,
+        autonumericInput(
+          inputId = 'eval_price',
+          label = "평가금액",
+          value = 0
+        ),
+        autonumericInput(
+          inputId = 'init_e_pl',
+          label = "기초평가손익",
+          value = 0
+        )
+      )
+    )
+  })
 
-    output$ticker_table <- renderUI({
+  ### * 테이블 설정====
+  output$ticker_table <- renderUI({
+    if(!is.null(rv$tickers)){
       rv$tickers |> flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
         htmltools_value()
+    } else {
+    }
+  })
+  
+  ### * 운용구분 설정====
+  observe({
+    update_manage_ticker <- function(){
+        if(input$type1 == "투자자산"){
+          rv$tickers <- md$read('assets')}
+        else {
+          rv$tickers <- md$read('pension')}
+        
+        updateSelectInput(session, 'new1',
+                          choices = c('신규', rev(rv$tickers$행번호)),
+                          selected = '신규')
+    }
+    
+    observeEvent(input$type1,{
+      update_manage_ticker()
     })
-
-    updateSelectInput(session, 'new1',
-                      choices = c('신규', rv$tickers$행번호),
-                      selected = '신규')
+    
+    observeEvent(input$ticker_new,{
+      update_manage_ticker()
+    })
+    
+    observeEvent(input$ticker_del,{
+      update_manage_ticker()
+    })
   })
 
-
+  ### * 신규/구분 설정====
   observeEvent(input$new1,{
     if(input$new1 != "신규"){
       t_rows <- filter(rv$tickers, 행번호 == input$new1)
 
-      updateTextInput(session, 'account', value = t_rows$계좌)
+      updateSelectInput(session, 'new1',
+                        choices = c('신규', rev(rv$tickers$행번호)),
+                        selected = input$new1)
+      updateSelectInput(session, 'ass_account', selected = t_rows$계좌)
+      
       updateTextInput(session, 'ticker', value = t_rows$종목코드)
       updateTextInput(session, 'ass_name', value = t_rows$종목명)
+      updateTextInput(session, 'comm_name', value = t_rows$상품명)
+      
+      updateSelectInput(session, 'ass_class', selected = t_rows$자산군)
+      updateSelectInput(session, 'ass_class1',
+                        selected = t_rows$세부자산군)
+      updateSelectInput(session, 'ass_class2',
+                        selected = t_rows$세부자산군2)
+      
+      updateSelectInput(session, 'ass_cur', selected = t_rows$통화)
       updateAutonumericInput(session, 'eval_price',
                              value = t_rows$평가금액)
-      updateTextInput(session, 'comm_name', value = t_rows$상품명)
-      updateTextInput(session, 'ass_cur', value = t_rows$통화)
-      updateTextInput(session, 'ass_class', value = t_rows$자산군)
-      updateTextInput(session, 'ass_class1',
-                      value = t_rows$세부자산군)
-      updateTextInput(session, 'ass_class2',
-                      value = t_rows$세부자산군2)
       updateAutonumericInput(session, 'init_e_pl',
                              value = t_rows$기초평가손익)
     }
     else{
 
-      updateTextInput(session, 'account', value = '')
+      updateSelectInput(session, 'ass_account', selected = NULL)
+      
       updateTextInput(session, 'ticker', value = '')
       updateTextInput(session, 'ass_name', value = '')
+      updateTextInput(session, 'comm_name', value = '')
+      
+      updateSelectInput(session, 'ass_class', selected = NULL)
+      updateSelectInput(session, 'ass_class1',
+                        selected = '')
+      updateSelectInput(session, 'ass_class2',
+                        selected = '')
+      
+      updateSelectInput(session, 'ass_cur', selected = NULL)
       updateAutonumericInput(session, 'eval_price',
                              value = 0)
-      updateTextInput(session, 'comm_name', value = '')
-      updateTextInput(session, 'ass_cur', value = '')
-      updateTextInput(session, 'ass_class', value = '')
-      updateTextInput(session, 'ass_class1',
-                      value = '')
-      updateTextInput(session, 'ass_class2',
-                      value = '')
       updateAutonumericInput(session, 'init_e_pl',
-                             value = '')
+                             value = 0)
 
     }
   })
+  
+  ### * 추가/수정/삭제 선택시====
+  observe({
+    rv$ticker_new <- tibble::tibble_row(
+      행번호=0, 계좌=input$ass_account, 종목코드=input$ticker,
+      종목명=input$ass_name, 평가금액=input$eval_price,
+      상품명=input$comm_name, 통화=input$ass_cur, 
+      자산군=input$ass_class, 
+      세부자산군=input$ass_class1, 세부자산군2=input$ass_class2,
+      기초평가손익=input$init_e_pl
+    )
+  })
+    
+  observeEvent(input$ticker_new,{
+    rv$ticker_new$행번호 <- tail(rv$tickers$행번호, 1)+1
+    if(input$type1 == "투자자산"){
+      dbxInsert(md$con, 'assets', rv$ticker_new)
+    } else {
+      dbxInsert(md$con, 'pension', rv$ticker_new)
+    }
+  })
+    
+  observeEvent(input$ticker_mod,{
+    rv$ticker_new$행번호 <- input$new1
+    if(input$type1 == "투자자산"){
+      dbxUpdate(md$con, 'assets', rv$ticker_new, where_cols = c("행번호"))
+      rv$tickers <- md$read('assets')
+    } else {
+      dbxUpdate(md$con, 'pension', rv$ticker_new, where_cols = c("행번호"))
+      rv$tickers <- md$read('pension')
+    }
+  })
+    
+  observeEvent(input$ticker_del,{
+    rv$ticker_new$행번호 <- input$new1
+    if(input$type1 == "투자자산"){
+      dbxDelete(md$con, 'assets', rv$ticker_new)
+    } else {
+      dbxDelete(md$con, 'pension', rv$ticker_new)
+    }
+  })
 
+  
 
+  ## d. 구분항목 관리====
+  
+  ass_ctg <- list('ass_account','ass_cur','ass_class',
+                  'ass_class1','ass_class2')
+  
+  ctg_kor <- list('계좌','통화','자산군',
+                  '세부자산군','세부자산군2')
+  
+  map2(ass_ctg, ctg_kor, function(i, j){
+    output[[paste0(i,'_list')]] <<- renderUI({
+      tagList(
+        textInput(
+          inputId = paste0('add_',i),
+          label = j,
+          value = ""
+        ),
+        selectInput(paste0('select_',i), NULL, rv$ctg[[i]]),
+        div(
+          actionButton(
+            inputId = glue("add_{i}_btn"),
+            label = "추가",
+            width = '45%', 
+            status = "info"
+          ),
+          actionButton(
+            inputId = glue("del_{i}_btn"),
+            label = "삭제",
+            width = '45%', 
+            status = "primary"
+          ),
+          align = 'center'
+        )
+      )
+    })
+    
+    observeEvent(input[[glue("add_{i}_btn")]],{
+      rv$ctg[[i]] <- c(rv$ctg[[i]], 
+                       input[[glue("add_{i}")]])
+      saveRDS(rv$ctg, 'categories.rds')
+    })
+    
+    observeEvent(input[[glue("del_{i}_btn")]],{
+      
+      rv$ctg[[i]] <- rv$ctg[[i]][
+        rv$ctg[[i]]!=input[[glue("select_{i}")]]
+      ]
+      
+      saveRDS(rv$ctg, 'categories.rds')
+    })
+  })
+  
   
   # 3) 자산운용 현황====
   

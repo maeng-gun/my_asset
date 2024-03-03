@@ -1,4 +1,5 @@
 library(dplyr)
+library(purrr)
 library(R6)
 library(ecos)
 library(glue)
@@ -812,6 +813,11 @@ MyData <- R6Class(
     ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
     read_obj = function(name){
       tbl(self$con, name)
+    },
+    
+    ##5.(메서드) 테이블 목록 ====
+    table_list = function(){
+      dbListTables(self$con)
     }
   )
 )
