@@ -180,7 +180,13 @@ body <- dashboardBody(
             )
           ),
           fluidRow(
-            uiOutput("ass_trade_table")
+            box(
+              width = 12,
+              solidHeader = F,
+              collapsible = F,
+              headerBorder = F,
+              uiOutput("trade_table")
+            )
           )
         ),
         
@@ -362,9 +368,11 @@ server <- function(input, output, session) {
     name_in='전체',
     code='전체', df=NULL, df2=NULL, 
     df3=NULL, df4=NULL, df5=NULL,
-    df_s=ec$read_items(),
-    df_d=NULL, tickers=NULL, ticker_new=NULL,
-    ctg=readRDS("categories.rds")
+    df_s=ec$read_items(), df_d=NULL, 
+    tickers=NULL, ticker_new=NULL,
+    trade=NULL, trade_new_=NULL,
+    ctg=readRDS("categories.rds"),
+    
   )
   
   # 1) 한국은행 지표선정====
@@ -692,83 +700,152 @@ server <- function(input, output, session) {
 
   ## b. 투자자산 거래내역====
   
+  # 운용구분  신규/수정 
+  # 계좌 통화
+  # [1] "거래일자"   "종목명"    
+  # [4] "매입수량"  "매입액"      "현금지출" "이자배당액"  "입출금" 
+      #     
+  # [7] "매도수량"  "매도원금"    "매도액"  "현금수입"   
+  # [10]  
+      #  
+  
   ### * 메뉴 설정====
   output$manage_ass_trade <- renderUI({
     fluidRow(
       column(
-        width = 2,
+        width = 1,
         selectInput(
-          inputId = 'ass_account',
+          inputId = 'type2',
+          label = "운용구분",
+          choices = c("투자자산", "연금자산")
+        ),
+        selectInput(
+          inputId = 'new2',
+          label = "신규/수정",
+          choices = "신규"
+        )
+      ),
+      column(
+        width = 1,
+        selectInput(
+          inputId = 'ass_account2',
           label = "계좌",
           choices = rv$ctg$ass_account
         ),
         selectInput(
-          inputId = 'ass_cur',
+          inputId = 'ass_cur2',
           label = "통화",
           choices = rv$ctg$ass_cur
         )
       ),
       column(
-        width = 2,
-        selectInput(
-          inputId = 'new2',
-          label = "신규/수정",
-          choices = "신규"
+        width = 1,
+        airDatepickerInput(
+          inputId = 'trading_date',
+          label = "거래일자",
+          addon = "none"
         ),
-        textInput(
+        selectInput(
           inputId = 'ass_name2',
           label = "종목명",
-          value = ""
+          choices = ""
         )
       ),
       column(
-        width = 2,
-        ,
-        textInput(
-          inputId = 'comm_name',
-          label = "상품명",
-          value = ""
-        )
-      ),
-      column(
-        width = 2,
-        selectInput(
-          inputId = 'ass_class',
-          label = "자산군",
-          choices = rv$ctg$ass_class
+        width = 1,
+        numericInput(
+          inputId = 'buy_q',
+          label = "매입수량",
+          value = 0
         ),
-        selectInput(
-          inputId = 'ass_class1',
-          label = "세부자산군",
-          choices = rv$ctg$ass_class1
+        numericInput(
+          inputId = 'sell_q',
+          label = "매도수량",
+          value = 0
         )
-      ),
-      column(
-        width = 2,
-        selectInput(
-          inputId = 'ass_class2',
-          label = "세부자산군2",
-          choices = rv$ctg$ass_class2
-        )
-        
       ),
       column(
         width = 2,
         autonumericInput(
-          inputId = 'eval_price',
-          label = "평가금액",
+          inputId = 'buy_p',
+          label = "매입액",
           value = 0
         ),
         autonumericInput(
-          inputId = 'init_e_pl',
-          label = "기초평가손익",
+          inputId = 'sell_b',
+          label = "매도원금",
+          value = 0
+        )
+      ),
+      column(
+        width = 2,
+        autonumericInput(
+          inputId = 'buy_c',
+          label = "현금지출",
+          value = 0
+        ),
+        autonumericInput(
+          inputId = 'sell_p',
+          label = "매도액",
+          value = 0
+        )
+      ),
+      column(
+        width = 2,
+        autonumericInput(
+          inputId = 'int_dev',
+          label = "이자배당액",
+          value = 0
+        ),
+        autonumericInput(
+          inputId = 'sell_c',
+          label = "현금수입",
+          value = 0
+        )
+      ),
+      column(
+        width = 2,
+        autonumericInput(
+          inputId = 'in_out_c',
+          label = "입출금",
           value = 0
         )
       )
     )
   })
   
+  ### * 테이블 설정====
+  output$trade_table <- renderUI({
+    if(!is.null(rv$trade)){
+        rv$trade |> flextable()|>
+          theme_vanilla() |>
+          fontsize(size=14, part='all') |> 
+          set_table_properties(layout='autofit') |>
+          htmltools_value(ft.align = 'center')
+    } else {
+    }
+  })
 
+  ### * 운용구분 설정====
+  # update_manage_trade <-  reactive({
+  #   
+  #   if(input$type2 == "투자자산"){
+  #     rv$trade <- md$read('assets_daily')}
+  #   else {
+  #     rv$trade <- md$read('pension')}
+  # 
+  #   # updateSelectInput(session, 'new2',
+  #   #                   choices = c('신규', rev(rv$trade$행번호)),
+  #   #                   selected = '신규')
+  # })
+  
+  observeEvent(input$type2,{
+    if(input$type2 == "투자자산"){
+      rv$trade <- md$read('assets_daily')}
+    else {
+      rv$trade <- md$read('pension')}
+  })
+  
   ## d. 구분항목 관리====
   
   ass_ctg <- list('ass_account','ass_cur','ass_class',

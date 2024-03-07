@@ -1,6 +1,8 @@
 md <- MyData$new('mydata.sqlite')
 
-get_assets_trade()
+get_assets_trade() |> names()
+
+names(df2)
 
 get_assets_trade <- function(){
   df1 <- md$read('assets')

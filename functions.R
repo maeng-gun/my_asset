@@ -30,7 +30,7 @@ get_exchange_rate <- function(cur='달러'){
     readr::parse_number()
 }
 
-#Ecos 클래스 정의====
+#[클래스] Ecos====
 Ecos <- R6Class(
   "Ecos",
   
@@ -92,7 +92,7 @@ Ecos <- R6Class(
 )
 
 
-#AutoInvest 클래스 정의====
+#[클래스] AutoInvest====
 AutoInvest <- R6Class(
   
   classname = 'AutoInvest',
@@ -131,7 +131,7 @@ AutoInvest <- R6Class(
       )
     },
     
-    #메서드(1) - 토큰 저장하기 ====
+    ##메서드(1) - 토큰 저장하기 ====
     
     save_token = function(my_token, my_expired) {
       valid_date <- 
@@ -142,7 +142,7 @@ AutoInvest <- R6Class(
                  self$token_tmp)
     },
     
-    #메서드(2) - 토큰 불러오기 ====
+    ##메서드(2) - 토큰 불러오기 ====
     read_token = function() {
       tryCatch({
         # 토큰이 저장된 파일 읽기
@@ -165,7 +165,7 @@ AutoInvest <- R6Class(
       })
     },
     
-    #메서드(3) - 인증하기 ====
+    ##메서드(3) - 인증하기 ====
     auth = function() {
       data <- c("grant_type" = "client_credentials",
                 "appkey" = self$APP_KEY,
@@ -193,7 +193,7 @@ AutoInvest <- R6Class(
       return(my_token)
     },
     
-    #메서드(4) - 해시키 얻기 ====
+    ##메서드(4) - 해시키 얻기 ====
     hashkey = function(data) {
       path <- "uapi/hashkey"
       headers <- c(appKey = self$APP_KEY, 
@@ -201,7 +201,7 @@ AutoInvest <- R6Class(
       self$POST_json(path, data, headers)$HASH
     },
     
-    #메서드(5-1) - GET 명령 ====
+    ##메서드(5-1) - GET 명령 ====
     GET_tbl = function(path, data, headers){
       URL <- glue("{self$URL_BASE}/{path}")
       headers2 <- c(self$token_headers, headers)
@@ -211,7 +211,7 @@ AutoInvest <- R6Class(
         fromJSON()
     },
     
-    # 메서드(5-2) - POST 명령 ====
+    ## 메서드(5-2) - POST 명령 ====
     POST_json = function(path, data, headers=NULL){
       
       URL <- glue("{self$URL_BASE}/{path}")
@@ -230,7 +230,7 @@ AutoInvest <- R6Class(
       }
     },
     
-    #메서드(6) - 자산별 잔고 ====
+    ##메서드(6) - 자산별 잔고 ====
     inquire_account_balance = function() {
       path <- "uapi/domestic-stock/v1/trading/inquire-account-balance"
       data <- list(
@@ -256,7 +256,7 @@ AutoInvest <- R6Class(
         filter(비중!=0)
     },
     
-    #메서드(7) - 국내주식 잔고 ====
+    ##메서드(7) - 국내주식 잔고 ====
     inquire_balance = function() {
       path <- "/uapi/domestic-stock/v1/trading/inquire-balance"
       
@@ -285,7 +285,7 @@ AutoInvest <- R6Class(
       
     },
     
-    #메서드(8) - 해외주식 잔고 ====
+    ##메서드(8) - 해외주식 잔고 ====
     inquire_balance_ovs = function(cur = 'USD') {
       path <- "uapi/overseas-stock/v1/trading/inquire-balance"
       exc <- list(USD = "NASD", JPY = "TKSE")
@@ -307,7 +307,7 @@ AutoInvest <- R6Class(
         mutate(평가금액 = as.numeric(평가금액))
     },
     
-    #메서드(9) - 개별종목 현재가 ====
+    ##메서드(9) - 개별종목 현재가 ====
     get_current_price = function(sym_cd) {
       path <- "/uapi/domestic-stock/v1/quotations/inquire-price"
       data <- list(
@@ -321,11 +321,12 @@ AutoInvest <- R6Class(
   )
 )
 
-# MyAssets 클래스 정의====
+#[클래스] MyAssets====
 MyAssets <- R6Class(
   classname = "MyAssets",
   
   public = list(
+    md = NULL,
     today = NULL, year = NULL, days = NULL,
     assets = NULL, pension = NULL, ex_usd = NULL, ex_jpy = NULL, 
     assets_daily = NULL, pension_daily = NULL,
@@ -344,11 +345,12 @@ MyAssets <- R6Class(
       } else {
         self$today <- today()
       }
+      self$md <- MyData$new('mydata.sqlite')
       self$year <- year(self$today)
       self$days <- seq(make_date(self$year,1,1), 
                        make_date(self$year,12,31),by='day')
-      self$assets <- read_excel('trade.xlsx', sheet = '자산정보')
-      self$pension <- read_excel('trade.xlsx', sheet = '연금종목정보')
+      self$assets <- self$md$read('assets')
+      self$pension <- self$md$read('pension')
       self$ex_usd <- get_exchange_rate('달러')
       self$ex_jpy <- get_exchange_rate('엔')/100
       self$assets_daily <- self$get_assets_daily()
@@ -368,19 +370,21 @@ MyAssets <- R6Class(
     ## 2.(메서드) 투자자산 일일거래내역 산출====
     get_assets_daily = function(){
       
-      usd1 <- read_excel('trade.xlsx', sheet = '불리오달러')
-      usd2 <- read_excel('trade.xlsx', sheet = '한투달러')
-      jpy <- read_excel('trade.xlsx', sheet = '한투엔화')
-      # krw1 <- read_excel('trade.xlsx', sheet = '나무원화') #2023년까지만 사용
-      krw2 <- read_excel('trade.xlsx', sheet = '한투원화')
-      # krw3 <- read_excel('trade.xlsx', sheet = '한투CMA') #2023년까지만 사용
-      krw4 <- read_excel('trade.xlsx', sheet = '한투ISA')
-      # krw5 <- read_excel('trade.xlsx', sheet = '별도원화')
-      fiw <- read_excel('trade.xlsx', sheet = '외화자산평가') |> select(-c('외화입출금'))
+      # usd1 <- read_excel('trade.xlsx', sheet = '불리오달러')
+      # usd2 <- read_excel('trade.xlsx', sheet = '한투달러')
+      # jpy <- read_excel('trade.xlsx', sheet = '한투엔화')
+      # # krw1 <- read_excel('trade.xlsx', sheet = '나무원화') #2023년까지만 사용
+      # krw2 <- read_excel('trade.xlsx', sheet = '한투원화')
+      # # krw3 <- read_excel('trade.xlsx', sheet = '한투CMA') #2023년까지만 사용
+      # krw4 <- read_excel('trade.xlsx', sheet = '한투ISA')
+      # # krw5 <- read_excel('trade.xlsx', sheet = '별도원화')
+      # fiw <- read_excel('trade.xlsx', sheet = '외화자산평가') |> select(-c('외화입출금'))
+      # 
+      # trade <- bind_rows(usd1, usd2, jpy, krw2, krw4, fiw) |>
+      #   mutate(across(매입수량:누적,as.numeric)) |> 
+      #   select(-종목명, -상품명)
       
-      trade <- bind_rows(usd1, usd2, jpy, krw2, krw4, fiw) |>
-        mutate(across(매입수량:누적,as.numeric)) |> 
-        select(-종목명, -상품명)
+      trade <- self$md$read('assets_daily')
       
       self$get_daily_trading(self$assets, trade)
       
@@ -408,13 +412,12 @@ MyAssets <- R6Class(
         left_join(select(ast, 종목코드, 종목명, 통화, 계좌), 
                   by = "종목코드") |> 
         left_join(trade, by = c("종목코드", "거래일자")) |> 
-        mutate(across(매입수량:누적, ~coalesce(.,0)))|>
+        mutate(across(매입수량:입출금, ~if_else(is.na(.x),0,.x))) |> 
         arrange(종목코드, 거래일자) |> 
         mutate(
-          거래일자=as.Date(거래일자),
           순매입수량 = 매입수량 - 매도수량,
-          수익 = 매매수익 + 이자배당액,
-          비용 = 매입비용 + 매도비용,
+          수익 =매도액 - 매도원금 + 이자배당액,
+          비용 = 현금지출 - 매입액 + 매도액 + 이자배당액 - 현금수입,
           실현손익 = 수익 - 비용
         ) |> 
         select(종목코드:계좌, 순매입수량, 매입액, 매도원금, 
@@ -778,12 +781,13 @@ MyAssets <- R6Class(
         add_row(계좌='합계', 평가금액=sum(df$평가금액), 투자비중=100) |>
         group_by(계좌) |>
         mutate(자산별비중 = 평가금액 / sum(평가금액) * 100)
-
     }
+    ## 11.(메서드) 거래내역 데이터 산출====
+    
   )
 )
 
-#MyData 클래스 정의====
+#[클래스] MyData ====
 MyData <- R6Class(
   
   classname = 'MyData',
