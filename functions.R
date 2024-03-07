@@ -353,59 +353,37 @@ MyAssets <- R6Class(
       self$pension <- self$md$read('pension')
       self$ex_usd <- get_exchange_rate('달러')
       self$ex_jpy <- get_exchange_rate('엔')/100
-      self$assets_daily <- self$get_assets_daily()
-      self$pension_daily <- self$get_pension_daily()
+      self$assets_daily <- self$get_daily_trading(
+        self$assets, self$md$read('assets_daily')
+      )
+      self$pension_daily <- self$get_daily_trading(
+        self$pension, self$md$read('pension_daily')
+      )
       self$bs_pl_book_a <- self$get_bs_pl('assets')
       self$bs_pl_book_p <- self$get_bs_pl('pension')
-      self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
-      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
-      self$ret_a <- self$get_class_returns('assets')
-      self$ret_p <- self$get_class_returns('pension')
-      self$compute_allocation_a()
-      self$compute_allocation_p()
-      
-      
     },
     
-    ## 2.(메서드) 투자자산 일일거래내역 산출====
-    get_assets_daily = function(){
+    ## 2.(메서드) 거래내역 기록 테이블====
+    get_trading_record = function(table, acct, cur){
+      df1 <- md$read(table)
+      df2 <- md$read(paste0(table,'_daily'))
       
-      # usd1 <- read_excel('trade.xlsx', sheet = '불리오달러')
-      # usd2 <- read_excel('trade.xlsx', sheet = '한투달러')
-      # jpy <- read_excel('trade.xlsx', sheet = '한투엔화')
-      # # krw1 <- read_excel('trade.xlsx', sheet = '나무원화') #2023년까지만 사용
-      # krw2 <- read_excel('trade.xlsx', sheet = '한투원화')
-      # # krw3 <- read_excel('trade.xlsx', sheet = '한투CMA') #2023년까지만 사용
-      # krw4 <- read_excel('trade.xlsx', sheet = '한투ISA')
-      # # krw5 <- read_excel('trade.xlsx', sheet = '별도원화')
-      # fiw <- read_excel('trade.xlsx', sheet = '외화자산평가') |> select(-c('외화입출금'))
-      # 
-      # trade <- bind_rows(usd1, usd2, jpy, krw2, krw4, fiw) |>
-      #   mutate(across(매입수량:누적,as.numeric)) |> 
-      #   select(-종목명, -상품명)
-      
-      trade <- self$md$read('assets_daily')
-      
-      self$get_daily_trading(self$assets, trade)
-      
+      df2 |> left_join(
+        (df1 |> transmute(계좌, 통화, 종목코드, 종목명)), 
+        by = '종목코드') |> 
+        mutate(매입비용 = 현금지출-매입액,
+               매매수익 = 매도액 - 매도원금,
+               매도비용 = 매도액 + 이자배당액 - 현금수입,
+               순수익 = 매매수익 + 이자배당액 - 매도비용 - 매입비용,
+               순현금수입 = 입출금 + 현금수입 - 현금지출,
+               잔액 = cumsum(순현금수입)) |> 
+        select(거래일자, 계좌, 통화, 종목코드, 종목명, 매입수량:순현금수입) |> 
+        mutate(across(매입수량:입출금, ~if_else(is.na(.x),0,.x))) |> 
+        filter(계좌==acct, 통화==cur) |> 
+        arrange(계좌, 통화, 거래일자) 
     },
     
-    ## 3.(메서드) 연금 일일거래내역 산출==== 
-    get_pension_daily = function(){
-      
-      nhb <- read_excel('trade.xlsx', sheet = '농협IRP')
-      shi <- read_excel('trade.xlsx', sheet = '삼성DC')
-      nhi <- read_excel('trade.xlsx', sheet = '엔투저축연금')
-      
-      trade <- bind_rows(nhb, shi, nhi) |>
-        mutate(across(매입수량:누적,as.numeric)) |> 
-        select(-종목명, -상품명)
-      
-      self$get_daily_trading(self$pension, trade)
-      
-    },
-    
-    ## 4.(메서드) 계좌거래 내역 전처리 ====
+    ## 3.(메서드) 계좌거래 내역 전처리 ====
     get_daily_trading = function(ast, trade){
       
       expand_grid(종목코드 = ast$종목코드, 거래일자 = self$days) |> 
@@ -425,7 +403,7 @@ MyAssets <- R6Class(
     },
     
     
-    ## 5.(메서드)운용자산 잔액-손익 테이블 생성====
+    ## 4.(메서드)운용자산 잔액-손익 테이블 생성====
     get_bs_pl = function(mode = 'assets') {
       
       ###(1) 기본 테이블 생성====
@@ -545,7 +523,7 @@ MyAssets <- R6Class(
       
     },
     
-    ## 6.(메서드)투자자산 평가반영 잔액-손익 테이블 생성====
+    ## 5.(메서드)투자자산 평가반영 잔액-손익 테이블 생성====
     evaluate_bs_pl_assets = function() {
       
       if (is.null(self$bl) && is.null(self$my)) {
@@ -603,7 +581,7 @@ MyAssets <- R6Class(
         filter(평잔!=0)
     },
     
-    ## 7.(메서드)연금 평가반영 잔액-손익 테이블 생성========
+    ## 6.(메서드)연금 평가반영 잔액-손익 테이블 생성========
     evaluate_bs_pl_pension = function(mode='assets'){
 
       price <- self$pension |>
@@ -622,7 +600,7 @@ MyAssets <- R6Class(
         filter(평잔!=0)
     },
     
-    ## 8.(메서드) 자산군별 수익률 현황====
+    ## 7.(메서드) 자산군별 수익률 현황====
     get_class_returns = function(mode='assets') {
       
       ### 1) 통화별/계좌별 수익률 산출함수====
@@ -697,7 +675,7 @@ MyAssets <- R6Class(
       
     },
     
-    ## 9.(메서드) 투자자산 자산군별 배분 현황====
+    ## 8.(메서드) 투자자산 자산군별 배분 현황====
     compute_allocation_a = function() {
       
       df <- self$bs_pl_mkt_a
@@ -750,7 +728,7 @@ MyAssets <- R6Class(
         add_row(세부자산군='합계', 평가금액 = sum(df$평가금액), 투자비중=100)
     },
     
-    ## 10.(메서드) 연금 자산군별 배분 현황====
+    ## 9.(메서드) 연금 자산군별 배분 현황====
     compute_allocation_p = function() {
       df <- self$bs_pl_mkt_p |> 
         group_by(계좌, 자산군, 세부자산군) |>
@@ -781,9 +759,16 @@ MyAssets <- R6Class(
         add_row(계좌='합계', 평가금액=sum(df$평가금액), 투자비중=100) |>
         group_by(계좌) |>
         mutate(자산별비중 = 평가금액 / sum(평가금액) * 100)
+    },
+    ## 10.(메서드) 평가금액 포함 자료 산출====
+    run_valuation = function(){
+      self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
+      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
+      self$ret_a <- self$get_class_returns('assets')
+      self$ret_p <- self$get_class_returns('pension')
+      self$compute_allocation_a()
+      self$compute_allocation_p()
     }
-    ## 11.(메서드) 거래내역 데이터 산출====
-    
   )
 )
 

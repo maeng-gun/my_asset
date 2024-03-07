@@ -359,9 +359,9 @@ server <- function(input, output, session) {
   
   source("functions.R", echo=F)
   
-  ec = Ecos$new()
-  
-  md = MyData$new('mydata.sqlite')
+  ec <- Ecos$new()
+  md <- MyData$new('mydata.sqlite')
+  ma <- MyAssets$new()
   
   # 0) 반응성 값 초기화====
   rv <-  reactiveValues(
@@ -819,7 +819,6 @@ server <- function(input, output, session) {
     if(!is.null(rv$trade)){
         rv$trade |> flextable()|>
           theme_vanilla() |>
-          fontsize(size=14, part='all') |> 
           set_table_properties(layout='autofit') |>
           htmltools_value(ft.align = 'center')
     } else {
@@ -841,9 +840,9 @@ server <- function(input, output, session) {
   
   observeEvent(input$type2,{
     if(input$type2 == "투자자산"){
-      rv$trade <- md$read('assets_daily')}
+      rv$trade <- ma$read('assets_daily')}
     else {
-      rv$trade <- md$read('pension')}
+      rv$trade <- md$read('pension_daily')}
   })
   
   ## d. 구분항목 관리====
@@ -908,7 +907,7 @@ server <- function(input, output, session) {
     
     w1$show()
     
-    ma <- MyAssets$new()
+    ma$run_valuaion()
     
     w1$hide()
   
