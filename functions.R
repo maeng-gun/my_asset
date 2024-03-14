@@ -365,22 +365,28 @@ MyAssets <- R6Class(
     
     ## 2.(메서드) 거래내역 기록 테이블====
     get_trading_record = function(table, acct, cur){
-      df1 <- md$read(table)
-      df2 <- md$read(paste0(table,'_daily'))
+      
+      if(table=="투자자산"){table <- 'assets'}
+      else {table <- 'pension'}
+      
+      df1 <- self$md$read(table)
+      df2 <- self$md$read(paste0(table,'_daily'))
       
       df2 |> left_join(
         (df1 |> transmute(계좌, 통화, 종목코드, 종목명)), 
         by = '종목코드') |> 
+        filter(계좌==acct, 통화==cur) |> 
         mutate(매입비용 = 현금지출-매입액,
                매매수익 = 매도액 - 매도원금,
                매도비용 = 매도액 + 이자배당액 - 현금수입,
                순수익 = 매매수익 + 이자배당액 - 매도비용 - 매입비용,
                순현금수입 = 입출금 + 현금수입 - 현금지출,
                잔액 = cumsum(순현금수입)) |> 
-        select(거래일자, 계좌, 통화, 종목코드, 종목명, 매입수량:순현금수입) |> 
-        mutate(across(매입수량:입출금, ~if_else(is.na(.x),0,.x))) |> 
-        filter(계좌==acct, 통화==cur) |> 
-        arrange(계좌, 통화, 거래일자) 
+        select(행번호, 계좌, 통화, 거래일자, 종목명, 
+               매입수량:현금지출, 매입비용, 매도수량, 매도원금, 
+               매도액, 매매수익, 이자배당액, 현금수입, 매도비용, 
+               순수익, 입출금, 잔액) |> 
+        arrange(desc(행번호)) 
     },
     
     ## 3.(메서드) 계좌거래 내역 전처리 ====
@@ -582,7 +588,7 @@ MyAssets <- R6Class(
     },
     
     ## 6.(메서드)연금 평가반영 잔액-손익 테이블 생성========
-    evaluate_bs_pl_pension = function(mode='assets'){
+    evaluate_bs_pl_pension = function(){
 
       price <- self$pension |>
         select(종목코드, 평가금액, 기초평가손익)

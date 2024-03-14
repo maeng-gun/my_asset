@@ -1,16 +1,19 @@
-md <- MyData$new('mydata.sqlite')
+source('functions.R')
 
-ma <- MyAssets$new()
+self <- MyAssets$new()
 
-df5 <- ma$get_trading_record(table, acct, cur)
+table <- 'assets'
+acct <- '불리오'
+cur <- '달러'
+
+df <- ma$get_trading_record(table, acct, cur)
 
 get_assets_trade() |> names()
 
 names(df2)
 
-table <- 'assets'
-acct <- '불리오'
-cur <- '달러'
+md <- MyData$new('mydata.sqlite')
+
 
 ma$get_trading_record(table, acct, cur)
 
