@@ -19,12 +19,6 @@ header <- dashboardHeader(
 sidebar <- dashboardSidebar(
   sidebarMenu(
     id = 'menu_tabs',
-    sidebarHeader("경제지표"),
-    menuItem(
-      text = "한국은행 지표선정",
-      icon = icon("hand-pointer"),
-      tabName = "ecos_stat"
-    ),
     sidebarHeader("포트폴리오 관리"),
     menuItem(
       text = "자산운용 내역 기록",
@@ -35,6 +29,12 @@ sidebar <- dashboardSidebar(
       text = "자산운용 현황",
       icon = icon("sack-dollar"),
       tabName = "pf_bs_pl"
+    ),
+    sidebarHeader("경제지표"),
+    menuItem(
+      text = "한국은행 지표선정",
+      icon = icon("hand-pointer"),
+      tabName = "ecos_stat"
     )
   ),
   br(),
@@ -51,54 +51,13 @@ body <- dashboardBody(
                 functions = c("closeWindow")),
   useSweetAlert(),
   useWaiter(),
+  # autoWaiter(
+  #   id=c('pf_box1','trading_box'),
+  #   html = tagList(spin_loader(), "로딩중..."),
+  #   color = transparent(.5)
+  # ),
   tabItems(
-    ##1) 한국은행 지표선정====
-    tabItem(
-      tabName = "ecos_stat",
-      tabBox(
-        width=12,
-        status='primary',
-        type='tabs',
-        ###a. 선정 아이템====
-        tabPanel(
-          title = "선정 아이템",
-          icon=icon('square-check'),
-          tableOutput('selected_item')
-        ),
-        ###b. 통계표 조회====
-        tabPanel(
-          title = "통계표 조회",
-          icon=icon('table-list'),
-          fluidRow(
-            column(3,textInput('name','검색어')),
-            column(9,tableOutput('ecos_stat_tables'))
-          )
-        ),
-        ###c. 아이템 추가====
-        tabPanel(
-          title = "아이템 추가",
-          icon=icon('square-plus'),
-          fluidRow(
-            column(
-              width=3,
-              selectizeInput('name_in','통계표이름','전체'),
-              selectizeInput('code_in','통계표코드','전체'),
-              selectizeInput('item_in','아이템이름','전체'),
-              selectizeInput('cyl_in','데이터주기','전체'),
-              br(),
-              textInput('ecos_name',"아이템명 설정", 
-                        width='100%'),
-              actionButton('add_item','아이템 추가',
-                           icon=icon('square-plus'),
-                           width='100%',
-                           status='primary')
-            ),
-            column(9, tableOutput('ecos_item_tables'))
-          )
-        )
-      )
-    ),
-    ##2) 자산운용 내역 기록====
+    ##1) 자산운용 내역 기록====
     tabItem(
       tabName = 'trading_record',
       tabBox(
@@ -111,6 +70,7 @@ body <- dashboardBody(
           title="거래내역",
           fluidRow(
             box(
+              id='trading_box',
               width = 12,
               status = 'info',
               solidHeader = T,
@@ -156,6 +116,7 @@ body <- dashboardBody(
           title="투자종목 관리",
           fluidRow(
             box(
+              id='ticker_box',
               width = 12,
               status = 'info',
               solidHeader = T,
@@ -199,35 +160,44 @@ body <- dashboardBody(
         ###c. 구분항목 관리====
         tabPanel(
           title="구분항목 관리",
-          fluidRow(
-            column(
-              width = 2,
-              uiOutput('ass_account_list')
-            ),
-            column(
-              width = 2,
-              uiOutput('ass_cur_list')
-            ),
-            column(
-              width = 2,
-              uiOutput('ass_class_list')
-            ),
-            column(
-              width = 2,
-              uiOutput('ass_class1_list')
-            ),
-            column(
-              width = 2,
-              uiOutput('ass_class2_list')
-            ),
-            column(
-              width = 2
+          box(
+            id='list_box',
+            width = 12,
+            status = 'info',
+            solidHeader = T,
+            title = "입력사항",
+            collapsible = F,
+            fluidRow(
+              column(
+                width = 2,
+                uiOutput('ass_account_list')
+              ),
+              column(
+                width = 2,
+                uiOutput('pen_account_list')
+              ),
+              column(
+                width = 2,
+                uiOutput('ass_cur_list')
+              ),
+              column(
+                width = 2,
+                uiOutput('ass_class_list')
+              ),
+              column(
+                width = 2,
+                uiOutput('ass_class1_list')
+              ),
+              column(
+                width = 2,
+                uiOutput('ass_class2_list')
+              )
             )
           )
         )
       )
     ),
-    ##3) 자산운용 현황====
+    ##2) 자산운용 현황====
     tabItem(
       tabName = 'pf_bs_pl',
       actionButton('kis','한투접속'),
@@ -285,7 +255,14 @@ body <- dashboardBody(
           h5("1. 자산군별 손익현황"),
           br(),
           fluidRow(
-            uiOutput("class_ret_a")
+            column(
+              width = 6,
+              uiOutput("class_ret_a")
+            ),
+            column(
+              width = 6,
+              uiOutput("class_ret_a2")
+            )
           ),
           br(),
           h5("2. 개별자산 손익현황"),
@@ -328,13 +305,66 @@ body <- dashboardBody(
           h5("1. 자산군별 손익현황"),
           br(),
           fluidRow(
-            uiOutput("class_ret_p")
+            column(
+              width = 6,
+              uiOutput("class_ret_p")
+            ),
+            column(
+              width = 6,
+              uiOutput("class_ret_p2")
+            )
           ),
           br(),
           h5("2. 개별자산 손익현황"),
           br(),
           fluidRow(
             uiOutput("bs_pl_mkt_p")
+          )
+        )
+      )
+    ),
+    ##3) 한국은행 지표선정====
+    tabItem(
+      tabName = "ecos_stat",
+      tabBox(
+        width=12,
+        status='primary',
+        type='tabs',
+        ###a. 선정 아이템====
+        tabPanel(
+          title = "선정 아이템",
+          icon=icon('square-check'),
+          tableOutput('selected_item')
+        ),
+        ###b. 통계표 조회====
+        tabPanel(
+          title = "통계표 조회",
+          icon=icon('table-list'),
+          fluidRow(
+            column(3,textInput('name','검색어')),
+            column(9,tableOutput('ecos_stat_tables'))
+          )
+        ),
+        ###c. 아이템 추가====
+        tabPanel(
+          title = "아이템 추가",
+          icon=icon('square-plus'),
+          fluidRow(
+            column(
+              width=3,
+              selectizeInput('name_in','통계표이름','전체'),
+              selectizeInput('code_in','통계표코드','전체'),
+              selectizeInput('item_in','아이템이름','전체'),
+              selectizeInput('cyl_in','데이터주기','전체'),
+              br(),
+              textInput('ecos_name',"아이템명 설정", 
+                        width='100%'),
+              actionButton('add_item','아이템 추가',
+                           icon=icon('square-plus'),
+                           width='100%',
+                           status='primary')
+            ),
+            column(9, tableOutput('ecos_item_tables'))
           )
         )
       )
@@ -357,13 +387,19 @@ ui <- dashboardPage(
 
 server <- function(input, output, session) {
 
+  w1 <- Waiter$new(
+    id=c('pf_box1','trading_box', 'ticker_box', 'list_box'),
+    html = tagList(spin_loader(), "로딩중..."),
+    color = transparent(.5))
   
+  w1$show()
   source("functions.R", echo=F)
-  
   ec <- Ecos$new()
   md <- MyData$new('mydata.sqlite')
   ma <- MyAssets$new()
-  
+
+
+    
   # 0) 반응성 값 초기화====
   rv <-  reactiveValues(
     name_in='전체',
@@ -372,116 +408,20 @@ server <- function(input, output, session) {
     df_s=ec$read_items(), df_d=NULL, 
     tickers=NULL, ticker_new=NULL,
     trade=NULL, trade_new_=NULL,
-    type2=NULL,
+    type1=NULL, type2=NULL,
     ctg=readRDS("categories.rds"),
     
   )
   
-  # 1) 한국은행 지표선정====
-  ## b. 통계표 조회====
-  observeEvent(input$name,{
-    rv$df <- ec$find_stat(input$name)
-    updateSelectizeInput(session, 'name_in', 
-                         choices = c('전체',rv$df$stat_name),
-                         selected = '전체')
-    
-  })
+  w1$hide()
   
-  ## c. 아이템 추가==== 
-  
-  ### * 통계표 이름==== 
-  observeEvent(input$name_in,{
-    
-    rv$name_in <- input$name_in
-    
-    updateSelectizeInput(session, 'name_in',
-                         choices = c('전체', rv$df$stat_name),
-                         selected = rv$name_in)
-    
-    if(rv$name_in=='전체'){
-      code <- '전체'
-      rv$code <- '전체'
-    }
-    else {
-      rv$df_d <- rv$df |> filter(stat_name==rv$name_in)
-      code <- rv$df_d$stat_code
-      
-      if(length(code)==1){rv$code <- code}
-      else {rv$code <- code[1]}
-      
-    }
-    updateSelectizeInput(session, 'code_in', choices = code,
-                         selected = rv$code)
-  })
-  
-  ### * 통계표 코드==== 
-  observeEvent(input$code_in,{
-    tryCatch({
-      rv$df2 <- ec$find_items(input$code_in)
-    }, error = function(e) {
-      rv$df2 <- ec$find_items('전체')
-    })
-    
-    rv$df5 <- rv$df2
-    
-    updateSelectizeInput(session, 'item_in',
-                         choices = c('전체', unique(rv$df2$item_name)),
-                         selected = '전체')
-    updateSelectizeInput(session, 'cyl_in',
-                         choices = c('전체', unique(rv$df2$cycle)),
-                         selected = '전체')
-  })
-  
-  ### * 아이템이름==== 
-  observeEvent(input$item_in,{
-    if(is.null(input$item_in)||input$item_in=='전체'){
-      rv$df3 <- rv$df2
-    }
-    else rv$df3 <- rv$df2 |> filter(item_name==input$item_in)
-    
-    rv$df5 <- rv$df3
-    
-    updateSelectizeInput(session, 'item_in',
-                         choices = c('전체', unique(rv$df2$item_name)),
-                         selected = input$item_in)
-    
-    updateSelectizeInput(session, 'cyl_in',
-                         choices = c('전체', unique(rv$df2$cycle)),
-                         selected = '전체')        
-  })
-  
-  ### * 데이터주기====    
-  observeEvent(input$cyl_in,{
-    if(is.null(input$cyl_in)||input$cyl_in=='전체'){
-      rv$df4 <- rv$df3
-    }
-    else rv$df4 <- rv$df3 |> filter(cycle==input$cyl_in)
-    
-    rv$df5 <- rv$df4
-    
-    updateSelectizeInput(session, 'cyl_in',
-                         choices = c('전체', unique(rv$df3$cycle)),
-                         selected = input$cyl_in)
-  })
-  
-  ## * 아이템 추가====
-  observeEvent(input$add_item,{
-    ec$save_items(rv$df5, input$ecos_name)
-    sendSweetAlert(title="추가하였습니다!", type='success')
-    rv$df_s <- ec$read_items()
-  })
-
-  observe({
-    output$selected_item <- renderTable(rv$df_s)
-    output$ecos_stat_tables <- renderTable(rv$df)
-    output$ecos_item_tables <- renderTable(rv$df5)
-  })
-
-  # 2) 자산운용 내역 기록====
+  # 1) 자산운용 내역 기록====
   
   ## a. 투자자산 거래내역====
   
   ### * 메뉴 설정====
+
+  
   output$manage_ass_trade <- renderUI({
     fluidRow(
       column(
@@ -586,19 +526,25 @@ server <- function(input, output, session) {
       )
     )
   })
+
   
   ### * 테이블 설정====
   output$trade_table <- renderUI({
     if(!is.null(rv$trade)){
-        rv$trade |> flextable()|>
+        rv$trade |> 
+          arrange(desc(행번호)) |> 
+          flextable()|>
           theme_vanilla() |>
           set_table_properties(layout='autofit') |>
           htmltools_value(ft.align = 'center')
     } else {
     }
   })
-  
+
   reset_trade <- reactive({
+    input$ass_trade_new
+    input$ass_trade_mod
+    input$ass_trade_del
     ma$get_trading_record(input$type2, 
                           input$ass_account2,
                           input$ass_cur2)
@@ -606,8 +552,13 @@ server <- function(input, output, session) {
   
   update_new_trade <- reactive({
     updateSelectInput(session, 'new2',
-                      choices = c('신규', rv$trade$행번호),
+                      choices = c('신규', rev(rv$trade$행번호)),
                       selected = '신규')
+    updateSelectInput(
+      session, 'ass_name2', 
+      choices = (md$read(rv$type2) |> 
+                   filter(계좌==input$ass_account2,
+                          통화==input$ass_cur2))$종목명)
   })
   
   ### * 운용구분 설정====
@@ -636,12 +587,6 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$ass_cur2,{
-    
-    updateSelectInput(
-      session, 'ass_name2', 
-      choices = (md$read(rv$type2) |> 
-                   filter(계좌==input$ass_account2,
-                          통화==input$ass_cur2))$종목명)
     rv$trade <- reset_trade()
     update_new_trade()
   })
@@ -708,14 +653,9 @@ server <- function(input, output, session) {
     } else {
       rv$trade_new$행번호 <- tail(md$read('pension_daily')$행번호, 1)+1
       dbxInsert(md$con, 'pension_daily', rv$trade_new)
-
     }
-    rv$trade <- ma$get_trading_record(input$type2, 
-                                      input$ass_account2,
-                                      input$ass_cur2)
-    updateSelectInput(session, 'new2',
-                      choices = c('신규', rv$trade$행번호),
-                      selected = '신규')
+    rv$trade <- reset_trade()
+    update_new_trade()
   })
 
 
@@ -729,12 +669,8 @@ server <- function(input, output, session) {
       dbxUpdate(md$con, 'pension_daily', rv$trade_new, 
                 where_cols = c("행번호"))
     }
-    rv$trade <- ma$get_trading_record(input$type2, 
-                                      input$ass_account2,
-                                      input$ass_cur2)
-    updateSelectInput(session, 'new2',
-                      choices = c('신규', rv$trade$행번호),
-                      selected = '신규')
+    rv$trade <- reset_trade()
+    update_new_trade()
   })
 
   observeEvent(input$ass_trade_del,{
@@ -744,12 +680,8 @@ server <- function(input, output, session) {
     } else {
       dbxDelete(md$con, 'pension_daily', rv$trade_new)
     }
-    rv$trade <- ma$get_trading_record(input$type2, 
-                                      input$ass_account2,
-                                      input$ass_cur2)
-    updateSelectInput(session, 'new2',
-                      choices = c('신규', rv$trade$행번호),
-                      selected = '신규')
+    rv$trade <- reset_trade()
+    update_new_trade()
   })
 
   ## b. 투자종목 관리====
@@ -765,18 +697,19 @@ server <- function(input, output, session) {
           choices = c("투자자산", "연금자산")
         ),
         selectInput(
-          inputId = 'new1',
-          label = "신규/수정",
-          choices = "신규"
+          inputId = 'ass_account',
+          label = "계좌",
+          choices = rv$ctg$ass_account
         )
       ),
       column(
         width = 2,
         selectInput(
-          inputId = 'ass_account',
-          label = "계좌",
-          choices = rv$ctg$ass_account
-        ),
+          inputId = 'new1',
+          label = "신규/수정",
+          choices = "신규"
+        )
+        ,
         textInput(
           inputId = 'ticker',
           label = "종목코드",
@@ -837,34 +770,55 @@ server <- function(input, output, session) {
       )
     )
   })
-  
+
   ### * 테이블 설정====
   output$ticker_table <- renderUI({
     if(!is.null(rv$tickers)){
-      rv$tickers |> flextable() |>
+      rv$tickers |> 
+        arrange(desc(행번호)) |> 
+        flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
         htmltools_value(ft.align = 'center')
     } else {
     }
   })
-  
-  ### * 운용구분 설정====
+
+  reset_ticker <- reactive({
+    input$ticker_new
+    input$ticker_mode
+    input$ticker_del
+    if(input$type1 == "투자자산"){
+      md$read('assets') |> 
+        filter(계좌==input$ass_account)
+    } else {
+      md$read('pension') |> 
+        filter(계좌==input$ass_account)}
+  })
   
   update_manage_ticker <-  reactive({
-    
-    if(input$type1 == "투자자산"){
-      rv$tickers <- md$read('assets')}
-    else {
-      rv$tickers <- md$read('pension')}
-    
     updateSelectInput(session, 'new1',
                       choices = c('신규', rev(rv$tickers$행번호)),
                       selected = '신규')
   })
-  
+    
+  ### * 운용구분 설정====
+
   
   observeEvent(input$type1,{
+    if(input$type1 == "투자자산"){
+      mode <- 'ass_account'
+    } else {
+      mode <- 'pen_account'
+    }
+    updateSelectInput(session, 'ass_account',
+                      choices = rv$ctg[[mode]])
+    rv$tickers <- reset_ticker()
+    update_manage_ticker()
+  })
+  
+  observeEvent(input$ass_account,{
+    rv$tickers <- reset_ticker()
     update_manage_ticker()
   })
   
@@ -934,14 +888,11 @@ server <- function(input, output, session) {
     rv$ticker_new$행번호 <- tail(rv$tickers$행번호, 1)+1
     if(input$type1 == "투자자산"){
       dbxInsert(md$con, 'assets', rv$ticker_new)
-      rv$tickers <- md$read('assets')
     } else {
       dbxInsert(md$con, 'pension', rv$ticker_new)
-      rv$tickers <- md$read('pension')
     }
-    updateSelectInput(session, 'new1',
-                      choices = c('신규', rev(rv$tickers$행번호)),
-                      selected = '신규')
+    rv$tickers <- reset_ticker()
+    update_manage_ticker()
   })
   
   
@@ -949,37 +900,31 @@ server <- function(input, output, session) {
     rv$ticker_new$행번호 <- input$new1
     if(input$type1 == "투자자산"){
       dbxUpdate(md$con, 'assets', rv$ticker_new, where_cols = c("행번호"))
-      rv$tickers <- md$read('assets')
     } else {
       dbxUpdate(md$con, 'pension', rv$ticker_new, where_cols = c("행번호"))
-      rv$tickers <- md$read('pension')
     }
-    updateSelectInput(session, 'new1',
-                      choices = c('신규', rev(rv$tickers$행번호)),
-                      selected = '신규')
+    rv$tickers <- reset_ticker()
+    update_manage_ticker()
   })
   
   observeEvent(input$ticker_del,{
     rv$ticker_new$행번호 <- input$new1
     if(input$type1 == "투자자산"){
       dbxDelete(md$con, 'assets', rv$ticker_new)
-      rv$tickers <- md$read('assets')
     } else {
       dbxDelete(md$con, 'pension', rv$ticker_new)
-      rv$tickers <- md$read('pension')
     }
-    updateSelectInput(session, 'new1',
-                      choices = c('신규', rev(rv$tickers$행번호)),
-                      selected = '신규')
+    rv$tickers <- reset_ticker()
+    update_manage_ticker()
   })
   
   
   ## c. 구분항목 관리====
   
-  ass_ctg <- list('ass_account','ass_cur','ass_class',
+  ass_ctg <- list('ass_account', 'pen_account', 'ass_cur','ass_class',
                   'ass_class1','ass_class2')
   
-  ctg_kor <- list('계좌','통화','자산군',
+  ctg_kor <- list('투자계좌', '연금계좌', '통화','자산군',
                   '세부자산군','세부자산군2')
   
   map2(ass_ctg, ctg_kor, function(i, j){
@@ -1008,7 +953,7 @@ server <- function(input, output, session) {
         )
       )
     })
-    
+
     observeEvent(input[[glue("add_{i}_btn")]],{
       rv$ctg[[i]] <- c(rv$ctg[[i]], 
                        input[[glue("add_{i}")]])
@@ -1026,14 +971,10 @@ server <- function(input, output, session) {
   })
   
   
-  # 3) 자산운용 현황====
+  # 2) 자산운용 현황====
   
   observeEvent(input$kis,{
-    w1 <- Waiter$new(
-      id='pf_box1',
-      html = tagList(spin_loader(), "로딩중..."),
-      color = transparent(.5))
-
+    
     w1$show()
     
     ma$run_valuation()
@@ -1053,15 +994,22 @@ server <- function(input, output, session) {
 
     ## a. 투자자산현황====
 
+    ###* 자산군별 배분현황====
     output$allo0 <- render_allo(ma$allo0)
     output$allo1 <- render_allo(ma$allo1)
+    
+    ###* 통화별 배분현황====
     output$allo2 <- render_allo(ma$allo2)
     output$allo3 <- render_allo(ma$allo3)
-    output$allo4 <- render_allo(ma$allo4)
+    
+    ###* 불리오 배분현황====
     output$allo5 <- render_allo(ma$allo5)
+    output$allo4 <- render_allo(ma$allo4)
+   
 
     # b. 투자손익현황====
 
+    
     output$class_ret_a <- renderUI({
       ma$ret_a |>
         select(1:3,평가금액,실현손익, 평가손익,
@@ -1072,6 +1020,19 @@ server <- function(input, output, session) {
         set_table_properties(layout='autofit') |>
         colformat_double(j=4:6, digits = 0) |>
         colformat_double(j=7:8, digits = 2) |>
+        htmltools_value()
+    })
+    
+    output$class_ret_a2 <- renderUI({
+      ma$ret_a2 |>
+        select(1:2,평가금액,실현손익, 평가손익,
+               실현수익률:평가수익률) |>
+        flextable() |>
+        theme_vanilla() |>
+        merge_v(j=1) |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=3:5, digits = 0) |>
+        colformat_double(j=6:7, digits = 2) |>
         htmltools_value()
     })
 
@@ -1110,6 +1071,19 @@ server <- function(input, output, session) {
         colformat_double(j=7:8, digits = 2) |>
         htmltools_value()
     })
+    
+    output$class_ret_p2 <- renderUI({
+      ma$ret_p2 |>
+        select(1:2,평가금액,실현손익, 평가손익,
+               실현수익률:평가수익률) |>
+        flextable() |>
+        theme_vanilla() |>
+        merge_v(j=1) |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=3:5, digits = 0) |>
+        colformat_double(j=6:7, digits = 2) |>
+        htmltools_value()
+    })
 
     output$bs_pl_mkt_p <-renderUI({
       ma$bs_pl_mkt_p |>
@@ -1126,6 +1100,107 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
+  })
+  
+  
+  # 3) 한국은행 지표선정====
+  ## b. 통계표 조회====
+  observeEvent(input$name,{
+    rv$df <- ec$find_stat(input$name)
+    updateSelectizeInput(session, 'name_in', 
+                         choices = c('전체',rv$df$stat_name),
+                         selected = '전체')
+    
+  })
+  
+  ## c. 아이템 추가==== 
+  
+  ### * 통계표 이름==== 
+  observeEvent(input$name_in,{
+    
+    rv$name_in <- input$name_in
+    
+    updateSelectizeInput(session, 'name_in',
+                         choices = c('전체', rv$df$stat_name),
+                         selected = rv$name_in)
+    
+    if(rv$name_in=='전체'){
+      code <- '전체'
+      rv$code <- '전체'
+    }
+    else {
+      rv$df_d <- rv$df |> filter(stat_name==rv$name_in)
+      code <- rv$df_d$stat_code
+      
+      if(length(code)==1){rv$code <- code}
+      else {rv$code <- code[1]}
+      
+    }
+    updateSelectizeInput(session, 'code_in', choices = code,
+                         selected = rv$code)
+  })
+  
+  ### * 통계표 코드==== 
+  observeEvent(input$code_in,{
+    tryCatch({
+      rv$df2 <- ec$find_items(input$code_in)
+    }, error = function(e) {
+      rv$df2 <- ec$find_items('전체')
+    })
+    
+    rv$df5 <- rv$df2
+    
+    updateSelectizeInput(session, 'item_in',
+                         choices = c('전체', unique(rv$df2$item_name)),
+                         selected = '전체')
+    updateSelectizeInput(session, 'cyl_in',
+                         choices = c('전체', unique(rv$df2$cycle)),
+                         selected = '전체')
+  })
+  
+  ### * 아이템이름==== 
+  observeEvent(input$item_in,{
+    if(is.null(input$item_in)||input$item_in=='전체'){
+      rv$df3 <- rv$df2
+    }
+    else rv$df3 <- rv$df2 |> filter(item_name==input$item_in)
+    
+    rv$df5 <- rv$df3
+    
+    updateSelectizeInput(session, 'item_in',
+                         choices = c('전체', unique(rv$df2$item_name)),
+                         selected = input$item_in)
+    
+    updateSelectizeInput(session, 'cyl_in',
+                         choices = c('전체', unique(rv$df2$cycle)),
+                         selected = '전체')        
+  })
+  
+  ### * 데이터주기====    
+  observeEvent(input$cyl_in,{
+    if(is.null(input$cyl_in)||input$cyl_in=='전체'){
+      rv$df4 <- rv$df3
+    }
+    else rv$df4 <- rv$df3 |> filter(cycle==input$cyl_in)
+    
+    rv$df5 <- rv$df4
+    
+    updateSelectizeInput(session, 'cyl_in',
+                         choices = c('전체', unique(rv$df3$cycle)),
+                         selected = input$cyl_in)
+  })
+  
+  ## * 아이템 추가====
+  observeEvent(input$add_item,{
+    ec$save_items(rv$df5, input$ecos_name)
+    sendSweetAlert(title="추가하였습니다!", type='success')
+    rv$df_s <- ec$read_items()
+  })
+  
+  observe({
+    output$selected_item <- renderTable(rv$df_s)
+    output$ecos_stat_tables <- renderTable(rv$df)
+    output$ecos_item_tables <- renderTable(rv$df5)
   })
   
   

@@ -30,6 +30,9 @@ get_exchange_rate <- function(cur='달러'){
     readr::parse_number()
 }
 
+df3
+
+
 #[클래스] Ecos====
 Ecos <- R6Class(
   "Ecos",
@@ -332,7 +335,8 @@ MyAssets <- R6Class(
     assets_daily = NULL, pension_daily = NULL,
     bs_pl_book_a = NULL, bs_pl_book_p = NULL, 
     bs_pl_mkt_a = NULL, bs_pl_mkt_p = NULL,
-    bl = NULL, my = NULL, ret_a = NULL, ret_p = NULL, 
+    bl = NULL, my = NULL, 
+    ret_a = NULL, ret_p = NULL, ret_a2 = NULL, ret_p2 = NULL, 
     allo0 = NULL, allo1 = NULL, allo2 = NULL,
     allo3 = NULL, allo4 = NULL, allo5 = NULL, 
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
@@ -385,8 +389,7 @@ MyAssets <- R6Class(
         select(행번호, 계좌, 통화, 거래일자, 종목명, 
                매입수량:현금지출, 매입비용, 매도수량, 매도원금, 
                매도액, 매매수익, 이자배당액, 현금수입, 매도비용, 
-               순수익, 입출금, 잔액) |> 
-        arrange(desc(행번호)) 
+               순수익, 입출금, 잔액)
     },
     
     ## 3.(메서드) 계좌거래 내역 전처리 ====
@@ -607,31 +610,55 @@ MyAssets <- R6Class(
     },
     
     ## 7.(메서드) 자산군별 수익률 현황====
-    get_class_returns = function(mode='assets') {
+    get_class_returns = function(mode='assets', depth=2) {
       
       ### 1) 통화별/계좌별 수익률 산출함수====
       get_class_returns <- function(asset_returns, total=F) {
         
-        if(mode=='assets') {dist <- asset_returns$통화[1]}
-        else {
-          if(total){dist <- '전체'}
-          else {dist <- asset_returns$계좌[1]}
+        if(mode=='assets') {
+          dist <- asset_returns$통화[1]
+          if(dist=="달러"){ 
+            ex <- self$ex_usd 
+          } else if(dist=="엔화"){ 
+            ex <- self$ex_jpy 
+          } else { 
+            ex <- 1
+          }
+        } else {
+          if(total){
+            dist <- '전체'
+          } else {
+            dist <- asset_returns$계좌[1]
+          }
+          ex = 1
+        }
+        
+        if(depth==2){
+          grp <- c('자산군','세부자산군')
+          grp_list <- list(자산군='전체', 세부자산군=NA)
+          del <- NULL
+        } else {
+          grp <- c('자산군')
+          grp_list <- list(자산군='전체')
+          del <- c('세부자산군')
         }
         
         class_returns <- asset_returns |> 
           select(-(종목코드:보유수량), -세부자산군2, 
-                 -실현수익률, -평가수익률) |> 
-          group_by(자산군, 세부자산군) |> 
+                 -실현수익률, -평가수익률, -all_of(del)) |> 
+          mutate(across(-all_of(grp), ~round(.x * ex,0))) |> 
+          group_by(across(all_of(grp))) |> 
           summarise(across(everything(), ~sum(.x, na.rm = TRUE)),
                     .groups='drop') |> 
           mutate(구분 = dist, .before=1)
           
-        class_returns <- class_returns |> 
-          add_row(구분 = dist, 자산군 = '전체', 세부자산군 = NA, 
+        class_returns |> 
+          add_row(구분 = dist, !!!grp_list, 
                   !!(class_returns |>
-                       select(-구분,-자산군,-세부자산군) |> 
+                       select(-구분,-all_of(grp)) |> 
                        summarise(across(everything(), 
-                                        ~sum(.x, na.rm=T)))))|> 
+                                        ~sum(.x, na.rm=T))))
+                  )|> 
           mutate(실현수익률 = 실현손익 / 평잔 * 100,
                  # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
                  평가수익률 = 평가손익 / 장부금액 * 100)
@@ -720,18 +747,22 @@ MyAssets <- R6Class(
         group_by(통화) |> 
         mutate(통화별비중 = 평가금액 / sum(평가금액) * 100)
       
-      self$allo4 <- self$bs_pl_mkt_a |>
-        filter(계좌 == '불리오') |>
+      df_b <- self$bs_pl_mkt_a |>
+        filter(계좌 == '불리오')
+      
+      self$allo4 <- df_b |>
         group_by(세부자산군, 세부자산군2) |>
         summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
         mutate(투자비중 = 평가금액 / sum(평가금액) * 100) |>
-        add_row(세부자산군='합계', 평가금액 = sum(df$평가금액), 투자비중=100)
+        add_row(세부자산군='합계', 
+                평가금액 = sum(df_b$평가금액), 투자비중=100)
       
-      self$allo5 <- self$allo4 |>
+      self$allo5 <- df_b |>
         group_by(세부자산군) |>
-        summarize(평가금액 = sum(평가금액),
-                  투자비중 = sum(투자비중)) |> 
-        add_row(세부자산군='합계', 평가금액 = sum(df$평가금액), 투자비중=100)
+        summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
+        mutate(투자비중 = 평가금액 / sum(평가금액) * 100) |>
+        add_row(세부자산군='합계', 
+                평가금액 = sum(df_b$평가금액), 투자비중=100)
     },
     
     ## 9.(메서드) 연금 자산군별 배분 현황====
@@ -772,6 +803,8 @@ MyAssets <- R6Class(
       self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
       self$ret_a <- self$get_class_returns('assets')
       self$ret_p <- self$get_class_returns('pension')
+      self$ret_a2 <- self$get_class_returns('assets', depth = 1)
+      self$ret_p2 <- self$get_class_returns('pension', depth = 1)
       self$compute_allocation_a()
       self$compute_allocation_p()
     }
