@@ -30,7 +30,7 @@ get_exchange_rate <- function(cur='달러'){
     readr::parse_number()
 }
 
-df3
+
 
 
 #[클래스] Ecos====
