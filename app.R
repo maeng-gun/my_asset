@@ -416,9 +416,7 @@ server <- function(input, output, session) {
   w1$hide()
   
   # 1) 자산운용 내역 기록====
-  
   ## a. 투자자산 거래내역====
-  
   ### * 메뉴 설정====
 
   
@@ -786,7 +784,7 @@ server <- function(input, output, session) {
 
   reset_ticker <- reactive({
     input$ticker_new
-    input$ticker_mode
+    input$ticker_mod
     input$ticker_del
     if(input$type1 == "투자자산"){
       md$read('assets') |> 
@@ -891,6 +889,7 @@ server <- function(input, output, session) {
     } else {
       dbxInsert(md$con, 'pension', rv$ticker_new)
     }
+
     rv$tickers <- reset_ticker()
     update_manage_ticker()
   })
@@ -1007,7 +1006,7 @@ server <- function(input, output, session) {
     output$allo4 <- render_allo(ma$allo4)
    
 
-    # b. 투자손익현황====
+    ## b. 투자손익현황====
 
     
     output$class_ret_a <- renderUI({
@@ -1057,7 +1056,7 @@ server <- function(input, output, session) {
     output$allo8 <- render_allo(ma$allo8)
     output$allo9 <- render_allo(ma$allo9)
 
-    # b. 투자손익현황====
+    # d. 투자손익현황====
 
     output$class_ret_p <- renderUI({
       ma$ret_p |>

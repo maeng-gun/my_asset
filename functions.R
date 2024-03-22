@@ -30,7 +30,7 @@ get_exchange_rate <- function(cur='달러'){
     readr::parse_number()
 }
 
-df3
+
 
 
 #[클래스] Ecos====
@@ -721,8 +721,9 @@ MyAssets <- R6Class(
                평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval)) |>
         group_by(자산군, 세부자산군, 통화) |>
         summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
-        mutate(투자비중 = 평가금액 / sum(평가금액) * 100)
+        mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2))
       
+      ### 자산군별 배분현황
       self$allo0 <- df |>
         group_by(자산군) |>
         summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) |> 
@@ -731,8 +732,9 @@ MyAssets <- R6Class(
       self$allo1 <- df |>
         add_row(자산군='합계', 평가금액=sum(df$평가금액), 투자비중=100) |>
         group_by(자산군) |>
-        mutate(자산별비중 = 평가금액 / sum(평가금액) * 100)
+        mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
       
+      ### 통화화별 배분현황
       self$allo2 <- df |>
         group_by(통화) |>
         summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) |> 
@@ -745,22 +747,25 @@ MyAssets <- R6Class(
                   투자비중 = sum(투자비중), .groups = 'drop') |>
         add_row(통화='합계', 평가금액 = sum(df$평가금액), 투자비중=100) |>
         group_by(통화) |> 
-        mutate(통화별비중 = 평가금액 / sum(평가금액) * 100)
+        mutate(통화별비중 = round(평가금액 / sum(평가금액) * 100,2))
       
+      
+      ### 불리오 배분현황
       df_b <- self$bs_pl_mkt_a |>
-        filter(계좌 == '불리오')
+        filter(계좌 == '불리오') %>% 
+        mutate(평가금액 = round(평가금액*self$ex_usd,0))
       
       self$allo4 <- df_b |>
         group_by(세부자산군, 세부자산군2) |>
         summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
-        mutate(투자비중 = 평가금액 / sum(평가금액) * 100) |>
+        mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2)) |>
         add_row(세부자산군='합계', 
                 평가금액 = sum(df_b$평가금액), 투자비중=100)
       
       self$allo5 <- df_b |>
         group_by(세부자산군) |>
         summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
-        mutate(투자비중 = 평가금액 / sum(평가금액) * 100) |>
+        mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2)) |>
         add_row(세부자산군='합계', 
                 평가금액 = sum(df_b$평가금액), 투자비중=100)
     },
