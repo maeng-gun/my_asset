@@ -883,7 +883,8 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$ticker_new,{
-    rv$ticker_new$행번호 <- tail(rv$tickers$행번호, 1)+1
+    
+    rv$ticker_new$행번호 <- tail(md$read('pension')$행번호, 1)+1
     if(input$type1 == "투자자산"){
       dbxInsert(md$con, 'assets', rv$ticker_new)
     } else {
