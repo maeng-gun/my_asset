@@ -11,6 +11,7 @@ library(rvest)
 library(readxl)
 library(RSQLite)
 library(dbx)
+library(ggplot2)
 import::from(stringr, str_detect, str_extract)
 
 
@@ -340,7 +341,7 @@ MyAssets <- R6Class(
     allo0 = NULL, allo1 = NULL, allo2 = NULL,
     allo3 = NULL, allo4 = NULL, allo5 = NULL, 
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
-    allo9 = NULL,
+    allo9 = NULL, inflow_table = NULL, inflow_plot= NULL,
     
     ## 1. 속성 초기화====
     initialize = function(base_dt=NULL) {
@@ -365,6 +366,11 @@ MyAssets <- R6Class(
       )
       self$bs_pl_book_a <- self$get_bs_pl('assets')
       self$bs_pl_book_p <- self$get_bs_pl('pension')
+      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
+      self$ret_p <- self$get_class_returns('pension')
+      self$ret_p2 <- self$get_class_returns('pension', depth = 1)
+      self$compute_allocation_p()
+      self$get_inflow()
     },
     
     ## 2.(메서드) 거래내역 기록 테이블====
@@ -378,7 +384,7 @@ MyAssets <- R6Class(
       
       df2 |> left_join(
         (df1 |> transmute(계좌, 통화, 종목코드, 종목명)), 
-        by = '종목코드') |> 
+        by = c('계좌','종목코드')) |> 
         filter(계좌==acct, 통화==cur) |> 
         mutate(매입비용 = 현금지출-매입액,
                매매수익 = 매도액 - 매도원금,
@@ -395,19 +401,20 @@ MyAssets <- R6Class(
     ## 3.(메서드) 계좌거래 내역 전처리 ====
     get_daily_trading = function(ast, trade){
       
-      expand_grid(종목코드 = ast$종목코드, 거래일자 = self$days) |> 
-        left_join(select(ast, 종목코드, 종목명, 통화, 계좌), 
-                  by = "종목코드") |> 
-        left_join(trade, by = c("종목코드", "거래일자")) |> 
+      expand_grid(select(ast,계좌,종목코드), 
+                  거래일자 = self$days) |> 
+        left_join(select(ast, 계좌, 종목코드,종목명, 통화), 
+                  by = c("계좌","종목코드")) |> 
+        left_join(trade, by = c("계좌", "종목코드", "거래일자")) |> 
         mutate(across(매입수량:입출금, ~if_else(is.na(.x),0,.x))) |> 
-        arrange(종목코드, 거래일자) |> 
+        arrange(계좌, 종목코드, 거래일자) |> 
         mutate(
           순매입수량 = 매입수량 - 매도수량,
           수익 =매도액 - 매도원금 + 이자배당액,
           비용 = 현금지출 - 매입액 + 매도액 + 이자배당액 - 현금수입,
           실현손익 = 수익 - 비용
         ) |> 
-        select(종목코드:계좌, 순매입수량, 매입액, 매도원금, 
+        select(계좌:통화, 순매입수량, 매입액, 매도원금, 
                수익, 비용, 실현손익, 현금수입, 입출금, 현금지출)
     },
     
@@ -418,7 +425,8 @@ MyAssets <- R6Class(
       ###(1) 기본 테이블 생성====
       
       if(mode == 'assets') {
-        trade <- self$assets_daily
+        trade <- self$assets_daily %>% 
+          arrange(계좌, 종목코드, 거래일자)
         codes <- self$assets
       }
       else {
@@ -427,32 +435,25 @@ MyAssets <- R6Class(
       }
       
       bs_pl1 <- trade |>
-        select(종목코드, 거래일자, 종목명, 통화, 계좌)
+        select(계좌, 종목코드, 거래일자, 종목명, 통화)
       
       bs_pl2 <- trade |> 
-        group_by(종목코드) |>
+        group_by(계좌, 종목코드) |>
         transmute(
           보유수량 = cumsum(순매입수량),
           장부금액 = cumsum(매입액 - 매도원금),
-          평잔 = cummean(장부금액)
-        ) |>
-        ungroup() |> 
-        select(-종목코드)
-      
-      bs_pl3 <- trade |>
-        group_by(종목코드) |>
-        transmute(
+          평잔 = cummean(장부금액),
           수익 = cumsum(수익),
           비용 = cumsum(비용),
           실현손익 = cumsum(실현손익)
-        )|>
+        ) |>
         ungroup() |> 
-        select(-종목코드)
+        select(-계좌, -종목코드)
       
-      bs_pl <- bind_cols(bs_pl1, bs_pl2, bs_pl3) |> 
-        left_join(select(codes, 종목코드, 자산군, 세부자산군, 세부자산군2), 
-                  by = '종목코드') |>
-        arrange(종목명, 거래일자)
+      bs_pl <- bind_cols(bs_pl1, bs_pl2) |> 
+        left_join(select(codes, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2), 
+                  by = c('계좌','종목코드')) |>
+        arrange(계좌, 종목코드, 거래일자)
       
       
       ###(2) 예수금 & 평잔 처리====
@@ -527,7 +528,7 @@ MyAssets <- R6Class(
         
       } else {
         bs_pl |> 
-          mutate(실현수익률 = 실현손익 / 평잔 * 100)
+          mutate(실현수익률 = if_else(is.na(실현손익 / 평잔 * 100), 0, 실현손익 / 평잔 * 100))
       }
       
     },
@@ -541,30 +542,30 @@ MyAssets <- R6Class(
       }
       
       
-      p_lotte <- as.integer(self$bl$get_current_price("011170")$stck_prpr)
-      q_lotte <- filter(self$bs_pl_book_a, 
-                        종목명=='롯데케미칼', 
-                        거래일자 == self$today)$보유수량
-      
+      # p_lotte <- as.integer(self$bl$get_current_price("011170")$stck_prpr)
+      # q_lotte <- filter(self$bs_pl_book_a, 
+      #                   종목명=='롯데케미칼', 
+      #                   거래일자 == self$today)$보유수량
+
       price <- self$assets |>
-        select(종목코드, 상품명, 평가금액) |> 
-        mutate(평가금액 = replace(평가금액, 
-                              상품명 == '우리사주 롯데케미칼', 
-                              p_lotte*q_lotte)) |> 
+        select(계좌, 종목코드, 상품명, 평가금액) |> 
+        # mutate(평가금액 = replace(평가금액, 
+        #                       상품명 == '우리사주 롯데케미칼', 
+        #                       p_lotte*q_lotte)) |> 
         filter(평가금액!=0) |> 
         bind_rows(
-          self$my$inquire_balance(),
-          self$my$inquire_balance_ovs(),
-          self$my$inquire_balance_ovs('JPY'),
-          self$bl$inquire_balance_ovs()) |> 
-        select(종목코드,평가금액)
+          mutate(self$my$inquire_balance(), 계좌 = '한투'),
+          mutate(self$my$inquire_balance_ovs(), 계좌 = '한투'),
+          mutate(self$my$inquire_balance_ovs('JPY'), 계좌 = '한투'),
+          mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')) |> 
+        select(계좌, 종목코드,평가금액)
 
       
       bs_pl <- self$bs_pl_book_a |> 
         filter(거래일자 == self$today) |> 
-        left_join(price, by="종목코드") |> 
+        left_join(price, by=c("계좌","종목코드")) |> 
         mutate(
-          평가금액 = ifelse(is.na(평가금액), 장부금액, 평가금액)) 
+          평가금액 = if_else(is.na(평가금액), 장부금액, 평가금액)) 
         # left_join(
         #   (self$assets |> select(종목코드, 기초평가손익)), 
         #   by="종목코드")
@@ -594,11 +595,11 @@ MyAssets <- R6Class(
     evaluate_bs_pl_pension = function(){
 
       price <- self$pension |>
-        select(종목코드, 평가금액, 기초평가손익)
+        select(계좌, 종목코드, 평가금액, 기초평가손익)
       
       self$bs_pl_book_p |> 
         filter(거래일자 == self$today) |> 
-        left_join(price, by="종목코드") |> 
+        left_join(price, by=c("계좌","종목코드")) |> 
         mutate(
           # 평가손익증감 = 평가금액 - 장부금액,
           # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
@@ -644,9 +645,9 @@ MyAssets <- R6Class(
         }
         
         class_returns <- asset_returns |> 
-          select(-(종목코드:보유수량), -세부자산군2, 
+          select(-(계좌:보유수량), -세부자산군2, 
                  -실현수익률, -평가수익률, -all_of(del)) |> 
-          mutate(across(-all_of(grp), ~round(.x * ex,0))) |> 
+          mutate(across(-all_of(grp), ~.x * ex)) |> 
           group_by(across(all_of(grp))) |> 
           summarise(across(everything(), ~sum(.x, na.rm = TRUE)),
                     .groups='drop') |> 
@@ -700,9 +701,13 @@ MyAssets <- R6Class(
           filter(계좌 == '엔투저축연금') |> 
           get_class_returns()
         
+        kis_ret <- df |> 
+          filter(계좌 == '한투연금저축') |> 
+          get_class_returns()
+        
         ret <- df |> get_class_returns(total=T)
         
-        bind_rows(nhb_ret, shi_ret, nhi_ret, ret)
+        bind_rows(nhb_ret, shi_ret, nhi_ret, kis_ret, ret)
         
       }
       
@@ -802,16 +807,59 @@ MyAssets <- R6Class(
         group_by(계좌) |>
         mutate(자산별비중 = 평가금액 / sum(평가금액) * 100)
     },
+    
     ## 10.(메서드) 평가금액 포함 자료 산출====
     run_valuation = function(){
       self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
-      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
       self$ret_a <- self$get_class_returns('assets')
-      self$ret_p <- self$get_class_returns('pension')
       self$ret_a2 <- self$get_class_returns('assets', depth = 1)
-      self$ret_p2 <- self$get_class_returns('pension', depth = 1)
       self$compute_allocation_a()
-      self$compute_allocation_p()
+    },
+    
+    ## 11.(메서드) 장부금액 및 현금성자산 추이 산출====
+    get_inflow = function(){
+      
+      df1 <- self$bs_pl_book_a %>% 
+        group_by(거래일자) %>% 
+        summarise(장부금액 = sum(장부금액)) %>% 
+        left_join(
+          self$bs_pl_book_a %>% 
+            filter(자산군=='현금성', 통화=='원화') %>% 
+            group_by(거래일자) %>% 
+            summarise(현금성자산 = sum(장부금액)),
+          by = '거래일자'
+        ) 
+      
+      y <- df1 %>% filter(거래일자 == today()-1)
+      
+      self$inflow_table <- 
+        self$md$read('inflow') %>% 
+        filter(거래일자 > today())
+        
+      df2 <- df1 %>% 
+        filter(거래일자 >= today()) %>%
+        select(거래일자) %>% 
+        left_join(
+          self$inflow_table, 
+          by='거래일자') %>% 
+        replace_na(list(순자금유입=0, 만기상환=0)) %>% 
+        mutate(across(-거래일자, cumsum)) %>% 
+        transmute(
+          거래일자,
+          장부금액 = y$장부금액+순자금유입,
+          현금성자산 = y$현금성자산+순자금유입+만기상환)
+      
+      df <- df1 %>% 
+        filter(거래일자 < today()) %>% 
+        bind_rows(df2)
+      
+      
+      self$inflow_plot <- df %>% 
+        pivot_longer(cols=-거래일자, names_to = '구분', values_to = '금액') %>% 
+        mutate(금액 = 금액/10000) %>% 
+        ggplot(aes(x=거래일자,y=금액, color=구분))+
+        geom_line(linewidth=2)+
+        facet_grid(rows='구분', scales = 'free_y')
     }
   )
 )

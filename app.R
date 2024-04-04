@@ -30,6 +30,11 @@ sidebar <- dashboardSidebar(
       icon = icon("sack-dollar"),
       tabName = "pf_bs_pl"
     ),
+    menuItem(
+      text = "자산/유동성 추이",
+      icon = icon("chart-line"),
+      tabName = "pf_liquid"
+    ),
     sidebarHeader("경제지표"),
     menuItem(
       text = "한국은행 지표선정",
@@ -323,7 +328,29 @@ body <- dashboardBody(
         )
       )
     ),
-    ##3) 한국은행 지표선정====
+    ##3) 자산/유동성 추이====
+    tabItem(
+      tabName = "pf_liquid",
+      box(
+        id='list_box',
+        width = 12,
+        status = 'info',
+        solidHeader = T,
+        title = "자산/유동성 추이",
+        collapsible = F,
+        fluidRow(
+          column(
+            width = 4,
+            uiOutput('inflow_table')
+          ),
+          column(
+            width = 8,
+            plotOutput('inflow_plot')
+          )
+        )
+      )
+    ),
+    ##4) 한국은행 지표선정====
     tabItem(
       tabName = "ecos_stat",
       tabBox(
@@ -631,6 +658,7 @@ server <- function(input, output, session) {
       if(length(trade_ticker)>0){
         rv$trade_new <- tibble::tibble_row(
           행번호=0, 거래일자=input$trading_date, 
+          계좌=input$ass_account2,
           종목코드=trade_ticker,
           매입수량=input$buy_q, 매입액=input$buy_p, 
           현금지출=input$buy_c, 매도수량=input$sell_q, 
@@ -873,7 +901,8 @@ server <- function(input, output, session) {
   ### * 추가/수정/삭제 선택시====
   observe({
     rv$ticker_new <- tibble::tibble_row(
-      행번호=0, 계좌=input$ass_account, 종목코드=input$ticker,
+      행번호=0, 계좌=input$ass_account, 
+      종목코드=input$ticker,
       종목명=input$ass_name, 평가금액=input$eval_price,
       상품명=input$comm_name, 통화=input$ass_cur, 
       자산군=input$ass_class, 
@@ -884,10 +913,12 @@ server <- function(input, output, session) {
   
   observeEvent(input$ticker_new,{
     
-    rv$ticker_new$행번호 <- tail(md$read('pension')$행번호, 1)+1
+
     if(input$type1 == "투자자산"){
+      rv$ticker_new$행번호 <- tail(md$read('assets')$행번호, 1)+1
       dbxInsert(md$con, 'assets', rv$ticker_new)
     } else {
+      rv$ticker_new$행번호 <- tail(md$read('pension')$행번호, 1)+1
       dbxInsert(md$con, 'pension', rv$ticker_new)
     }
 
@@ -970,6 +1001,15 @@ server <- function(input, output, session) {
     })
   })
   
+  render_allo <- function(df){
+    renderUI({
+      df |> flextable() |>
+        theme_vanilla() |>
+        merge_v(j=1:2) |>
+        set_table_properties(layout='autofit',width=0.9) |>
+        htmltools_value()
+    })
+  }  
   
   # 2) 자산운용 현황====
   
@@ -981,18 +1021,8 @@ server <- function(input, output, session) {
     
     w1$hide()
 
-    render_allo <- function(df){
-      renderUI({
-        df |> flextable() |>
-          theme_vanilla() |>
-          merge_v(j=1:2) |>
-          set_table_properties(layout='autofit',width=0.9) |>
-          htmltools_value()
-      })
-    }
-
-
-    ## a. 투자자산현황====
+    
+   ## a. 투자자산현황====
 
     ###* 자산군별 배분현황====
     output$allo0 <- render_allo(ma$allo0)
@@ -1039,71 +1069,85 @@ server <- function(input, output, session) {
     output$bs_pl_mkt_a <-renderUI({
       ma$bs_pl_mkt_a |>
         select(통화, 자산군, 세부자산군, 종목명,
-               보유수량,평가금액, 실현손익,평가손익,
+               보유수량,장부금액, 평가금액, 실현손익,평가손익,
                실현수익률, 평가수익률) |>
         arrange(통화,자산군,세부자산군) |>
         flextable() |>
         theme_vanilla() |>
         merge_v(j=1:3) |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=5:8, digits = 0) |>
-        colformat_double(j=9:10, digits = 2) |>
+        colformat_double(j=5:9, digits = 0) |>
+        colformat_double(j=10:11, digits = 2) |>
         htmltools_value()
     })
 
-    # c. 투자자산현황====
-    output$allo6 <- render_allo(ma$allo6)
-    output$allo7 <- render_allo(ma$allo7)
-    output$allo8 <- render_allo(ma$allo8)
-    output$allo9 <- render_allo(ma$allo9)
-
-    # d. 투자손익현황====
-
-    output$class_ret_p <- renderUI({
-      ma$ret_p |>
-        select(1:3,평가금액,실현손익, 평가손익,
-               실현수익률:평가수익률) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1:2) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=4:6, digits = 0) |>
-        colformat_double(j=7:8, digits = 2) |>
-        htmltools_value()
-    })
-    
-    output$class_ret_p2 <- renderUI({
-      ma$ret_p2 |>
-        select(1:2,평가금액,실현손익, 평가손익,
-               실현수익률:평가수익률) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=3:5, digits = 0) |>
-        colformat_double(j=6:7, digits = 2) |>
-        htmltools_value()
-    })
-
-    output$bs_pl_mkt_p <-renderUI({
-      ma$bs_pl_mkt_p |>
-        select(계좌, 자산군, 세부자산군, 종목명,
-               보유수량,평가금액, 실현손익, 평가손익,
-               실현수익률,평가수익률) |>
-        arrange(계좌,자산군,세부자산군) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1:3) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=5:8, digits = 0) |>
-        colformat_double(j=9:10, digits = 2) |>
-        htmltools_value()
-    })
-    
+  })
+  
+  ## c. 연금자산현황====
+  output$allo6 <- render_allo(ma$allo6)
+  output$allo7 <- render_allo(ma$allo7)
+  output$allo8 <- render_allo(ma$allo8)
+  output$allo9 <- render_allo(ma$allo9)
+  
+  ## d. 연금손익현황====
+  
+  output$class_ret_p <- renderUI({
+    ma$ret_p |>
+      select(1:3,평가금액,실현손익, 평가손익,
+             실현수익률:평가수익률) |>
+      flextable() |>
+      theme_vanilla() |>
+      merge_v(j=1:2) |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=4:6, digits = 0) |>
+      colformat_double(j=7:8, digits = 2) |>
+      htmltools_value()
+  })
+  
+  output$class_ret_p2 <- renderUI({
+    ma$ret_p2 |>
+      select(1:2,평가금액,실현손익, 평가손익,
+             실현수익률:평가수익률) |>
+      flextable() |>
+      theme_vanilla() |>
+      merge_v(j=1) |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=3:5, digits = 0) |>
+      colformat_double(j=6:7, digits = 2) |>
+      htmltools_value()
+  })
+  
+  output$bs_pl_mkt_p <-renderUI({
+    ma$bs_pl_mkt_p |>
+      select(계좌, 자산군, 세부자산군, 종목명,
+             보유수량, 장부금액, 평가금액, 실현손익, 평가손익,
+             실현수익률,평가수익률) |>
+      arrange(계좌,자산군,세부자산군) |>
+      flextable() |>
+      theme_vanilla() |>
+      merge_v(j=1:3) |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=5:9, digits = 0) |>
+      colformat_double(j=10:11, digits = 2) |>
+      htmltools_value()
+  })
+  
+  # 3) 자산/유동성 추이====
+  
+  output$inflow_table <- renderUI({
+    ma$inflow_table %>% flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      htmltools_value(ft.align = 'center')
+  })
+  
+  output$inflow_plot <- renderPlot({
+    ma$inflow_plot
   })
   
   
-  # 3) 한국은행 지표선정====
+  
+  # 4) 한국은행 지표선정====
   ## b. 통계표 조회====
   observeEvent(input$name,{
     rv$df <- ec$find_stat(input$name)
