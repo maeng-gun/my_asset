@@ -340,11 +340,15 @@ body <- dashboardBody(
         collapsible = F,
         fluidRow(
           column(
-            width = 4,
+            width = 2,
+            uiOutput('manage_inflow'),
+          ),
+          column(
+            width = 3,
             uiOutput('inflow_table')
           ),
           column(
-            width = 8,
+            width = 7,
             plotOutput('inflow_plot')
           )
         )
@@ -436,6 +440,7 @@ server <- function(input, output, session) {
     tickers=NULL, ticker_new=NULL,
     trade=NULL, trade_new_=NULL,
     type1=NULL, type2=NULL,
+    inflow=NULL, inflow_new=NULL,
     ctg=readRDS("categories.rds"),
     
   )
@@ -913,7 +918,6 @@ server <- function(input, output, session) {
   
   observeEvent(input$ticker_new,{
     
-
     if(input$type1 == "투자자산"){
       rv$ticker_new$행번호 <- tail(md$read('assets')$행번호, 1)+1
       dbxInsert(md$con, 'assets', rv$ticker_new)
@@ -1134,15 +1138,140 @@ server <- function(input, output, session) {
   
   # 3) 자산/유동성 추이====
   
-  output$inflow_table <- renderUI({
-    ma$inflow_table %>% flextable() |>
-      theme_vanilla() |>
-      set_table_properties(layout='autofit') |>
-      htmltools_value(ft.align = 'center')
+  ### * 메뉴 설정====
+  output$manage_inflow <- renderUI({
+    fluidRow(
+      selectInput(
+        inputId = 'new3',
+        label = "신규/수정",
+        choices = "신규",
+        width='100%'
+      ),
+      airDatepickerInput(
+          inputId = 'trading_date2',
+          label = "거래일자",
+          addon = "none",
+          value = Sys.Date(),
+          width='100%'
+      ),
+      autonumericInput(
+        inputId = 'net_inflow',
+        label = "순자금유입",
+        value = 0,
+        width='100%'
+      ),
+      autonumericInput(
+        inputId = 'payment',
+        label = "만기상환",
+        value = 0,
+        width='100%'
+      ),
+      br(),
+      actionButton(
+        inputId = "inflow_new",
+        label = "추가",
+        status = "info",
+        width='100%'
+      ),
+      br(),
+      actionButton(
+        inputId = "inflow_mod",
+        label = "수정",
+        status = "success",
+        width='100%'
+      ),
+      br(),
+      actionButton(
+        inputId = "inflow_del",
+        label = "삭제",
+        status = "primary",
+        width='100%'
+      )
+    ) 
   })
   
+  ### * 테이블 설정====
+  
+  reset_inflow <- reactive({
+    input$inflow_new
+    input$inflow_mod
+    input$inflow_del
+    md$read('inflow')
+  })
+  
+  update_manage_inflow <-  reactive({
+    updateSelectInput(session, 'new3',
+                      choices = c('신규', rev(rv$inflow$행번호)),
+                      selected = '신규')
+  })
+  
+  output$inflow_table <- renderUI({
+    if(!is.null(rv$inflow)){
+      rv$inflow |>
+        flextable() |>
+        theme_vanilla() |>
+        set_table_properties(layout='autofit') |>
+        htmltools_value(ft.align = 'center')
+    } else {
+    }
+  })
+  
+  ### * 신규/구분 설정====
+  observeEvent(input$new3,{
+    if(input$new3 != "신규"){
+      rv$inflow <- reset_inflow()
+      t_rows <- filter(rv$inflow, 행번호 == input$new3)
+      updateAirDateInput(session, 'trading_date2', value = t_rows$거래일자)
+      updateAutonumericInput(session, 'net_inflow', value = t_rows$순자금유입)
+      updateAutonumericInput(session, 'payment', value = t_rows$만기상환)
+      
+    } else {
+      rv$inflow <- reset_inflow()
+      update_manage_inflow()
+      updateAirDateInput(session, 'trading_date2', value = Sys.Date())
+      updateAutonumericInput(session, 'net_inflow', value = 0)
+      updateAutonumericInput(session, 'payment', value = 0)
+    }
+  })
+  
+  ### * 추가/수정/삭제 선택시====
+  observe({
+    rv$inflow_new <- tibble::tibble_row(
+      행번호=0, 거래일자 = input$trading_date2,
+      순자금유입=input$net_inflow,
+      만기상환=input$payment
+    )
+  })
+  
+  observeEvent(input$inflow_new,{
+    
+    rv$inflow_new$행번호 <- tail(md$read('inflow')$행번호, 1)+1
+    dbxInsert(md$con, 'inflow', rv$inflow_new)
+    rv$inflow <- reset_inflow()
+    update_manage_inflow()
+  })
+  
+  observeEvent(input$inflow_mod,{
+    rv$inflow_new$행번호 <- input$new3
+    dbxUpdate(md$con, 'inflow', rv$inflow_new, where_cols = c("행번호"))
+    rv$inflow <- reset_inflow()
+    update_manage_inflow()
+  })
+  
+  observeEvent(input$inflow_del,{
+    dbxDelete(md$con, 'inflow', tibble::tibble_row(행번호=input$new3))
+    rv$inflow <- reset_inflow()
+    update_manage_inflow()
+  })
+  
+  ### * 그래프 설정====
   output$inflow_plot <- renderPlot({
-    ma$inflow_plot
+    ma$inflow_plot +
+      theme(
+        text = element_text(size = 20),
+        legend.position = "none",
+        axis.title = element_blank()
+      )
   })
   
   

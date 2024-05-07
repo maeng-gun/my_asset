@@ -84,7 +84,7 @@ Ecos <- R6Class(
     #(메서드)아이템 저장
     save_items = function(df, name){
       
-      df2 <- df |> mutate(new_name = name)
+      df2 <- df |> mutate(new_name = name, .before=1)
       
       self$read_items() |> 
         bind_rows(df2) |> 
@@ -553,11 +553,12 @@ MyAssets <- R6Class(
         #                       상품명 == '우리사주 롯데케미칼', 
         #                       p_lotte*q_lotte)) |> 
         filter(평가금액!=0) |> 
-        bind_rows(
-          mutate(self$my$inquire_balance(), 계좌 = '한투'),
-          mutate(self$my$inquire_balance_ovs(), 계좌 = '한투'),
-          mutate(self$my$inquire_balance_ovs('JPY'), 계좌 = '한투'),
-          mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')) |> 
+        # bind_rows(
+          # mutate(self$my$inquire_balance(), 계좌 = '한투'),
+          # mutate(self$my$inquire_balance_ovs(), 계좌 = '한투'),
+          # mutate(self$my$inquire_balance_ovs('JPY'), 계좌 = '한투'),
+          # mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')
+          # ) |> 
         select(계좌, 종목코드,평가금액)
 
       

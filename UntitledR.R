@@ -1,8 +1,134 @@
+library(tidyquant)
+library(editData)
+library(datapasta)
 source('functions.R')
 
+
+ma <- MyData$new('mydata.sqlite')
+df <- 
+  readRDS('ecos_items.rds') %>% 
+  mutate(site = 'ecos', .before=1)
+
+editFiles()
+
+tq_get(c('^FVX', 'GC=F'))
+
+tq_get('^FVX', get='stock.price', from='2000-01-01')
+
+tq_get('DGS5',get='economic.data', from='2000-01-01')
+
+library(dplyr)
+a$get_history(start = '2000-01-01') %>% 
+  tibble()
+
+
+df <- list('DSG3MO', 'DGS1', 'DGS2', 'DGS5', 'DGS10', 'DGS20', 'DGS30') %>% 
+  purrr::map_dfr(
+    ~tq_get(.x, get='economic.data', from='2024-04-25')
+  ) %>% 
+  pivot_wider(names_from = symbol, values_from = price)
+
+df
+
+df <- editData(df)
+
+tq_exchange('NYSE')
+
+
+
+self <- Ecos$new()
+self$read_items()$item_name
+
+
+ecos::statSearch('721Y001')
+
+self$find_items('731Y001')
+
+ecos::ecos.setKey('QNY131XKGR9OTK7LSNLS')
+
+self$read_items()
+
+
+
+ui=fluidPage(
+  textInput("mydata","mydata",value="mtcars"),
+  editableDTUI("editableDT"),
+  tableOutput('table')
+)
+
+server=function(input,output,session){
+  data=reactive({
+    myget(input$mydata)
+  })
+  result=callModule(editableDT, "editableDT", data=data)
+  output$table <- renderTable({re})
+}
+shinyApp(ui=ui,server=server)
+
+
+
+
+
+
+
+
+
+ecos::statTableList()
+map
+
+
+df <- self$read_items() %>% 
+  split(.$new_name) %>% 
+  map_dfr(
+    ~ecos::statSearch(stat_code = .x$stat_code, 
+                     item_code1 = .x$item_code,
+                     start_time = '20230101',
+                     cycle = 'D')%>% 
+      as_tibble() %>% 
+      transmute(code=.x$new_name,
+                date=ymd(time),
+                value=data_value) 
+  )
+
+x <- self$read_items() %>% 
+  split(.$new_name) %>% .$ktr10
+
+ecos::statSearch(stat_code = x$stat_code, 
+                 item_code1 = x$item_code,
+                 start_time = '20200101',
+                 cycle = 'D')
+
+
+df %>% 
+  pivot_wider(names_from = 'code', values_from = value) %>% 
+  arrange(date) %>% 
+  filter(if_all(2, ~!is.na(.)))
+  
+
+
+
+ecos::statSearch(stat_code =df1$stat_code, 
+                        item_code1 = df1$item_code,
+                        start_time = strftime(last(df2$date)+1,'%Y%m%d'),
+                        cycle = 'D') %>% 
+  as_tibble() %>% 
+  transmute(code=df1$new_name,
+            date=ymd(time),
+            value=data_value)
+
+
+
+names(df1)
+
+
 self <- MyAssets$new()
+ma$bs_pl_book_a %>% 
+  filter(거래일자=='2024-05-01')
 
 md <- MyData$new('mydata.sqlite')
+
+md$read('inflow')
+
 
 library(ggplot2)
 
