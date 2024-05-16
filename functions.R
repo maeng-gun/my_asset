@@ -854,6 +854,7 @@ MyAssets <- R6Class(
         filter(거래일자 < today()) %>% 
         bind_rows(df2)
       
+      self$inflow_table %>% left_join(df, by="거래일자")
       
       self$inflow_plot <- df %>% 
         pivot_longer(cols=-거래일자, names_to = '구분', values_to = '금액') %>% 

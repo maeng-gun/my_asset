@@ -11,7 +11,7 @@ df <-
 
 editFiles()
 
-tq_get(c('^FVX', 'GC=F'))
+tq_get(c('GC=F', 'SI=F', 'CL=F'))
 
 tq_get('^FVX', get='stock.price', from='2000-01-01')
 
