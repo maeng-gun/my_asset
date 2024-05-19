@@ -1,8 +1,75 @@
 library(tidyquant)
 library(editData)
 library(datapasta)
+library(ecos)
 source('functions.R')
 
+e <- Ecos$new()
+
+ma <- MyData$new('mydata.sqlite')
+
+df2 <- ma$read('idx_info') %>% 
+  filter(site=='ecos') %>% 
+  select(stat_code, item_code, cycle, index) %>% 
+  slice(1:5) %>% 
+  pmap_dfr(
+    ~statSearch(stat_code = ..1,
+                item_code1 = ..2,
+                cycle = ..3,
+                start_time = "20240514",
+                end_time = strftime(today(),"%Y%m%d")
+     ) %>% 
+     as_tibble() %>% 
+     transmute(date = ymd(time), index = ..4, value = data_value)
+  )
+
+
+get_code <- list('fred' = c('economic.data', 'price'),
+     'yahoo' = c("stock.prices", 'close'))
+
+
+value_code <- list()
+
+get_code[['fred']]
+
+df3 <- ma$read('idx_info') %>% 
+  filter(site!='ecos') %>% 
+  select(item_code, site, new_name) %>% 
+  pmap_dfr(
+    ~tq_get(..1, 
+            get = get_code[[..2]][1], 
+            from = "2024-05-14"
+    ) %>% 
+    as_tibble() %>% 
+    transmute(date = ymd(date), code = ..3, value= .data[[get_code[[..2]][2]]])
+  ) %>% 
+  pivot_wider(names_from = code, values_from = value)
+
+df3
+
+a <- function(x){
+  df2 %>% transmute(value = .data[[x]])
+}
+
+
+
+tq_get("GC=F", from="2024-05-14")
+
+vignette('programming')
+df2 %>% transmute_('value' = 'krwcny')
+
+df2
+
+tq_get('DGS5', 
+       get = 'economic.data', 
+       from = "20240514"
+)
+
+  
+df2 %>% 
+  full_join(df3, by='date')
+  
+s1$stat_code
 
 ma <- MyData$new('mydata.sqlite')
 df <- 
@@ -15,7 +82,7 @@ tq_get(c('GC=F', 'SI=F', 'CL=F'))
 
 tq_get('^FVX', get='stock.price', from='2000-01-01')
 
-tq_get('DGS5',get='economic.data', from='2000-01-01')
+
 
 library(dplyr)
 a$get_history(start = '2000-01-01') %>% 
@@ -36,7 +103,10 @@ tq_exchange('NYSE')
 
 
 
-self <- Ecos$new()
+
+ecos <- Ecos$new()
+
+
 self$read_items()$item_name
 
 
