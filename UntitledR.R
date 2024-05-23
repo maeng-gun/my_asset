@@ -8,44 +8,104 @@ e <- Ecos$new()
 
 ma <- MyData$new('mydata.sqlite')
 
-df2 <- ma$read('idx_info') %>% 
-  filter(site=='ecos') %>% 
-  select(stat_code, item_code, cycle, index) %>% 
-  slice(1:5) %>% 
-  pmap_dfr(
-    ~statSearch(stat_code = ..1,
-                item_code1 = ..2,
-                cycle = ..3,
-                start_time = "20240514",
-                end_time = strftime(today(),"%Y%m%d")
-     ) %>% 
-     as_tibble() %>% 
-     transmute(date = ymd(time), index = ..4, value = data_value)
-  )
+scrap_econ <- function(start, end=NULL){
+  
+  if(is.null(end)){end <- today()}
+  
+  info <- ma$read('idx_info')
+  
+  df <- info %>% 
+    filter(site=='ecos') %>%
+    slice(1:2) %>% 
+    select(stat_code, item_code, cycle, index) %>%
+    pmap_dfr(
+      ~statSearch(stat_code = ..1,
+                  item_code1 = ..2,
+                  cycle = ..3,
+                  start_time = strftime(start,"%Y%m%d"),
+                  end_time = strftime(end,"%Y%m%d")
+      ) %>% 
+        as_tibble() %>% 
+        transmute(date = ymd(time), index = ..4, value = data_value)
+    )
+  
+  
+  get_code <- list('fred' = c('economic.data', 'price'),
+                   'yahoo' = c("stock.prices", 'close'))
+  
+  
+  df2 <- info %>% 
+    filter(site!='ecos') %>% 
+    slice(1:2) %>% 
+    select(item_code, site, index) %>% 
+    pmap_dfr(
+      ~tq_get(..1, 
+              get = get_code[[..2]][1], 
+              from = start,
+              to = end,
+      ) %>% 
+        as_tibble() %>% 
+        transmute(date = ymd(date), index = ..3, value= .data[[get_code[[..2]][2]]])
+    )
+  
+  bind_rows(df,df2) %>% 
+    filter(!is.na(value))
+}
+
+upsert_econ <- function(table, record){
+  dbxUpsert(ma$con, table, record, c("date", "index"))
+}
 
 
-get_code <- list('fred' = c('economic.data', 'price'),
-     'yahoo' = c("stock.prices", 'close'))
 
 
-value_code <- list()
-
-get_code[['fred']]
-
-df3 <- ma$read('idx_info') %>% 
-  filter(site!='ecos') %>% 
-  select(item_code, site, new_name) %>% 
-  pmap_dfr(
-    ~tq_get(..1, 
-            get = get_code[[..2]][1], 
-            from = "2024-05-14"
+query_econ <- function(stats, start, end=NULL){
+  if(is.null(end)){end <- today()}
+  
+  ma$read_obj('econ_daily') %>% 
+    filter(between(date, start, end)) %>% 
+    right_join(
+      ma$read_obj('idx_info') %>% 
+        filter(new_name %in% stats) %>% 
+        select(index, new_name),
+      by='index'
     ) %>% 
-    as_tibble() %>% 
-    transmute(date = ymd(date), code = ..3, value= .data[[get_code[[..2]][2]]])
-  ) %>% 
-  pivot_wider(names_from = code, values_from = value)
+    select(date, new_name, value) %>% 
+    collect() %>% 
+    mut
+}
 
-df3
+df <- query_econ("krwusd", "2024-01-01")
+
+df %>% 
+  ggplot(aes(x=date, y=value, color=new_name)) +
+  geom_line() +
+  scale_x_date(date_labels = '%y-%m', date_breaks = '1 month') +
+  labs(x='', y='') +
+  theme(legend.position = "none")
+
+
+
+
+
+
+df2 <- tribble(
+  ~date, ~index, ~value,
+  "2024-05-20", 16, 1,
+  "2024-05-20", 17, 2,
+  "2024-05-21", 18, 3
+)
+
+start <- '2024-05-20'
+
+
+
+bind_rows(df2,df3) %>% 
+  left_join(ma$read('idx_info') %>% select(index, new_name), by="index") %>% 
+  pivot_wider(id_cols = date, names_from=new_name, values_from=value)
+
+
+
 
 a <- function(x){
   df2 %>% transmute(value = .data[[x]])
