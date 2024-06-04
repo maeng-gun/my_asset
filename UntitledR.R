@@ -8,7 +8,14 @@ e <- Ecos$new()
 
 ma <- MyData$new('mydata.sqlite')
 
-scrap_econ <- function(start, end=NULL){
+scrap_econ_daily <- function(start=NULL, end=NULL){
+  
+  if(is.null(start)){
+    start <- ma$read_obj('econ_daily') %>% 
+      distinct(date) %>% 
+      dbplyr::window_order(desc(date)) %>% 
+      filter(row_number()==1) %>% pull() %>% -10
+  }
   
   if(is.null(end)){end <- today()}
   
@@ -16,50 +23,64 @@ scrap_econ <- function(start, end=NULL){
   
   df <- info %>% 
     filter(site=='ecos') %>%
-    slice(1:2) %>% 
     select(stat_code, item_code, cycle, index) %>%
     pmap_dfr(
-      ~statSearch(stat_code = ..1,
+      ~tryCatch({
+        statSearch(stat_code = ..1,
                   item_code1 = ..2,
                   cycle = ..3,
                   start_time = strftime(start,"%Y%m%d"),
                   end_time = strftime(end,"%Y%m%d")
-      ) %>% 
-        as_tibble() %>% 
-        transmute(date = ymd(time), index = ..4, value = data_value)
+        ) %>% 
+          as_tibble() %>% 
+          transmute(date = ymd(time), index = ..4, value = data_value)
+        }, error=function(e){
+          tibble()
+        }
+      )
     )
-  
-  
+
   get_code <- list('fred' = c('economic.data', 'price'),
                    'yahoo' = c("stock.prices", 'close'))
   
   
   df2 <- info %>% 
-    filter(site!='ecos') %>% 
-    slice(1:2) %>% 
+    filter(site!='ecos') %>%
     select(item_code, site, index) %>% 
     pmap_dfr(
-      ~tq_get(..1, 
-              get = get_code[[..2]][1], 
-              from = start,
-              to = end,
-      ) %>% 
-        as_tibble() %>% 
-        transmute(date = ymd(date), index = ..3, value= .data[[get_code[[..2]][2]]])
+      ~tryCatch({
+          tq_get(..1, 
+                 get = get_code[[..2]][1], 
+                 from = start,
+                 to = end,
+          ) %>% 
+            as_tibble() %>% 
+            transmute(date = ymd(date), index = ..3, value= .data[[get_code[[..2]][2]]])
+      }, error=function(e){
+          tibble()
+      }
+      )
     )
   
   bind_rows(df,df2) %>% 
     filter(!is.na(value))
 }
 
-upsert_econ <- function(table, record){
+upsert_econ <- function(record, table){
   dbxUpsert(ma$con, table, record, c("date", "index"))
 }
 
+scrap_econ_daily() %>% 
+  upsert_econ('econ_daily')
 
 
 
-query_econ <- function(stats, start, end=NULL){
+
+
+
+query_econ <- function(stats, start=NULL, end=NULL){
+  
+  if(is.null(start)){start <- '2000-01-01'}
   if(is.null(end)){end <- today()}
   
   ma$read_obj('econ_daily') %>% 
@@ -71,32 +92,26 @@ query_econ <- function(stats, start, end=NULL){
       by='index'
     ) %>% 
     select(date, new_name, value) %>% 
-    collect() %>% 
-    mut
+    collect()
 }
 
-df <- query_econ("krwusd", "2024-01-01")
+library(timetk)
 
-df %>% 
+day_1m <- today() %-time% '1 month'
+day_5y <- floor_date(today() %-time% '5 year', "year")
+ytd <- floor_date(today(),"year")
+
+
+
+
+query_econ("ktr10")
+
+query_econ("ktr10") %>% 
   ggplot(aes(x=date, y=value, color=new_name)) +
   geom_line() +
-  scale_x_date(date_labels = '%y-%m', date_breaks = '1 month') +
   labs(x='', y='') +
-  theme(legend.position = "none")
+  theme(legend.position = 'none')
 
-
-
-
-
-
-df2 <- tribble(
-  ~date, ~index, ~value,
-  "2024-05-20", 16, 1,
-  "2024-05-20", 17, 2,
-  "2024-05-21", 18, 3
-)
-
-start <- '2024-05-20'
 
 
 
