@@ -1,17 +1,17 @@
 library(dplyr)
+library(lubridate)
 library(purrr)
+library(ggplot2)
 library(R6)
 library(ecos)
 library(glue)
 library(httr)
 library(jsonlite)
-library(lubridate)
 library(tidyr)
 library(rvest)
-library(readxl)
 library(RSQLite)
 library(dbx)
-library(ggplot2)
+library(tidyquant)
 import::from(stringr, str_detect, str_extract)
 
 
@@ -95,6 +95,44 @@ Ecos <- R6Class(
   )
 )
 
+#[클래스] MyData ====
+MyData <- R6Class(
+  
+  classname = 'MyData',
+  public=list(
+    
+    con=NULL,
+    
+    ##1. 속성 초기화 ====
+    initialize = function(file){
+      
+      self$con <- dbConnect(SQLite(), file, bigint = 'numeric',
+                            extended_types=T)
+      
+    },
+    
+    ##2.(메서드) 테이블 추가 ====
+    add_table = function(name, table){
+      dbWriteTable(self$con, name, table)
+    },
+    
+    ##3.(메서드) 테이블 읽기 ====
+    
+    read = function(name){
+      dbReadTable(self$con, name) |> tibble()
+    },
+    
+    ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
+    read_obj = function(name){
+      tbl(self$con, name)
+    },
+    
+    ##5.(메서드) 테이블 목록 ====
+    table_list = function(){
+      dbListTables(self$con)
+    }
+  )
+)
 
 #[클래스] AutoInvest====
 AutoInvest <- R6Class(
@@ -558,7 +596,7 @@ MyAssets <- R6Class(
           # mutate(self$my$inquire_balance_ovs(), 계좌 = '한투'),
           # mutate(self$my$inquire_balance_ovs('JPY'), 계좌 = '한투'),
           # mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')
-          # ) |> 
+          # ) |>
         select(계좌, 종목코드,평가금액)
 
       
@@ -785,7 +823,7 @@ MyAssets <- R6Class(
       df <- self$bs_pl_mkt_p |> 
         group_by(계좌, 자산군, 세부자산군) |>
         summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
-        mutate(투자비중 = 평가금액 / sum(평가금액) * 100)
+        mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2))
       
       self$allo6 <- df |>
         group_by(자산군) |>
@@ -800,7 +838,7 @@ MyAssets <- R6Class(
         add_row(자산군='합계', 평가금액 = sum(df$평가금액), 
                 투자비중=100) |> 
         group_by(자산군) |> 
-        mutate(자산별비중 = 평가금액 / sum(평가금액) * 100)
+        mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
       
       self$allo8 <- df |>
         group_by(계좌) |>
@@ -810,7 +848,7 @@ MyAssets <- R6Class(
       self$allo9 <- df |>
         add_row(계좌='합계', 평가금액=sum(df$평가금액), 투자비중=100) |>
         group_by(계좌) |>
-        mutate(자산별비중 = 평가금액 / sum(평가금액) * 100)
+        mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
     },
     
     ## 10.(메서드) 평가금액 포함 자료 산출====
@@ -870,44 +908,7 @@ MyAssets <- R6Class(
   )
 )
 
-#[클래스] MyData ====
-MyData <- R6Class(
-  
-  classname = 'MyData',
-  public=list(
-    
-    con=NULL,
-    
-    ##1. 속성 초기화 ====
-    initialize = function(file){
-      
-      self$con <- dbConnect(SQLite(), file, bigint = 'numeric',
-                            extended_types=T)
-      
-    },
-    
-    ##2.(메서드) 테이블 추가 ====
-    add_table = function(name, table){
-      dbWriteTable(self$con, name, table)
-    },
-    
-    ##3.(메서드) 테이블 읽기 ====
-    
-    read = function(name){
-        dbReadTable(self$con, name) |> tibble()
-    },
-    
-    ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
-    read_obj = function(name){
-      tbl(self$con, name)
-    },
-    
-    ##5.(메서드) 테이블 목록 ====
-    table_list = function(){
-      dbListTables(self$con)
-    }
-  )
-)
+
 
 get_holidays <- function(start_year, end_year){
   service_key <- get_config()$holiday
@@ -940,3 +941,102 @@ get_holidays <- function(start_year, end_year){
   }
   return(out)
 }
+
+#[클래스] Scrap_econ ====
+Scrap_econ <- R6Class(
+  
+  classname = 'Scrap_econ',
+  inherit = MyData,
+  public=list(
+
+    ##1. 속성 초기화 ====
+    initialize = function(){
+      self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
+                            extended_types=T)
+      get_config()$ecos |> ecos.setKey()
+    },
+    
+    ##2. 일별 금융데이터 수집====
+    scrap_daily = function(start=NULL, end=NULL){
+      
+      if(is.null(start)){
+        start <- self$read_obj('econ_daily') %>% 
+          distinct(date) %>% 
+          dbplyr::window_order(desc(date)) %>% 
+          filter(row_number()==1) %>% pull() %>% -10
+      }
+      
+      if(is.null(end)){end <- today()}
+      
+      info <- self$read('idx_info')
+      
+      df <- info %>% 
+        filter(site=='ecos') %>%
+        select(stat_code, item_code, cycle, index) %>%
+        pmap_dfr(
+          ~tryCatch({
+            statSearch(stat_code = ..1,
+                       item_code1 = ..2,
+                       cycle = ..3,
+                       start_time = strftime(start,"%Y%m%d"),
+                       end_time = strftime(end,"%Y%m%d")
+            ) %>% 
+              as_tibble() %>% 
+              transmute(date = ymd(time), index = ..4, value = data_value)
+          }, error=function(e){
+            tibble()
+          }
+          )
+        )
+      
+      get_code <- list('fred' = c('economic.data', 'price'),
+                       'yahoo' = c("stock.prices", 'close'))
+      
+      
+      df2 <- info %>% 
+        filter(site!='ecos') %>%
+        select(item_code, site, index) %>% 
+        pmap_dfr(
+          ~tryCatch({
+            tq_get(..1, 
+                   get = get_code[[..2]][1], 
+                   from = start,
+                   to = end,
+            ) %>% 
+              as_tibble() %>% 
+              transmute(date = ymd(date), index = ..3, value= .data[[get_code[[..2]][2]]])
+          }, error=function(e){
+            tibble()
+          }
+          )
+        )
+      
+      bind_rows(df,df2) %>% 
+        filter(!is.na(value))
+    },
+    
+    ##3. 수집데이터 DB적재 ====
+    upsert_econ = function(record, table){
+      dbxUpsert(self$con, table, record, c("date", "index"))
+    },
+    
+    ##4. DB 일별데이터 조회 ====
+    query_daily = function(stats, start=NULL, end=NULL){
+      
+      if(is.null(start)){start <- '2000-01-01'}
+      if(is.null(end)){end <- today()}
+      
+      self$read_obj('econ_daily') %>% 
+        filter(between(date, start, end)) %>% 
+        right_join(
+          self$read_obj('idx_info') %>% 
+            filter(item_name %in% stats) %>% 
+            select(index, new_name),
+          by='index'
+        ) %>% 
+        select(date, new_name, value) %>% 
+        collect()
+    }
+  )
+)
+

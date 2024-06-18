@@ -1,99 +1,18 @@
-library(tidyquant)
-library(editData)
-library(datapasta)
-library(ecos)
 source('functions.R')
 
-e <- Ecos$new()
+self <- Scrap_econ$new()
 
-ma <- MyData$new('mydata.sqlite')
+self$query_daily(c('미국채(2년)', '미국채(10년)'))
 
-scrap_econ_daily <- function(start=NULL, end=NULL){
-  
-  if(is.null(start)){
-    start <- ma$read_obj('econ_daily') %>% 
-      distinct(date) %>% 
-      dbplyr::window_order(desc(date)) %>% 
-      filter(row_number()==1) %>% pull() %>% -10
-  }
-  
-  if(is.null(end)){end <- today()}
-  
-  info <- ma$read('idx_info')
-  
-  df <- info %>% 
-    filter(site=='ecos') %>%
-    select(stat_code, item_code, cycle, index) %>%
-    pmap_dfr(
-      ~tryCatch({
-        statSearch(stat_code = ..1,
-                  item_code1 = ..2,
-                  cycle = ..3,
-                  start_time = strftime(start,"%Y%m%d"),
-                  end_time = strftime(end,"%Y%m%d")
-        ) %>% 
-          as_tibble() %>% 
-          transmute(date = ymd(time), index = ..4, value = data_value)
-        }, error=function(e){
-          tibble()
-        }
-      )
-    )
+scrap_econ_daily() %>% upsert_econ('econ_daily')
 
-  get_code <- list('fred' = c('economic.data', 'price'),
-                   'yahoo' = c("stock.prices", 'close'))
-  
-  
-  df2 <- info %>% 
-    filter(site!='ecos') %>%
-    select(item_code, site, index) %>% 
-    pmap_dfr(
-      ~tryCatch({
-          tq_get(..1, 
-                 get = get_code[[..2]][1], 
-                 from = start,
-                 to = end,
-          ) %>% 
-            as_tibble() %>% 
-            transmute(date = ymd(date), index = ..3, value= .data[[get_code[[..2]][2]]])
-      }, error=function(e){
-          tibble()
-      }
-      )
-    )
-  
-  bind_rows(df,df2) %>% 
-    filter(!is.na(value))
-}
 
-upsert_econ <- function(record, table){
-  dbxUpsert(ma$con, table, record, c("date", "index"))
-}
-
-scrap_econ_daily() %>% 
-  upsert_econ('econ_daily')
+stats <- "금 선물"
 
 
 
 
 
-
-query_econ <- function(stats, start=NULL, end=NULL){
-  
-  if(is.null(start)){start <- '2000-01-01'}
-  if(is.null(end)){end <- today()}
-  
-  ma$read_obj('econ_daily') %>% 
-    filter(between(date, start, end)) %>% 
-    right_join(
-      ma$read_obj('idx_info') %>% 
-        filter(new_name %in% stats) %>% 
-        select(index, new_name),
-      by='index'
-    ) %>% 
-    select(date, new_name, value) %>% 
-    collect()
-}
 
 library(timetk)
 
@@ -102,17 +21,36 @@ day_5y <- floor_date(today() %-time% '5 year', "year")
 ytd <- floor_date(today(),"year")
 
 
+df <- query_econ('krweur')
 
 
-query_econ("ktr10")
+library(plotly)
 
-query_econ("ktr10") %>% 
+
+plotlyOutput()
+
+query_econ('krweur') %>% 
+  tail(50)
+query_econ(c('krweur', 'krwusd')) %>% 
   ggplot(aes(x=date, y=value, color=new_name)) +
-  geom_line() +
-  labs(x='', y='') +
-  theme(legend.position = 'none')
+  geom_line(linewidth=1) +
+  labs(x='', y='')
+  
 
-
+query_econ(c("utr01", "utr05", "utr10")) %>% 
+  filter(date %>% timetk::between_time("2020","2024")) %>% 
+  group_by(new_name) %>% 
+  plot_ly(x = ~date, y = ~value, color=~new_name) %>% 
+  add_lines() %>%
+  layout(showlegend = T, 
+         xaxis = list(rangeselector=list(
+                        buttons=list(
+                          list(count=1, label="YTD", step="year", stepmode="todate"),
+                          list(count=3, label="3m", step="month", stepmode="backward"),
+                          list(count=1, label="1y", step="year", stepmode="backward"),
+                          list(count=5, label="5y", step="year", stepmode="backward"),
+                          list(count=10, label="10y", step="year", stepmode="backward")
+                        ))))
 
 
 bind_rows(df2,df3) %>% 
