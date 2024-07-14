@@ -366,6 +366,7 @@ AutoInvest <- R6Class(
 #[클래스] MyAssets====
 MyAssets <- R6Class(
   classname = "MyAssets",
+  inherit = MyData,
   
   public = list(
     md = NULL,
@@ -383,24 +384,28 @@ MyAssets <- R6Class(
     
     ## 1. 속성 초기화====
     initialize = function(base_dt=NULL) {
+      
+      self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
+                            extended_types=T)
+      
       if (!is.null(base_dt)) {
         self$today <- ymd(base_dt)
       } else {
         self$today <- today()
       }
-      self$md <- MyData$new('mydata.sqlite')
+      
       self$year <- year(self$today)
       self$days <- seq(make_date(self$year,1,1), 
                        make_date(self$year,12,31),by='day')
-      self$assets <- self$md$read('assets')
-      self$pension <- self$md$read('pension')
+      self$assets <- self$read('assets')
+      self$pension <- self$read('pension')
       self$ex_usd <- get_exchange_rate('달러')
       self$ex_jpy <- get_exchange_rate('엔')/100
       self$assets_daily <- self$get_daily_trading(
-        self$assets, self$md$read('assets_daily')
+        self$assets, self$read('assets_daily')
       )
       self$pension_daily <- self$get_daily_trading(
-        self$pension, self$md$read('pension_daily')
+        self$pension, self$read('pension_daily')
       )
       self$bs_pl_book_a <- self$get_bs_pl('assets')
       self$bs_pl_book_p <- self$get_bs_pl('pension')
@@ -417,8 +422,8 @@ MyAssets <- R6Class(
       if(table=="투자자산"){table <- 'assets'}
       else {table <- 'pension'}
       
-      df1 <- self$md$read(table)
-      df2 <- self$md$read(paste0(table,'_daily'))
+      df1 <- self$read(table)
+      df2 <- self$read(paste0(table,'_daily'))
       
       df2 |> left_join(
         (df1 |> transmute(계좌, 통화, 종목코드, 종목명)), 
@@ -634,12 +639,14 @@ MyAssets <- R6Class(
     evaluate_bs_pl_pension = function(){
 
       price <- self$pension |>
-        select(계좌, 종목코드, 평가금액, 기초평가손익)
+        select(계좌, 종목코드, 평가금액, 기초평가손익) %>% 
+        filter(평가금액!=0)
       
       self$bs_pl_book_p |> 
         filter(거래일자 == self$today) |> 
         left_join(price, by=c("계좌","종목코드")) |> 
         mutate(
+          평가금액 = if_else(is.na(평가금액), 장부금액, 평가금액),
           # 평가손익증감 = 평가금액 - 장부금액,
           # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
           평가손익 = 평가금액 - 장부금액,
@@ -876,7 +883,7 @@ MyAssets <- R6Class(
       y <- df1 %>% filter(거래일자 == today()-1)
       
       self$inflow_table <- 
-        self$md$read('inflow') %>% 
+        self$read('inflow') %>% 
         filter(거래일자 > today())
         
       df2 <- df1 %>% 
