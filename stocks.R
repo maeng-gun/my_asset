@@ -1,5 +1,7 @@
 library(reticulate)
 library(R6)
+library(dplyr)
+library(httr)
 py_run_file('xw.py')
 
 #[클래스] XlWings ====
@@ -97,5 +99,76 @@ self$kill()
 
 
 py$paste(self$ws$range('A7'), df$종목코드, T)
+
+
+
+
+#[클래스] KrxStocks ====
+KrxStocks <- R6Class(
+  
+  classname = 'KrxStocks',
+  public=list(
+    
+    url = NULL, user.agent = NULL, referer = NULL,
+    stock_list = NULL,
+      
+    ##1. 속성 초기화 ====
+    initialize = function(){
+      self$url <- 'http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
+      self$user.agent <- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36 '
+      self$referer <- 'http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201'
+      self$get_stock_list()
+    },
+    
+    ##2.(메서드) KRX POST ====
+    post_krx = function(params){
+      res <- POST(url=self$url,
+                  query=params, 
+                  user_agent(self$user.agent), 
+                  add_headers(referer=self$referer)) %>% 
+        content('t') %>% 
+        jsonlite::fromJSON()
+      
+      res[[ names(res)[1] ]] %>% 
+        as_tibble()
+    },
+    
+    ##3.(메서드) KRX POST ====
+    get_stock_list = function(yyyymmdd=NULL){
+      
+      if(is.null(yyyymmdd)){ yyyymmdd <- strftime(lubridate::today(),'%Y%m%d')}
+      
+      params1 <- list(bld = "dbms/MDC/STAT/standard/MDCSTAT01501",
+                      mktId = "ALL",
+                      trdDd = yyyymmdd)
+      
+      self$stock_list <- self$post_krx(params1) %>% 
+        select(종목코드=ISU_SRT_CD, 종목명=ISU_ABBRV, 시장구분=MKT_ID) %>% 
+        mutate(종목코드=paste0('A',종목코드),
+               시장구분=case_match(시장구분, 'STK'~'코스피', 'KSQ'~'코스닥', 
+                                   'KNX'~'코넥스'))
+    },
+    
+    ##4.(메서드) 종목코드 찾기 ====
+    find_code = function(name=NULL, mkt=NULL){
+      
+      df <- self$stock_list
+      
+      if(!is.null(mkt)){df <- df %>% filter(시장구분 %in% mkt)}
+      if(!is.null(name)){
+        df <- df %>% 
+          filter(stringr::str_detect(종목명, name))
+      }
+      
+      df
+    }
+  )
+)
+
+self <- KrxStocks$new()
+
+
+
+
 
 
