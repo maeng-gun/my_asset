@@ -561,7 +561,7 @@ server <- function(input, output, session) {
   ### * 테이블 설정====
   output$trade_table <- renderUI({
     if(!is.null(rv$trade)){
-        tkdg |> 
+      rv$trade |> 
           arrange(desc(행번호)) |> 
           flextable()|>
           theme_vanilla() |>
