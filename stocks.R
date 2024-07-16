@@ -69,7 +69,17 @@ XlWings <- R6Class(
 )
 
 
-self <- XlWings$new('stocks.xlsm')
+self <- XlWings$new('bspl.xlsm')
+
+self$ws$range('f10:z10')$copy(self$ws$range('f11'))
+
+self$read_table('a11') %>% 
+  rename_with(~stringr::str_sub(., end=-4), ends_with('(원)'))
+
+ks$find_code('롯데케미칼')$종목코드 %>% 
+  self$paste('A12')
+
+self$refresh()
 
 self$clear_table('A7')
 rep('20240711',4) %>% 
@@ -165,8 +175,7 @@ KrxStocks <- R6Class(
   )
 )
 
-self <- KrxStocks$new()
-
+ks <- KrxStocks$new()
 
 
 
