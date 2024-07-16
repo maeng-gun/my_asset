@@ -1,6 +1,7 @@
 library(reticulate)
 library(R6)
 library(dplyr)
+library(stringr)
 library(httr)
 py_run_file('xw.py')
 
@@ -69,48 +70,6 @@ XlWings <- R6Class(
 )
 
 
-self <- XlWings$new('bspl.xlsm')
-
-self$ws$range('f10:z10')$copy(self$ws$range('f11'))
-
-self$read_table('a11') %>% 
-  rename_with(~stringr::str_sub(., end=-4), ends_with('(원)'))
-
-ks$find_code('롯데케미칼')$종목코드 %>% 
-  self$paste('A12')
-
-self$refresh()
-
-self$clear_table('A7')
-rep('20240711',4) %>% 
-  self$paste('C4')
-
-df$종목코드 %>% 
-  self$paste('A7',T)
-self$refresh()
-
-
-df <- self$read_table('A6') %>% 
-  setNames(c('종목코드','종목명','대분류','중분류',
-             '소분류', '시장구분','시가총액')) %>% 
-  arrange(desc(시가총액))
-
-
-df %>% 
-  arrange(desc(시가총액)) %>% 
-  group_by(중분류) %>% 
-  reframe(종목명 = head(종목명, n=3),
-          시가총액 = head(시가총액, n=3)/1000000000000)
-  
-df %>% filter(중분류=='미디어')
-
-self$kill()
-
-
-
-py$paste(self$ws$range('A7'), df$종목코드, T)
-
-
 
 
 #[클래스] KrxStocks ====
@@ -156,7 +115,8 @@ KrxStocks <- R6Class(
         select(종목코드=ISU_SRT_CD, 종목명=ISU_ABBRV, 시장구분=MKT_ID) %>% 
         mutate(종목코드=paste0('A',종목코드),
                시장구분=case_match(시장구분, 'STK'~'코스피', 'KSQ'~'코스닥', 
-                                   'KNX'~'코넥스'))
+                                   'KNX'~'코넥스')) %>% 
+        filter(str_ends(종목코드,'0'))
     },
     
     ##4.(메서드) 종목코드 찾기 ====
@@ -167,17 +127,12 @@ KrxStocks <- R6Class(
       if(!is.null(mkt)){df <- df %>% filter(시장구분 %in% mkt)}
       if(!is.null(name)){
         df <- df %>% 
-          filter(stringr::str_detect(종목명, name))
+          filter(str_detect(종목명, str_c(name, collapse = '|')))
       }
       
       df
     }
   )
 )
-
-ks <- KrxStocks$new()
-
-
-
 
 

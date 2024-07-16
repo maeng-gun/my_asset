@@ -421,7 +421,7 @@ server <- function(input, output, session) {
   w1$show()
   source("functions.R", echo=F)
   ec <- Ecos$new()
-  # md <- MyData$new('mydata.sqlite')
+  md <- MyData$new('mydata.sqlite')
   sk <- reactiveVal(T)
   
   ma <- reactive({
@@ -561,7 +561,7 @@ server <- function(input, output, session) {
   ### * 테이블 설정====
   output$trade_table <- renderUI({
     if(!is.null(rv$trade)){
-      rv$trade |> 
+        rv$trade |> 
           arrange(desc(행번호)) |> 
           flextable()|>
           theme_vanilla() |>
@@ -687,7 +687,7 @@ server <- function(input, output, session) {
     }
     rv$trade <- reset_trade()
     update_new_trade()
-    # sk(!sk())
+    sk(!sk())
   })
 
 
@@ -703,7 +703,7 @@ server <- function(input, output, session) {
     }
     rv$trade <- reset_trade()
     update_new_trade()
-    # sk(!sk())
+    sk(!sk())
   })
 
   observeEvent(input$ass_trade_del,{
@@ -715,7 +715,7 @@ server <- function(input, output, session) {
     }
     rv$trade <- reset_trade()
     update_new_trade()
-    # sk(!sk())
+    sk(!sk())
   })
 
   ## b. 투자종목 관리====
@@ -1033,13 +1033,11 @@ server <- function(input, output, session) {
     ma()$run_valuation()
     
     w1$hide()
-  })
-    
-  ## a. 투자자산현황====
 
-  ###* 자산군별 배분현황====
-  
-  observe({
+    
+   ## a. 투자자산현황====
+
+    ###* 자산군별 배분현황====
     output$allo0 <- render_allo(ma()$allo0)
     output$allo1 <- render_allo(ma()$allo1)
     
@@ -1050,52 +1048,53 @@ server <- function(input, output, session) {
     ###* 불리오 배분현황====
     output$allo5 <- render_allo(ma()$allo5)
     output$allo4 <- render_allo(ma()$allo4)
-  })
-  
-  ## b. 투자손익현황====
+   
 
-  
-  output$class_ret_a <- renderUI({
-    ma()$ret_a |>
-      select(1:3,평가금액,실현손익, 평가손익,
-             실현수익률:평가수익률) |>
-      flextable() |>
-      theme_vanilla() |>
-      merge_v(j=1:2) |>
-      set_table_properties(layout='autofit') |>
-      colformat_double(j=4:6, digits = 0) |>
-      colformat_double(j=7:8, digits = 2) |>
-      htmltools_value()
-  })
-  
-  output$class_ret_a2 <- renderUI({
-    ma()$ret_a2 |>
-      select(1:2,평가금액,실현손익, 평가손익,
-             실현수익률:평가수익률) |>
-      flextable() |>
-      theme_vanilla() |>
-      merge_v(j=1) |>
-      set_table_properties(layout='autofit') |>
-      colformat_double(j=3:5, digits = 0) |>
-      colformat_double(j=6:7, digits = 2) |>
-      htmltools_value()
-  })
+    ## b. 투자손익현황====
 
-  output$bs_pl_mkt_a <-renderUI({
-    ma()$bs_pl_mkt_a |>
-      select(통화, 자산군, 세부자산군, 종목명,
-             보유수량,장부금액, 평가금액, 실현손익,평가손익,
-             실현수익률, 평가수익률) |>
-      arrange(통화,자산군,세부자산군) |>
-      flextable() |>
-      theme_vanilla() |>
-      merge_v(j=1:3) |>
-      set_table_properties(layout='autofit') |>
-      colformat_double(j=5:9, digits = 0) |>
-      colformat_double(j=10:11, digits = 2) |>
-      htmltools_value()
-  })
+    
+    output$class_ret_a <- renderUI({
+      ma()$ret_a |>
+        select(1:3,평가금액,실현손익, 평가손익,
+               실현수익률:평가수익률) |>
+        flextable() |>
+        theme_vanilla() |>
+        merge_v(j=1:2) |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=4:6, digits = 0) |>
+        colformat_double(j=7:8, digits = 2) |>
+        htmltools_value()
+    })
+    
+    output$class_ret_a2 <- renderUI({
+      ma()$ret_a2 |>
+        select(1:2,평가금액,실현손익, 평가손익,
+               실현수익률:평가수익률) |>
+        flextable() |>
+        theme_vanilla() |>
+        merge_v(j=1) |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=3:5, digits = 0) |>
+        colformat_double(j=6:7, digits = 2) |>
+        htmltools_value()
+    })
 
+    output$bs_pl_mkt_a <-renderUI({
+      ma()$bs_pl_mkt_a |>
+        select(통화, 자산군, 세부자산군, 종목명,
+               보유수량,장부금액, 평가금액, 실현손익,평가손익,
+               실현수익률, 평가수익률) |>
+        arrange(통화,자산군,세부자산군) |>
+        flextable() |>
+        theme_vanilla() |>
+        merge_v(j=1:3) |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=5:9, digits = 0) |>
+        colformat_double(j=10:11, digits = 2) |>
+        htmltools_value()
+    })
+
+  })
   
   ## c. 연금자산현황====
   output$allo6 <- render_allo(ma()$allo6)

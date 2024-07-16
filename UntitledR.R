@@ -258,3 +258,77 @@ self$inflow_plot <- df %>%
   facet_grid(rows='구분', scales = 'free_y')
 
 
+#재무제표 수집
+source('stocks.R')
+ks <- KrxStocks$new()
+
+company = c('롯데케미칼','LG화학')
+start = 2000
+end = 2023
+
+
+read_bspl <- function(company, start, end, annual=T){
+  xw <- XlWings$new('bspl.xlsm')
+  ks$find_code(company)$종목코드 %>% xw$paste('A12', T)
+  c(start, end) %>% xw$paste('B7')
+  if(annual){freq <- 'Annual'} else {freq <-'All Gross'}
+  xw$paste(freq, 'B5')
+  xw$refresh()
+  xw$ws$range('f10:z10')$copy(xw$ws$range('f11'))
+  xw$read_table('a11') %>% 
+    rename_with(~stringr::str_sub(., end=-4), ends_with('(원)')) %>% 
+    filter(!if_all(-Symbol:-주기, is.na)) %>% 
+    select(-Symbol, -결산월, -주기) %>% 
+    rename(종목명=Name, 연도=회계년)
+}
+
+
+df <- xw$read_table('a11') %>% 
+  rename_with(~stringr::str_sub(., end=-4), ends_with('(원)')) %>% 
+  filter(!if_all(-Symbol:-주기, is.na)) %>% 
+  select(-Symbol, -결산월, -주기) %>% 
+  rename(종목명=Name, 연도=회계년)
+
+df %>% group_by(종목명) %>% 
+  transmute(연도, across(-1, timetk::diff_vec, .names = "{.col}_증감")) %>% 
+  tidyr::gather('계정명','금액',!c(종목명,연도)) %>% 
+  mutate(금액 = 금액/1000000000000) %>% 
+  group_by(종목명,연도) %>% 
+  arrange(종목명, 연도, desc(abs(금액)))
+
+ks$find_code('롯데케미칼')$종목코드 %>% 
+  self$paste('A12')
+
+self$refresh()
+
+self$clear_table('A7')
+rep('20240711',4) %>% 
+  self$paste('C4')
+
+df$종목코드 %>% 
+  self$paste('A7',T)
+self$refresh()
+
+
+df <- self$read_table('A6') %>% 
+  setNames(c('종목코드','종목명','대분류','중분류',
+             '소분류', '시장구분','시가총액')) %>% 
+  arrange(desc(시가총액))
+
+
+df %>% 
+  arrange(desc(시가총액)) %>% 
+  group_by(중분류) %>% 
+  reframe(종목명 = head(종목명, n=3),
+          시가총액 = head(시가총액, n=3)/1000000000000)
+
+df %>% filter(중분류=='미디어')
+
+self$kill()
+
+
+
+py$paste(self$ws$range('A7'), df$종목코드, T)
+
+
+

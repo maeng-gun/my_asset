@@ -273,9 +273,7 @@ AutoInvest <- R6Class(
     },
     
     ##메서드(6) - 자산별 잔고 ====
-    
-    
-    ance = function() {
+    inquire_account_balance = function() {
       path <- "uapi/domestic-stock/v1/trading/inquire-account-balance"
       data <- list(
         CANO = self$ACCT,
@@ -416,7 +414,6 @@ MyAssets <- R6Class(
       self$ret_p2 <- self$get_class_returns('pension', depth = 1)
       self$compute_allocation_p()
       self$get_inflow()
-      self$run_valuation()
     },
     
     ## 2.(메서드) 거래내역 기록 테이블====
@@ -599,12 +596,12 @@ MyAssets <- R6Class(
         #                       상품명 == '우리사주 롯데케미칼', 
         #                       p_lotte*q_lotte)) |> 
         filter(평가금액!=0) |> 
-        bind_rows(
+        # bind_rows(
           # mutate(self$my$inquire_balance(), 계좌 = '한투'),
           # mutate(self$my$inquire_balance_ovs(), 계좌 = '한투'),
           # mutate(self$my$inquire_balance_ovs('JPY'), 계좌 = '한투'),
-          mutate(self$bl$inquire_balance(), 계좌 = '한투ISA')
-        ) |>
+          # mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')
+          # ) |>
         select(계좌, 종목코드,평가금액)
 
       
