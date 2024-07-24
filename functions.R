@@ -1,4 +1,5 @@
 library(dplyr)
+library(timetk)
 library(lubridate)
 library(purrr)
 library(ggplot2)
@@ -964,7 +965,7 @@ Scrap_econ <- R6Class(
     },
     
     ##2. 일별 금융데이터 수집====
-    scrap_daily = function(start=NULL, end=NULL){
+    scrap_daily = function(start=NULL, end=NULL, item=NULL){
       
       if(is.null(start)){
         start <- self$read_obj('econ_daily') %>% 
@@ -976,6 +977,8 @@ Scrap_econ <- R6Class(
       if(is.null(end)){end <- today()}
       
       info <- self$read('idx_info')
+      
+      if(!is.null(item)){info <- info %>% filter(item_name == item)}
       
       df <- info %>% 
         filter(site=='ecos') %>%
@@ -1038,11 +1041,35 @@ Scrap_econ <- R6Class(
         right_join(
           self$read_obj('idx_info') %>% 
             filter(item_name %in% stats) %>% 
-            select(index, new_name),
+            select(index, item_name),
           by='index'
         ) %>% 
-        select(date, new_name, value) %>% 
+        select(date, item_name, value) %>% 
         collect()
+    },
+    
+    ##5. 시계열 그래프 그리기 ====
+    plot_time_series = function(items, start=NULL, end=NULL){
+      
+      if(is.null(start)){start <- '2000-01-01'}
+      if(is.null(end)){end <- today()}
+      
+      self$query_daily(items) %>% 
+        filter(between_time(date, start, end)) %>% 
+        group_by(item_name) %>% 
+        plot_ly(x = ~date, y = ~value, color=~item_name, colors = RColorBrewer::brewer.pal(3, "Set2")) %>% 
+        add_lines() %>%
+        layout(showlegend = T, 
+               xaxis = list(
+                 tickformat = "%Y-%m",
+                 rangeselector=list(
+                 buttons=list(
+                   list(count=1, label="YTD", step="year", stepmode="todate"),
+                   list(count=3, label="3m", step="month", stepmode="backward"),
+                   list(count=1, label="1y", step="year", stepmode="backward"),
+                   list(count=5, label="5y", step="year", stepmode="backward"),
+                   list(count=10, label="10y", step="year", stepmode="backward")
+                 ))))
     }
   )
 )

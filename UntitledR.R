@@ -1,20 +1,27 @@
 source('functions.R')
 
+library(timetk)
+library(plotly)
+
 self <- Scrap_econ$new()
 
-self$query_daily(c('미국채(2년)', '미국채(10년)'))
+df <- self$scrap_daily(start = '2008-12-16', 
+                       end = '2024-06-10',item = '미국기준금리')
 
-scrap_econ_daily() %>% upsert_econ('econ_daily')
+df %>% self$upsert_econ('econ_daily')
+
+scrap_daily() %>% upsert_econ('econ_daily')
 
 
 stats <- "금 선물"
 
+c('미국기준금리','미국채(10년)') %>% 
+  self$plot_time_series("2020", "2024")
 
 
 
 
 
-library(timetk)
 
 day_1m <- today() %-time% '1 month'
 day_5y <- floor_date(today() %-time% '5 year', "year")
@@ -22,9 +29,9 @@ ytd <- floor_date(today(),"year")
 
 
 df <- query_econ('krweur')
+query_econ
 
 
-library(plotly)
 
 
 plotlyOutput()
@@ -35,14 +42,16 @@ query_econ(c('krweur', 'krwusd')) %>%
   ggplot(aes(x=date, y=value, color=new_name)) +
   geom_line(linewidth=1) +
   labs(x='', y='')
-  
 
-query_econ(c("utr01", "utr05", "utr10")) %>% 
-  filter(date %>% timetk::between_time("2020","2024")) %>% 
-  group_by(new_name) %>% 
-  plot_ly(x = ~date, y = ~value, color=~new_name) %>% 
-  add_lines() %>%
-  layout(showlegend = T, 
+self$read_obj('idx_info') %>% pull(item_name)
+  
+c('미국기준금리') %>% 
+  self$query_daily() %>% 
+  filter(between_time(date, "2020","2024")) %>% 
+  group_by(item_name) %>% 
+  plot_ly(x = ~date, y = ~value, color=~item_name, colors = RColorBrewer::brewer.pal(3, "Set2")) %>% 
+  add_lines() %>% 
+  layout(showlegend = T,
          xaxis = list(rangeselector=list(
                         buttons=list(
                           list(count=1, label="YTD", step="year", stepmode="todate"),
