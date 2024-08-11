@@ -40,6 +40,11 @@ sidebar <- dashboardSidebar(
       text = "한국은행 지표선정",
       icon = icon("hand-pointer"),
       tabName = "ecos_stat"
+    ),
+    menuItem(
+      text = "경제지표 시계열",
+      icon = icon("chart-line"),
+      tabName = "econ_series"
     )
   ),
   br(),
@@ -76,7 +81,108 @@ body <- dashboardBody(
               solidHeader = T,
               title = "입력사항",
               collapsible = F,
-              uiOutput('manage_ass_trade'),
+              fluidRow(
+                column(
+                  width = 1,
+                  selectInput(
+                    inputId = 'type2',
+                    label = "운용구분",
+                    choices = c("투자자산", "연금자산")
+                  ),
+                  selectInput(
+                    inputId = 'ass_account2',
+                    label = "계좌",
+                    choices = NULL
+                  )
+                ),
+                column(
+                  width = 1,
+                  selectInput(
+                    inputId = 'ass_cur2',
+                    label = "통화",
+                    choices = NULL
+                  ),
+                  selectInput(
+                    inputId = 'new2',
+                    label = "신규/수정",
+                    choices = "신규"
+                  )
+                ),
+                column(
+                  width = 1,
+                  airDatepickerInput(
+                    inputId = 'trading_date',
+                    label = "거래일자",
+                    addon = "none",
+                    value = Sys.Date()
+                  ),
+                  selectInput(
+                    inputId = 'ass_name2',
+                    label = "종목명",
+                    choices = NULL
+                  )
+                ),
+                column(
+                  width = 1,
+                  numericInput(
+                    inputId = 'buy_q',
+                    label = "매입수량",
+                    value = 0
+                  ),
+                  numericInput(
+                    inputId = 'sell_q',
+                    label = "매도수량",
+                    value = 0
+                  )
+                ),
+                column(
+                  width = 2,
+                  autonumericInput(
+                    inputId = 'buy_p',
+                    label = "매입액",
+                    value = 0
+                  ),
+                  autonumericInput(
+                    inputId = 'sell_b',
+                    label = "매도원금",
+                    value = 0
+                  )
+                ),
+                column(
+                  width = 2,
+                  autonumericInput(
+                    inputId = 'buy_c',
+                    label = "현금지출",
+                    value = 0
+                  ),
+                  autonumericInput(
+                    inputId = 'sell_p',
+                    label = "매도액",
+                    value = 0
+                  )
+                ),
+                column(
+                  width = 2,
+                  autonumericInput(
+                    inputId = 'int_dev',
+                    label = "이자배당액",
+                    value = 0
+                  ),
+                  autonumericInput(
+                    inputId = 'sell_c',
+                    label = "현금수입",
+                    value = 0
+                  )
+                ),
+                column(
+                  width = 2,
+                  autonumericInput(
+                    inputId = 'in_out_c',
+                    label = "입출금",
+                    value = 0
+                  )
+                )
+              ),
               br(),
               div(
                 actionButton(
@@ -394,6 +500,13 @@ body <- dashboardBody(
           )
         )
       )
+    ),
+    ##5) 경제지표 시계열====
+    tabItem(
+      tabName = "econ_series",
+      fluidRow(
+        uiOutput('econ_series2')
+      )
     )
   )
 )
@@ -421,14 +534,25 @@ server <- function(input, output, session) {
   w1$show()
   source("functions.R", echo=F)
   ec <- Ecos$new()
-  md <- MyData$new('mydata.sqlite')
+  
   sk <- reactiveVal(T)
+  sk2 <- reactiveVal(T)
+  
+  md <- MyData$new('mydata.sqlite')
+  ass_init <- md$read('assets')
+  pen_init <- md$read('pension')
+  ctg_init <- readRDS("categories.rds")
   
   ma <- reactive({
     sk()
     MyAssets$new()
   })
-
+  
+  
+  ctg <- reactive({
+    sk2()
+    readRDS("categories.rds")
+  })
 
     
   # 0) 반응성 값 초기화====
@@ -439,9 +563,9 @@ server <- function(input, output, session) {
     df_s=ec$read_items(), df_d=NULL, 
     tickers=NULL, ticker_new=NULL,
     trade=NULL, trade_new_=NULL,
-    type1=NULL, type2=NULL,
-    inflow=NULL, inflow_new=NULL,
-    ctg=readRDS("categories.rds")
+    type2=NULL,
+    inflow=NULL, inflow_new=NULL
+    # ctg=readRDS("categories.rds")
   )
   
   
@@ -451,113 +575,6 @@ server <- function(input, output, session) {
   ## a. 투자자산 거래내역====
   ### * 메뉴 설정====
 
-  
-  output$manage_ass_trade <- renderUI({
-    fluidRow(
-      column(
-        width = 1,
-        selectInput(
-          inputId = 'type2',
-          label = "운용구분",
-          choices = c("투자자산", "연금자산")
-        ),
-        selectInput(
-          inputId = 'ass_account2',
-          label = "계좌",
-          choices = unique(ma()$read('assets')$계좌)
-        )
-      ),
-      column(
-        width = 1,
-        selectInput(
-          inputId = 'ass_cur2',
-          label = "통화",
-          choices = unique(ma()$read('assets')$통화)
-        ),
-        selectInput(
-          inputId = 'new2',
-          label = "신규/수정",
-          choices = "신규"
-        )
-      ),
-      column(
-        width = 1,
-        airDatepickerInput(
-          inputId = 'trading_date',
-          label = "거래일자",
-          addon = "none",
-          value = Sys.Date()
-        ),
-        selectInput(
-          inputId = 'ass_name2',
-          label = "종목명",
-          choices = NULL
-        )
-      ),
-      column(
-        width = 1,
-        numericInput(
-          inputId = 'buy_q',
-          label = "매입수량",
-          value = 0
-        ),
-        numericInput(
-          inputId = 'sell_q',
-          label = "매도수량",
-          value = 0
-        )
-      ),
-      column(
-        width = 2,
-        autonumericInput(
-          inputId = 'buy_p',
-          label = "매입액",
-          value = 0
-        ),
-        autonumericInput(
-          inputId = 'sell_b',
-          label = "매도원금",
-          value = 0
-        )
-      ),
-      column(
-        width = 2,
-        autonumericInput(
-          inputId = 'buy_c',
-          label = "현금지출",
-          value = 0
-        ),
-        autonumericInput(
-          inputId = 'sell_p',
-          label = "매도액",
-          value = 0
-        )
-      ),
-      column(
-        width = 2,
-        autonumericInput(
-          inputId = 'int_dev',
-          label = "이자배당액",
-          value = 0
-        ),
-        autonumericInput(
-          inputId = 'sell_c',
-          label = "현금수입",
-          value = 0
-        )
-      ),
-      column(
-        width = 2,
-        autonumericInput(
-          inputId = 'in_out_c',
-          label = "입출금",
-          value = 0
-        )
-      )
-    )
-  })
-
-  
   ### * 테이블 설정====
   output$trade_table <- renderUI({
     if(!is.null(rv$trade)){
@@ -581,9 +598,11 @@ server <- function(input, output, session) {
   })
   
   update_new_trade <- reactive({
+    
     updateSelectInput(session, 'new2',
                       choices = c('신규', rev(rv$trade$행번호)),
                       selected = '신규')
+    
     updateSelectInput(
       session, 'ass_name2', 
       choices = (ma()$read(rv$type2) |> 
@@ -596,8 +615,10 @@ server <- function(input, output, session) {
   observeEvent(input$type2,{
     if(input$type2 == "투자자산"){
       rv$type2 <- 'assets'
+      mode <- 'ass_account'
     } else {
       rv$type2 <- 'pension'
+      mode <- 'pen_account'
     }
     updateSelectInput(session, 'ass_account2',
                       choices = unique(ma()$read(rv$type2)$계좌))
@@ -733,7 +754,7 @@ server <- function(input, output, session) {
         selectInput(
           inputId = 'ass_account',
           label = "계좌",
-          choices = rv$ctg$ass_account
+          choices = NULL,
         )
       ),
       column(
@@ -768,12 +789,12 @@ server <- function(input, output, session) {
         selectInput(
           inputId = 'ass_class',
           label = "자산군",
-          choices = rv$ctg$ass_class
+          choices = NULL
         ),
         selectInput(
           inputId = 'ass_class1',
           label = "세부자산군",
-          choices = rv$ctg$ass_class1
+          choices = NULL
         )
       ),
       column(
@@ -781,12 +802,12 @@ server <- function(input, output, session) {
         selectInput(
           inputId = 'ass_class2',
           label = "세부자산군2",
-          choices = rv$ctg$ass_class2
+          choices = NULL
         ),
         selectInput(
           inputId = 'ass_cur',
           label = "통화",
-          choices = rv$ctg$ass_cur
+          choices = NULL
         )
       ),
       column(
@@ -835,6 +856,21 @@ server <- function(input, output, session) {
                       choices = c('신규', rev(rv$tickers$행번호)),
                       selected = '신규')
   })
+  
+  update_categories <- reactive({
+    
+    updateSelectInput(session, 'ass_class',
+                      choices = ctg()$ass_class)
+
+    updateSelectInput(session, 'ass_class1',
+                      choices = ctg()$ass_class1)
+
+    updateSelectInput(session, 'ass_class2',
+                      choices = ctg()$ass_class2)
+
+    updateSelectInput(session, 'ass_cur',
+                      choices = ctg()$ass_cur)
+  })
     
   ### * 운용구분 설정====
 
@@ -846,14 +882,16 @@ server <- function(input, output, session) {
       mode <- 'pen_account'
     }
     updateSelectInput(session, 'ass_account',
-                      choices = rv$ctg[[mode]])
+                      choices = ctg()[[mode]])
     rv$tickers <- reset_ticker()
     update_manage_ticker()
+    update_categories()
   })
   
   observeEvent(input$ass_account,{
     rv$tickers <- reset_ticker()
     update_manage_ticker()
+    update_categories()
   })
   
   
@@ -929,10 +967,10 @@ server <- function(input, output, session) {
       dbxInsert(ma()$con, 'pension', rv$ticker_new)
     }
 
+    sk(!sk())
     rv$tickers <- reset_ticker()
     update_manage_ticker()
-    ma()$initialize()
-    sk(!sk())
+    update_new_trade()
   })
   
   
@@ -943,10 +981,10 @@ server <- function(input, output, session) {
     } else {
       dbxUpdate(ma()$con, 'pension', rv$ticker_new, where_cols = c("행번호"))
     }
+    sk(!sk())
     rv$tickers <- reset_ticker()
     update_manage_ticker()
-    ma()$initialize()
-    sk(!sk())
+    update_new_trade()
   })
   
   observeEvent(input$ticker_del,{
@@ -956,10 +994,10 @@ server <- function(input, output, session) {
     } else {
       dbxDelete(ma()$con, 'pension', rv$ticker_new)
     }
+    sk(!sk())
     rv$tickers <- reset_ticker()
     update_manage_ticker()
-    ma()$initialize()
-    sk(!sk())
+    update_new_trade()
   })
   
   
@@ -979,7 +1017,7 @@ server <- function(input, output, session) {
           label = j,
           value = ""
         ),
-        selectInput(paste0('select_',i), NULL, rv$ctg[[i]]),
+        selectInput(paste0('select_',i), NULL, ctg()[[i]]),
         div(
           actionButton(
             inputId = glue("add_{i}_btn"),
@@ -999,18 +1037,20 @@ server <- function(input, output, session) {
     })
 
     observeEvent(input[[glue("add_{i}_btn")]],{
-      rv$ctg[[i]] <- c(rv$ctg[[i]], 
-                       input[[glue("add_{i}")]])
-      saveRDS(rv$ctg, 'categories.rds')
+      x <- ctg()
+      x[[i]] <- c(x[[i]], input[[glue("add_{i}")]])
+      saveRDS(x, 'categories.rds')
+      sk2(!sk2())
+      update_categories()
     })
     
     observeEvent(input[[glue("del_{i}_btn")]],{
+      x <- ctg()
+      x[[i]] <- x[[i]][ x[[i]]!=input[[glue("select_{i}")]] ]
       
-      rv$ctg[[i]] <- rv$ctg[[i]][
-        rv$ctg[[i]]!=input[[glue("select_{i}")]]
-      ]
-      
-      saveRDS(rv$ctg, 'categories.rds')
+      saveRDS(x, 'categories.rds')
+      sk2(!sk2())
+      update_categories()
     })
   })
   
@@ -1387,6 +1427,10 @@ server <- function(input, output, session) {
     output$ecos_stat_tables <- renderTable(rv$df)
     output$ecos_item_tables <- renderTable(rv$df5)
   })
+  
+  
+  # 5) 한국은행 지표선정====
+  
   
   
   observeEvent(input$close_win,{

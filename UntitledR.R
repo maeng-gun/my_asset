@@ -1,5 +1,6 @@
 source('functions.R')
 
+library(httr)
 library(timetk)
 library(plotly)
 
@@ -18,9 +19,25 @@ stats <- "금 선물"
 c('미국기준금리','미국채(10년)') %>% 
   self$plot_time_series("2020", "2024")
 
+a <- c('K55301BU3904', 'K55105BU1096', 'K55105BV3794')
+
+self$bs_pl_book_p |> 
+  filter(거래일자 == self$today)
 
 
+map_dbl(a, function(x){
+  x %>% 
+    {
+      paste0('https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=',.)
+    } %>% 
+    read_html() %>%
+    html_element(xpath='/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]') %>% 
+    html_text() %>% 
+    stringr::str_remove(',') %>% 
+    as.numeric()
+})
 
+'K55301B96890' %>% 
 
 
 day_1m <- today() %-time% '1 month'
@@ -340,4 +357,25 @@ self$kill()
 py$paste(self$ws$range('A7'), df$종목코드, T)
 
 
+self$stock_list %>% 
+  filter(종목코드 %in% c('060310', '005930'))
 
+self <- MyAssets$new()
+
+ks <- KrxStocks$new()
+
+df <- bs_pl %>% 
+  left_join(
+    ks$stock_list %>% 
+      select(종목코드, 종가),
+    by='종목코드'
+  ) %>% 
+  filter(평잔!=0) %>% 
+  mutate(
+    장부금액 = if_else(장부금액<1, 0, 장부금액),
+    평가금액 = case_when(
+      !is.na(평가금액) ~ 평가금액,
+      !is.na(종가) ~ 종가*보유수량,
+      TRUE ~ 장부금액)) %>% 
+  select(-종가)
+df

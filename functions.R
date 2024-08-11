@@ -1,19 +1,14 @@
-library(dplyr)
+library(tidyverse)
 library(timetk)
-library(lubridate)
-library(purrr)
-library(ggplot2)
 library(R6)
 library(ecos)
 library(glue)
 library(httr)
 library(jsonlite)
-library(tidyr)
 library(rvest)
 library(RSQLite)
 library(dbx)
 library(tidyquant)
-import::from(stringr, str_detect, str_extract)
 
 
 get_config <- function(){
@@ -131,6 +126,133 @@ MyData <- R6Class(
     ##5.(메서드) 테이블 목록 ====
     table_list = function(){
       dbListTables(self$con)
+    }
+  )
+)
+
+#[클래스] KrxStocks ====
+KrxStocks <- R6Class(
+  
+  classname = 'KrxStocks',
+  public=list(
+    
+    user.agent = NULL, referer = NULL,
+    stock_list = NULL, last_wd = NULL,
+    this_wd = NULL,
+    
+    ##1. 속성 초기화 ====
+    initialize = function(date=NULL){
+      if(is.null(date)){date <- today()}
+      self$user.agent <- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36 '
+      self$referer <- 'http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201'
+      self$this_wd <- self$get_workdays(year(date))
+      self$last_wd <- self$this_wd %>% 
+        filter(기준일<=date) %>% 
+        pull(기준일) %>% last()
+      self$stock_list <- self$get_stock_list()
+    },
+    
+    ##2.(메서드) KRX POST ====
+    post_krx = function(site, params){
+      
+      url <- list(
+        data='http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd',
+        open='http://open.krx.co.kr/contents/OPN/99/OPN99000001.jspx')
+      
+      res <- POST(url=url[site],
+                  query=params, 
+                  user_agent(self$user.agent), 
+                  add_headers(referer=self$referer)) %>% 
+        content('t') %>% 
+        jsonlite::fromJSON()
+      
+      res[[ names(res)[1] ]] %>% 
+        as_tibble()
+    },
+    
+    ##3.(메서드) 영업일 얻기 ====
+    get_workdays = function(year){
+      
+      unix_time <- 
+        (as.numeric(Sys.time()) * 1000) %>% round() %>% as.character()
+      
+      otp_params <- list(
+        bld = 'MKD/01/0110/01100305/mkd01100305_01',
+        name = 'form',
+        '_' = unix_time)
+
+      otp_code <- 
+        GET(url='http://open.krx.co.kr/contents/COM/GenerateOTP.jspx',
+            query=otp_params,
+            user_agent(self$user.agent)) %>% 
+        content('t')
+      
+      view_params <- list(
+        search_bas_yy = as.character(year),
+        gridTp = 'KRX',
+        pagePath = 'contents/MKD/01/0110/01100305/MKD01100305.jsp',
+        code = otp_code)
+      
+      holidays <- 
+        self$post_krx('open',view_params)$calnd_dd %>% 
+        as.Date()
+      
+      start <- glue('{year}-01-01')
+      end <- glue('{year}-12-31')
+      
+      cal <- bizdays::create.calendar(
+        name = 'mycal',
+        holidays = holidays,
+        weekdays = c('saturday','sunday'),
+        start.date = start,
+        end.date = end)
+      
+      tibble(기준일=bizdays::bizseq(start, end, cal))
+    },
+    
+    ##4.(메서드) 주식 종목(ETF포함) 리스트 얻기====
+    get_stock_list = function(date=NULL){
+      
+      if(is.null(date)){ 
+        yyyymmdd <- strftime(self$last_wd, '%Y%m%d')
+      } else {
+        yyyymmdd <- strftime(date, '%Y%m%d')
+      }
+      
+      params1 <- list(bld = "dbms/MDC/STAT/standard/MDCSTAT01501",
+                      mktId = "ALL",
+                      trdDd = yyyymmdd)
+      
+      params2 <- list(bld = "dbms/MDC/STAT/standard/MDCSTAT04301",
+                      mktId = "ALL",
+                      trdDd = yyyymmdd)
+      
+      self$post_krx('data', params1) %>% 
+        bind_rows(
+          self$post_krx('data', params2) %>% 
+            mutate(MKT_ID='STK')
+        ) %>% 
+        select(종목코드=ISU_SRT_CD, 종목명=ISU_ABBRV, 
+               종가=TDD_CLSPRC, 시장구분=MKT_ID) %>% 
+        mutate(시장구분=case_match(시장구분, 'STK'~'코스피', 'KSQ'~'코스닥', 
+                               'KNX'~'코넥스'),
+               종가 = readr::parse_number(종가)) %>% 
+        filter(str_ends(종목코드,'0'))
+    },
+    
+    ##4.(메서드) 종목코드 찾기 ====
+    find_code = function(name=NULL, mkt=NULL){
+      
+      df <- self$get_stock_list() %>% 
+        mutate(종목코드=paste0('A',종목코드))
+      
+      if(!is.null(mkt)){df <- df %>% filter(시장구분 %in% mkt)}
+      if(!is.null(name)){
+        df <- df %>% 
+          filter(str_detect(종목명, str_c(name, collapse = '|')))
+      }
+      
+      df
     }
   )
 )
@@ -376,7 +498,7 @@ MyAssets <- R6Class(
     assets_daily = NULL, pension_daily = NULL,
     bs_pl_book_a = NULL, bs_pl_book_p = NULL, 
     bs_pl_mkt_a = NULL, bs_pl_mkt_p = NULL,
-    bl = NULL, my = NULL, 
+    bl = NULL, my = NULL, ks = NULL,
     ret_a = NULL, ret_p = NULL, ret_a2 = NULL, ret_p2 = NULL, 
     allo0 = NULL, allo1 = NULL, allo2 = NULL,
     allo3 = NULL, allo4 = NULL, allo5 = NULL, 
@@ -394,7 +516,7 @@ MyAssets <- R6Class(
       } else {
         self$today <- today()
       }
-      
+      self$ks <- KrxStocks$new()
       self$year <- year(self$today)
       self$days <- seq(make_date(self$year,1,1), 
                        make_date(self$year,12,31),by='day')
@@ -580,10 +702,10 @@ MyAssets <- R6Class(
     ## 5.(메서드)투자자산 평가반영 잔액-손익 테이블 생성====
     evaluate_bs_pl_assets = function() {
       
-      if (is.null(self$bl) && is.null(self$my)) {
-        self$bl <- AutoInvest$new('boolio')
-        self$my <- AutoInvest$new('my')
-      }
+      # if (is.null(self$bl) && is.null(self$my)) {
+        # self$bl <- AutoInvest$new('boolio')
+        # self$my <- AutoInvest$new('my')
+      # }
       
       
       # p_lotte <- as.integer(self$bl$get_current_price("011170")$stck_prpr)
@@ -606,11 +728,22 @@ MyAssets <- R6Class(
         select(계좌, 종목코드,평가금액)
 
       
-      bs_pl <- self$bs_pl_book_a |> 
-        filter(거래일자 == self$today) |> 
-        left_join(price, by=c("계좌","종목코드")) |> 
+      bs_pl <- self$bs_pl_book_a %>% 
+        filter(거래일자 == self$today) %>%  
+        left_join(price, by=c("계좌","종목코드")) %>% 
+        left_join(
+          ks$stock_list %>% 
+            select(종목코드, 종가),
+          by='종목코드'
+        ) %>% 
+        filter(평잔!=0) %>% 
         mutate(
-          평가금액 = if_else(is.na(평가금액), 장부금액, 평가금액)) 
+          장부금액 = if_else(장부금액<1, 0, 장부금액),
+          평가금액 = case_when(
+            !is.na(평가금액) ~ 평가금액,
+            !is.na(종가) ~ 종가*보유수량,
+            TRUE ~ 장부금액)) %>% 
+        select(-종가) 
         # left_join(
         #   (self$assets |> select(종목코드, 기초평가손익)), 
         #   by="종목코드")
@@ -632,8 +765,7 @@ MyAssets <- R6Class(
           평가손익 = 평가금액 - 장부금액, 
           평가수익률 = 평가손익 / 장부금액 * 100
         ) |> 
-        arrange(desc(통화), desc(평가금액)) |> 
-        filter(평잔!=0)
+        arrange(desc(통화), desc(평가금액))
     },
     
     ## 6.(메서드)연금 평가반영 잔액-손익 테이블 생성========
@@ -645,14 +777,27 @@ MyAssets <- R6Class(
       
       self$bs_pl_book_p |> 
         filter(거래일자 == self$today) |> 
-        left_join(price, by=c("계좌","종목코드")) |> 
+        left_join(price, by=c("계좌","종목코드")) %>% 
+        left_join(
+          ks$stock_list %>% 
+            select(종목코드, 종가),
+          by='종목코드'
+        ) %>% 
+        filter(평잔!=0) %>% 
         mutate(
-          평가금액 = if_else(is.na(평가금액), 장부금액, 평가금액),
+          장부금액 = if_else(장부금액<1, 0, 장부금액),
+          평가금액 = case_when(
+            !is.na(평가금액) ~ 평가금액,
+            !is.na(종가) ~ 종가*보유수량,
+            TRUE ~ 장부금액)) %>% 
+        select(-종가) %>% 
+        # mutate(
+        #   평가금액 = if_else(is.na(평가금액), 장부금액, 평가금액),
           # 평가손익증감 = 평가금액 - 장부금액,
           # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
-          평가손익 = 평가금액 - 장부금액,
-          평가수익률 = 평가손익 / 장부금액 * 100
-        ) |> 
+          # 평가손익 = 평가금액 - 장부금액,
+          # 평가수익률 = 평가손익 / 장부금액 * 100
+        # ) |> 
         arrange(desc(통화), desc(평가금액)) |> 
         filter(평잔!=0)
     },
