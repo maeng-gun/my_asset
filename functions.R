@@ -504,6 +504,7 @@ MyAssets <- R6Class(
     allo3 = NULL, allo4 = NULL, allo5 = NULL, 
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
     allo9 = NULL, inflow_table = NULL, inflow_plot= NULL,
+    inflow_bal=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(base_dt=NULL) {
@@ -516,26 +517,13 @@ MyAssets <- R6Class(
       } else {
         self$today <- today()
       }
-      self$ks <- KrxStocks$new()
+      
       self$year <- year(self$today)
       self$days <- seq(make_date(self$year,1,1), 
                        make_date(self$year,12,31),by='day')
-      self$assets <- self$read('assets')
-      self$pension <- self$read('pension')
-      self$ex_usd <- get_exchange_rate('달러')
-      self$ex_jpy <- get_exchange_rate('엔')/100
-      self$assets_daily <- self$get_daily_trading(
-        self$assets, self$read('assets_daily')
-      )
-      self$pension_daily <- self$get_daily_trading(
-        self$pension, self$read('pension_daily')
-      )
-      self$bs_pl_book_a <- self$get_bs_pl('assets')
-      self$bs_pl_book_p <- self$get_bs_pl('pension')
-      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
-      self$ret_p <- self$get_class_returns('pension')
-      self$ret_p2 <- self$get_class_returns('pension', depth = 1)
-      self$compute_allocation_p()
+      self$run_book()
+      self$update_new_price()
+      self$run_valuation()
       self$get_inflow()
     },
     
@@ -732,7 +720,7 @@ MyAssets <- R6Class(
         filter(거래일자 == self$today) %>%  
         left_join(price, by=c("계좌","종목코드")) %>% 
         left_join(
-          ks$stock_list %>% 
+          self$ks$stock_list %>% 
             select(종목코드, 종가),
           by='종목코드'
         ) %>% 
@@ -775,31 +763,55 @@ MyAssets <- R6Class(
         select(계좌, 종목코드, 평가금액, 기초평가손익) %>% 
         filter(평가금액!=0)
       
-      self$bs_pl_book_p |> 
+      get_fund_price <- function(code){
+        map_dbl(code, function(x){
+          x %>% 
+            {
+              paste0('https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=',.)
+            } %>% 
+            read_html() %>%
+            html_element(xpath='/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]') %>% 
+            html_text() %>% 
+            stringr::str_remove(',') %>% 
+            as.numeric()
+        })
+      }
+      
+      bs_pl <- self$bs_pl_book_p |> 
         filter(거래일자 == self$today) |> 
         left_join(price, by=c("계좌","종목코드")) %>% 
         left_join(
-          ks$stock_list %>% 
+          self$ks$stock_list %>% 
             select(종목코드, 종가),
           by='종목코드'
         ) %>% 
         filter(평잔!=0) %>% 
         mutate(
-          장부금액 = if_else(장부금액<1, 0, 장부금액),
+          장부금액 = if_else(장부금액<1, 0, 장부금액))
+      
+      bs_pl %>% 
+        left_join(
+          bs_pl %>% 
+            filter(str_sub(종목코드,1,2)=='K5') %>% 
+            select(종목코드) %>% 
+            mutate(
+              기준가 = get_fund_price(종목코드)
+            ),
+          by='종목코드'
+        ) %>% 
+        mutate(
           평가금액 = case_when(
             !is.na(평가금액) ~ 평가금액,
             !is.na(종가) ~ 종가*보유수량,
-            TRUE ~ 장부금액)) %>% 
+            !is.na(기준가) ~ 기준가*보유수량/1000,
+            TRUE ~ 장부금액),
+          평가손익증감 = 평가금액 - 장부금액,
+          운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
+          평가손익 = 평가금액 - 장부금액,
+          평가수익률 = 평가손익 / 장부금액 * 100
+        ) %>% 
         select(-종가) %>% 
-        # mutate(
-        #   평가금액 = if_else(is.na(평가금액), 장부금액, 평가금액),
-          # 평가손익증감 = 평가금액 - 장부금액,
-          # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
-          # 평가손익 = 평가금액 - 장부금액,
-          # 평가수익률 = 평가손익 / 장부금액 * 100
-        # ) |> 
-        arrange(desc(통화), desc(평가금액)) |> 
-        filter(평잔!=0)
+        arrange(desc(통화), desc(평가금액))
     },
     
     ## 7.(메서드) 자산군별 수익률 현황====
@@ -1007,9 +1019,13 @@ MyAssets <- R6Class(
     ## 10.(메서드) 평가금액 포함 자료 산출====
     run_valuation = function(){
       self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
+      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
       self$ret_a <- self$get_class_returns('assets')
       self$ret_a2 <- self$get_class_returns('assets', depth = 1)
+      self$ret_p <- self$get_class_returns('pension')
+      self$ret_p2 <- self$get_class_returns('pension', depth = 1)
       self$compute_allocation_a()
+      self$compute_allocation_p()
     },
     
     ## 11.(메서드) 장부금액 및 현금성자산 추이 산출====
@@ -1028,7 +1044,7 @@ MyAssets <- R6Class(
       
       y <- df1 %>% filter(거래일자 == today()-1)
       
-      self$inflow_table <- 
+      df3 <- 
         self$read('inflow') %>% 
         filter(거래일자 > today())
         
@@ -1036,7 +1052,7 @@ MyAssets <- R6Class(
         filter(거래일자 >= today()) %>%
         select(거래일자) %>% 
         left_join(
-          self$inflow_table, 
+          df3, 
           by='거래일자') %>% 
         replace_na(list(순자금유입=0, 만기상환=0)) %>% 
         mutate(across(-거래일자, cumsum)) %>% 
@@ -1045,19 +1061,45 @@ MyAssets <- R6Class(
           장부금액 = y$장부금액+순자금유입,
           현금성자산 = y$현금성자산+순자금유입+만기상환)
       
-      df <- df1 %>% 
+      self$inflow_bal <- df1 %>% 
         filter(거래일자 < today()) %>% 
         bind_rows(df2)
       
-      self$inflow_table %>% left_join(df, by="거래일자")
+      self$inflow_table <- 
+        df3 %>% 
+        left_join(self$inflow_bal, by='거래일자') %>% 
+        arrange(거래일자)
       
-      self$inflow_plot <- df %>% 
+      
+      self$inflow_plot <- self$inflow_bal %>% 
         pivot_longer(cols=-거래일자, names_to = '구분', values_to = '금액') %>% 
         mutate(금액 = 금액/10000) %>% 
         ggplot(aes(x=거래일자,y=금액, color=구분))+
         geom_line(linewidth=2)+
         facet_grid(rows='구분', scales = 'free_y')
+    },
+    
+    ## 12.(메서드) 장부잔액 자료 산출====
+    run_book = function(){
+      self$assets <- self$read('assets')
+      self$pension <- self$read('pension')
+      self$ex_usd <- get_exchange_rate('달러')
+      self$ex_jpy <- get_exchange_rate('엔')/100
+      self$assets_daily <- self$get_daily_trading(
+        self$assets, self$read('assets_daily')
+      )
+      self$pension_daily <- self$get_daily_trading(
+        self$pension, self$read('pension_daily')
+      )
+      self$bs_pl_book_a <- self$get_bs_pl('assets')
+      self$bs_pl_book_p <- self$get_bs_pl('pension')
+    },
+    
+    ## 13.(메서드) 주가 업데이트====
+    update_new_price = function(){
+      self$ks <- KrxStocks$new()
     }
+    
   )
 )
 

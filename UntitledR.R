@@ -21,21 +21,46 @@ c('미국기준금리','미국채(10년)') %>%
 
 a <- c('K55301BU3904', 'K55105BU1096', 'K55105BV3794')
 
-self$bs_pl_book_p |> 
-  filter(거래일자 == self$today)
+bs_pl <- self$bs_pl_book_p |> 
+  filter(거래일자 == self$today) |> 
+  left_join(price, by=c("계좌","종목코드")) %>% 
+  left_join(
+    self$ks$stock_list %>% 
+      select(종목코드, 종가),
+    by='종목코드'
+  ) %>% 
+  filter(평잔!=0) %>% 
+  mutate(
+    장부금액 = if_else(장부금액<1, 0, 장부금액))
+
+bs_pl %>% 
+  left_join(
+    bs_pl %>% 
+      filter(str_sub(종목코드,1,2)=='K5') %>% 
+      select(종목코드) %>% 
+      mutate(
+        기준가 = get_fund_price(종목코드)
+      ),
+    by='종목코드'
+  ) %>% 
+  mutate(
+    평가금액 = case_when(
+      !is.na(평가금액) ~ 평가금액,
+      !is.na(종가) ~ 종가*보유수량,
+      !is.na(기준가) ~ 기준가*보유수량/1000,
+      TRUE ~ 장부금액),
+    평가손익증감 = 평가금액 - 장부금액,
+    운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
+    평가손익 = 평가금액 - 장부금액,
+    평가수익률 = 평가손익 / 장부금액 * 100
+  ) %>% 
+  select(-종가) %>% 
+  arrange(desc(통화), desc(평가금액))
 
 
-map_dbl(a, function(x){
-  x %>% 
-    {
-      paste0('https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=',.)
-    } %>% 
-    read_html() %>%
-    html_element(xpath='/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]') %>% 
-    html_text() %>% 
-    stringr::str_remove(',') %>% 
-    as.numeric()
-})
+
+
+
 
 'K55301B96890' %>% 
 
@@ -362,7 +387,9 @@ self$stock_list %>%
 
 self <- MyAssets$new()
 
+
 ks <- KrxStocks$new()
+
 
 df <- bs_pl %>% 
   left_join(

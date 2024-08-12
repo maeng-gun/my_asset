@@ -306,7 +306,7 @@ body <- dashboardBody(
     ##2) 자산운용 현황====
     tabItem(
       tabName = 'pf_bs_pl',
-      actionButton('kis','한투접속'),
+      actionButton('kis','주가 업데이트'),
       br(),
       br(),
       tabBox(
@@ -445,11 +445,11 @@ body <- dashboardBody(
             uiOutput('manage_inflow'),
           ),
           column(
-            width = 3,
+            width = 5,
             uiOutput('inflow_table')
           ),
           column(
-            width = 7,
+            width = 5,
             plotOutput('inflow_plot')
           )
         )
@@ -543,10 +543,26 @@ server <- function(input, output, session) {
   pen_init <- md$read('pension')
   ctg_init <- readRDS("categories.rds")
   
+  maa <- MyAssets$new()
+  
   ma <- reactive({
     sk()
-    MyAssets$new()
+    input$kis
+    maa$run_book()
+    maa$run_valuation()
+    maa
   })
+  
+  # renew_bs <- reactive({
+  #   maa$run_book()
+  #   maa$run_valuation()
+  #   maa
+  # })
+  
+  # renew_prices <- reactive({
+  #   self$update_new_price()
+  #   self$run_valuation()
+  # })
   
   
   ctg <- reactive({
@@ -706,9 +722,10 @@ server <- function(input, output, session) {
       rv$trade_new$행번호 <- tail(ma()$read('pension_daily')$행번호, 1)+1
       dbxInsert(ma()$con, 'pension_daily', rv$trade_new)
     }
+    sk(!sk())
+    # renew_bs()
     rv$trade <- reset_trade()
     update_new_trade()
-    sk(!sk())
   })
 
 
@@ -722,9 +739,10 @@ server <- function(input, output, session) {
       dbxUpdate(ma()$con, 'pension_daily', rv$trade_new, 
                 where_cols = c("행번호"))
     }
+    sk(!sk())
+    # renew_bs()
     rv$trade <- reset_trade()
     update_new_trade()
-    sk(!sk())
   })
 
   observeEvent(input$ass_trade_del,{
@@ -734,9 +752,10 @@ server <- function(input, output, session) {
     } else {
       dbxDelete(ma()$con, 'pension_daily', rv$trade_new)
     }
+    sk(!sk())
+    # renew_bs()
     rv$trade <- reset_trade()
     update_new_trade()
-    sk(!sk())
   })
 
   ## b. 투자종목 관리====
@@ -968,6 +987,7 @@ server <- function(input, output, session) {
     }
 
     sk(!sk())
+    # renew_bs()
     rv$tickers <- reset_ticker()
     update_manage_ticker()
     update_new_trade()
@@ -982,6 +1002,7 @@ server <- function(input, output, session) {
       dbxUpdate(ma()$con, 'pension', rv$ticker_new, where_cols = c("행번호"))
     }
     sk(!sk())
+    # renew_bs()
     rv$tickers <- reset_ticker()
     update_manage_ticker()
     update_new_trade()
@@ -995,6 +1016,7 @@ server <- function(input, output, session) {
       dbxDelete(ma()$con, 'pension', rv$ticker_new)
     }
     sk(!sk())
+    # renew_bs()
     rv$tickers <- reset_ticker()
     update_manage_ticker()
     update_new_trade()
@@ -1066,75 +1088,76 @@ server <- function(input, output, session) {
   
   # 2) 자산운용 현황====
   
+
   observeEvent(input$kis,{
-    
     w1$show()
-    
-    ma()$run_valuation()
-    
+
+    maa$update_new_price()
+    maa$run_valuation()
+
     w1$hide()
-
+  })  
     
-   ## a. 투자자산현황====
+ ## a. 투자자산현황====
 
-    ###* 자산군별 배분현황====
-    output$allo0 <- render_allo(ma()$allo0)
-    output$allo1 <- render_allo(ma()$allo1)
-    
-    ###* 통화별 배분현황====
-    output$allo2 <- render_allo(ma()$allo2)
-    output$allo3 <- render_allo(ma()$allo3)
-    
-    ###* 불리오 배분현황====
-    output$allo5 <- render_allo(ma()$allo5)
-    output$allo4 <- render_allo(ma()$allo4)
-   
+  ###* 자산군별 배분현황====
+  output$allo0 <- render_allo(ma()$allo0)
+  output$allo1 <- render_allo(ma()$allo1)
+  
+  ###* 통화별 배분현황====
+  output$allo2 <- render_allo(ma()$allo2)
+  output$allo3 <- render_allo(ma()$allo3)
+  
+  ###* 불리오 배분현황====
+  output$allo5 <- render_allo(ma()$allo5)
+  output$allo4 <- render_allo(ma()$allo4)
+ 
 
-    ## b. 투자손익현황====
+  ## b. 투자손익현황====
 
-    
-    output$class_ret_a <- renderUI({
-      ma()$ret_a |>
-        select(1:3,평가금액,실현손익, 평가손익,
-               실현수익률:평가수익률) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1:2) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=4:6, digits = 0) |>
-        colformat_double(j=7:8, digits = 2) |>
-        htmltools_value()
-    })
-    
-    output$class_ret_a2 <- renderUI({
-      ma()$ret_a2 |>
-        select(1:2,평가금액,실현손익, 평가손익,
-               실현수익률:평가수익률) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=3:5, digits = 0) |>
-        colformat_double(j=6:7, digits = 2) |>
-        htmltools_value()
-    })
-
-    output$bs_pl_mkt_a <-renderUI({
-      ma()$bs_pl_mkt_a |>
-        select(통화, 자산군, 세부자산군, 종목명,
-               보유수량,장부금액, 평가금액, 실현손익,평가손익,
-               실현수익률, 평가수익률) |>
-        arrange(통화,자산군,세부자산군) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1:3) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=5:9, digits = 0) |>
-        colformat_double(j=10:11, digits = 2) |>
-        htmltools_value()
-    })
-
+  
+  output$class_ret_a <- renderUI({
+    ma()$ret_a |>
+      select(1:3,평가금액,실현손익, 평가손익,
+             실현수익률:평가수익률) |>
+      flextable() |>
+      theme_vanilla() |>
+      merge_v(j=1:2) |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=4:6, digits = 0) |>
+      colformat_double(j=7:8, digits = 2) |>
+      htmltools_value()
   })
+  
+  output$class_ret_a2 <- renderUI({
+    ma()$ret_a2 |>
+      select(1:2,평가금액,실현손익, 평가손익,
+             실현수익률:평가수익률) |>
+      flextable() |>
+      theme_vanilla() |>
+      merge_v(j=1) |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=3:5, digits = 0) |>
+      colformat_double(j=6:7, digits = 2) |>
+      htmltools_value()
+  })
+
+  output$bs_pl_mkt_a <-renderUI({
+    ma()$bs_pl_mkt_a |>
+      select(통화, 자산군, 세부자산군, 종목명,
+             보유수량,장부금액, 평가금액, 실현손익,평가손익,
+             실현수익률, 평가수익률) |>
+      arrange(통화,자산군,세부자산군) |>
+      flextable() |>
+      theme_vanilla() |>
+      merge_v(j=1:3) |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=5:9, digits = 0) |>
+      colformat_double(j=10:11, digits = 2) |>
+      htmltools_value()
+  })
+
+
   
   ## c. 연금자산현황====
   output$allo6 <- render_allo(ma()$allo6)
@@ -1245,12 +1268,13 @@ server <- function(input, output, session) {
     input$inflow_new
     input$inflow_mod
     input$inflow_del
-    ma()$read('inflow')
+    ma()$get_inflow()
+    ma()$inflow_table
   })
   
   update_manage_inflow <-  reactive({
     updateSelectInput(session, 'new3',
-                      choices = c('신규', rev(rv$inflow$행번호)),
+                      choices = c('신규', rv$inflow$행번호),
                       selected = '신규')
   })
   
@@ -1318,12 +1342,14 @@ server <- function(input, output, session) {
   
   ### * 그래프 설정====
   output$inflow_plot <- renderPlot({
+    sk()
     ma()$inflow_plot +
       theme(
         text = element_text(size = 20),
         legend.position = "none",
         axis.title = element_blank()
-      )
+      )+
+      scale_x_date(date_labels = '%m', date_breaks = '1 months')
   })
   
   
