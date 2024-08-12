@@ -67,4 +67,12 @@ XlWings <- R6Class(
       self$ws$range(cell)$expand('table')$clear()
     }
   )
+<<<<<<< HEAD
 )
+=======
+)
+
+
+
+
+>>>>>>> 3c58a570733ac783d2506b9b370b440511796c4d

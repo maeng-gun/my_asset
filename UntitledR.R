@@ -1,20 +1,44 @@
 source('functions.R')
 
+library(httr)
+library(timetk)
+library(plotly)
+
 self <- Scrap_econ$new()
 
-self$query_daily(c('미국채(2년)', '미국채(10년)'))
+df <- self$scrap_daily(start = '2008-12-16', 
+                       end = '2024-06-10',item = '미국기준금리')
 
-scrap_econ_daily() %>% upsert_econ('econ_daily')
+df %>% self$upsert_econ('econ_daily')
+
+scrap_daily() %>% upsert_econ('econ_daily')
 
 
 stats <- "금 선물"
 
+c('미국기준금리','미국채(10년)') %>% 
+  self$plot_time_series("2020", "2024")
+
+a <- c('K55301BU3904', 'K55105BU1096', 'K55105BV3794')
+
+self$bs_pl_book_p |> 
+  filter(거래일자 == self$today)
 
 
+map_dbl(a, function(x){
+  x %>% 
+    {
+      paste0('https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=',.)
+    } %>% 
+    read_html() %>%
+    html_element(xpath='/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]') %>% 
+    html_text() %>% 
+    stringr::str_remove(',') %>% 
+    as.numeric()
+})
 
+'K55301B96890' %>% 
 
-
-library(timetk)
 
 day_1m <- today() %-time% '1 month'
 day_5y <- floor_date(today() %-time% '5 year', "year")
@@ -22,9 +46,9 @@ ytd <- floor_date(today(),"year")
 
 
 df <- query_econ('krweur')
+query_econ
 
 
-library(plotly)
 
 
 plotlyOutput()
@@ -35,14 +59,16 @@ query_econ(c('krweur', 'krwusd')) %>%
   ggplot(aes(x=date, y=value, color=new_name)) +
   geom_line(linewidth=1) +
   labs(x='', y='')
-  
 
-query_econ(c("utr01", "utr05", "utr10")) %>% 
-  filter(date %>% timetk::between_time("2020","2024")) %>% 
-  group_by(new_name) %>% 
-  plot_ly(x = ~date, y = ~value, color=~new_name) %>% 
-  add_lines() %>%
-  layout(showlegend = T, 
+self$read_obj('idx_info') %>% pull(item_name)
+  
+c('미국기준금리') %>% 
+  self$query_daily() %>% 
+  filter(between_time(date, "2020","2024")) %>% 
+  group_by(item_name) %>% 
+  plot_ly(x = ~date, y = ~value, color=~item_name, colors = RColorBrewer::brewer.pal(3, "Set2")) %>% 
+  add_lines() %>% 
+  layout(showlegend = T,
          xaxis = list(rangeselector=list(
                         buttons=list(
                           list(count=1, label="YTD", step="year", stepmode="todate"),
@@ -331,4 +357,25 @@ self$kill()
 py$paste(self$ws$range('A7'), df$종목코드, T)
 
 
+self$stock_list %>% 
+  filter(종목코드 %in% c('060310', '005930'))
 
+self <- MyAssets$new()
+
+ks <- KrxStocks$new()
+
+df <- bs_pl %>% 
+  left_join(
+    ks$stock_list %>% 
+      select(종목코드, 종가),
+    by='종목코드'
+  ) %>% 
+  filter(평잔!=0) %>% 
+  mutate(
+    장부금액 = if_else(장부금액<1, 0, 장부금액),
+    평가금액 = case_when(
+      !is.na(평가금액) ~ 평가금액,
+      !is.na(종가) ~ 종가*보유수량,
+      TRUE ~ 장부금액)) %>% 
+  select(-종가)
+df
