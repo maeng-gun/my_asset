@@ -147,7 +147,7 @@ KrxStocks <- R6Class(
       self$referer <- 'http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201'
       self$this_wd <- self$get_workdays(year(date))
       self$last_wd <- self$this_wd %>% 
-        filter(기준일<=date) %>% 
+        filter(기준일<date) %>% 
         pull(기준일) %>% last()
       self$stock_list <- self$get_stock_list()
     },
