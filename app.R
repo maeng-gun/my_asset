@@ -65,6 +65,12 @@ body <- dashboardBody(
     ##1) 자산운용 내역 기록====
     tabItem(
       tabName = 'trading_record',
+      airDatepickerInput(
+        inputId = 'base_date',
+        label = "기준일",
+        addon = "none",
+        value = Sys.Date()
+      ),
       tabBox(
         width=12,
         status='primary',
@@ -531,7 +537,12 @@ server <- function(input, output, session) {
     html = tagList(spin_loader(), "로딩중..."),
     color = transparent(.5))
   
-  w1$show()
+  show_delay <- function(text, type){
+    show_alert(title=text, type=type)
+  }
+  
+  # w1$show()
+  show_delay("앱 구동중...", "info")
   source("functions.R", echo=F)
   ec <- Ecos$new()
   
@@ -545,13 +556,19 @@ server <- function(input, output, session) {
   
   maa <- MyAssets$new()
   
+  observeEvent(input$base_date,{
+    maa$initialize(input$base_date)
+  })
+  
   ma <- reactive({
+    input$base_date
     sk()
     input$kis
     maa$run_book()
     maa$run_valuation()
     maa
   })
+
   
   # renew_bs <- reactive({
   #   maa$run_book()
@@ -585,7 +602,8 @@ server <- function(input, output, session) {
   )
   
   
-  w1$hide()
+  # w1$hide()
+  show_delay("완료!", "success")
   
   # 1) 자산운용 내역 기록====
   ## a. 투자자산 거래내역====

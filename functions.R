@@ -657,15 +657,15 @@ MyAssets <- R6Class(
         
         bs_pl |>
           mutate(
-            장부금액 = replace(장부금액, 종목명=='나무예수금', 
-                               cash_w_b$나무),
+            # 장부금액 = replace(장부금액, 종목명=='나무예수금', 
+            #                    cash_w_b$나무),
             장부금액 = replace(장부금액, 종목명=='한투예수금', 
                                cash_w_b$한투),
             장부금액 = replace(장부금액, 종목명=='한투CMA예수금',
                                cash_w_b$한투CMA),
             장부금액 = replace(장부금액, 종목명=='한투ISA예수금',
                                cash_w_b$한투ISA),
-            평잔 = replace(평잔, 종목명=='나무예수금', cash_w_e$나무),
+            # 평잔 = replace(평잔, 종목명=='나무예수금', cash_w_e$나무),
             평잔 = replace(평잔, 종목명=='한투예수금', cash_w_e$한투),
             평잔 = replace(평잔, 종목명=='한투CMA예수금', cash_w_e$한투CMA),
             평잔 = replace(평잔, 종목명=='한투ISA예수금', cash_w_e$한투ISA),
