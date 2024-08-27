@@ -1095,13 +1095,11 @@ server <- function(input, output, session) {
   })
   
   render_allo <- function(df){
-    renderUI({
       df |> flextable() |>
         theme_vanilla() |>
         merge_v(j=1:2) |>
         set_table_properties(layout='autofit',width=0.9) |>
         htmltools_value()
-    })
   }  
   
   # 2) 자산운용 현황====
@@ -1119,16 +1117,16 @@ server <- function(input, output, session) {
  ## a. 투자자산현황====
 
   ###* 자산군별 배분현황====
-  output$allo0 <- render_allo(ma()$allo0)
-  output$allo1 <- render_allo(ma()$allo1)
+  output$allo0 <- renderUI({render_allo(ma()$allo0)})
+  output$allo1 <- renderUI({render_allo(ma()$allo1)})
   
   ###* 통화별 배분현황====
-  output$allo2 <- render_allo(ma()$allo2)
-  output$allo3 <- render_allo(ma()$allo3)
+  output$allo2 <- renderUI({render_allo(ma()$allo2)})
+  output$allo3 <- renderUI({render_allo(ma()$allo3)})
   
   ###* 불리오 배분현황====
-  output$allo5 <- render_allo(ma()$allo5)
-  output$allo4 <- render_allo(ma()$allo4)
+  output$allo5 <- renderUI({render_allo(ma()$allo5)})
+  output$allo4 <- renderUI({render_allo(ma()$allo4)})
  
 
   ## b. 투자손익현황====
@@ -1178,10 +1176,10 @@ server <- function(input, output, session) {
 
   
   ## c. 연금자산현황====
-  output$allo6 <- render_allo(ma()$allo6)
-  output$allo7 <- render_allo(ma()$allo7)
-  output$allo8 <- render_allo(ma()$allo8)
-  output$allo9 <- render_allo(ma()$allo9)
+  output$allo6 <- renderUI({render_allo(ma()$allo6)})
+  output$allo7 <- renderUI({render_allo(ma()$allo7)})
+  output$allo8 <- renderUI({render_allo(ma()$allo8)})
+  output$allo9 <- renderUI({render_allo(ma()$allo9)})
   
   ## d. 연금손익현황====
   
