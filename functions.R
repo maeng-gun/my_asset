@@ -1046,7 +1046,10 @@ MyAssets <- R6Class(
       
       df3 <- 
         self$read('inflow') %>% 
-        filter(거래일자 > today())
+        filter(거래일자 > today()) %>% 
+        select(-행번호) %>%
+        add_row(거래일자=today(), 순자금유입=0, 만기상환=0) %>% 
+        arrange(거래일자)
         
       df2 <- df1 %>% 
         filter(거래일자 >= today()) %>%
