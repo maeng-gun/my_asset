@@ -142,15 +142,12 @@ KrxStocks <- R6Class(
     
     ##1. 속성 초기화 ====
     initialize = function(date=NULL){
-      if(is.null(date)){
-        if(hour(now())>=9){date <- today()}
-        else {date <- today() - 1}
-      }
+      if(is.null(date)){date <- today()}
       self$user.agent <- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36 '
       self$referer <- 'http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201'
       self$this_wd <- self$get_workdays(year(date))
       self$last_wd <- self$this_wd %>% 
-        filter(기준일<=date) %>% 
+        filter(기준일<date) %>% 
         pull(기준일) %>% last()
       self$stock_list <- self$get_stock_list()
     },
@@ -1049,7 +1046,10 @@ MyAssets <- R6Class(
       
       df3 <- 
         self$read('inflow') %>% 
-        filter(거래일자 > today())
+        filter(거래일자 > today()) %>% 
+        select(-행번호) %>%
+        add_row(거래일자=today(), 순자금유입=0, 만기상환=0) %>% 
+        arrange(거래일자)
         
       df2 <- df1 %>% 
         filter(거래일자 >= today()) %>%
@@ -1107,7 +1107,7 @@ MyAssets <- R6Class(
 )
 
 
-#[함수] 공휴일 얻기====
+
 get_holidays <- function(start_year, end_year){
   service_key <- get_config()$holiday
   request_url <- 'http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo'
