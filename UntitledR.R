@@ -405,4 +405,39 @@ df <- bs_pl %>%
       !is.na(종가) ~ 종가*보유수량,
       TRUE ~ 장부금액)) %>% 
   select(-종가)
-df
+
+
+
+df <- df %>% mutate(자산군=factor(자산군, 
+                               levels=c("채권","주식","대체자산","현금성")))
+self$allo1
+df2 <- self$ret_a %>% 
+  group_by(자산군, 세부자산군) %>% 
+  summarize(
+    평가금액 = sum(평가금액),
+    장부금액 = sum(장부금액),
+    평가손익 = sum(평가손익),
+    .groups = 'drop') |>
+  mutate(평가수익률 = 평가손익 / 장부금액 * 100,
+         자산군=factor(자산군, 
+                    levels=c("채권","주식","대체자산","현금성"))
+         ) %>% 
+  filter(!(자산군 %in% c('외화자산','전체'))) %>% 
+  select(자산군, 세부자산군, 평가수익률)
+
+df3  
+
+df <- df |> 
+  filter(자산군 != '외화자산') |>
+  mutate(평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
+         평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval),
+         자산군=factor(자산군, 
+                    levels=c("채권","주식","대체자산","현금성"))) |>
+  group_by(자산군, 세부자산군) |>
+  summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
+  mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2))
+
+df3 <- df %>% left_join(df2, by=c('자산군','세부자산군')) %>% 
+  arrange(자산군)
+
+df3
