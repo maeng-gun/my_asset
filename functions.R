@@ -928,8 +928,8 @@ MyAssets <- R6Class(
     compute_allocation_a = function() {
       
       df <- self$bs_pl_mkt_a
-      usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)                    
-      jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)                    
+      usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
+      jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)  
       
       df <- df |> 
         filter(자산군 != '외화자산') |>
@@ -939,16 +939,55 @@ MyAssets <- R6Class(
         summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
         mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2))
       
-      ### 자산군별 배분현황
-      self$allo0 <- df |>
-        group_by(자산군) |>
-        summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) |> 
-        add_row(자산군='합계', 평가금액=sum(df$평가금액), 투자비중=100)
+      df2 <- self$ret_a %>% 
+        filter(구분=="원화"|자산군!="전체") %>% 
+        group_by(자산군, 세부자산군) %>% 
+        summarize(
+          평가금액 = sum(평가금액),
+          장부금액 = sum(장부금액),
+          평가손익 = sum(평가손익),
+          .groups = 'drop')
       
-      self$allo1 <- df |>
-        add_row(자산군='합계', 평가금액=sum(df$평가금액), 투자비중=100) |>
+      sum_eval <- df2 %>% filter(자산군=='외화자산') %>% .$평가금액 %>% sum()
+      sum_bal <- df2 %>% filter(자산군=='외화자산') %>% .$장부금액 %>% sum()
+      sum_prof <- (df2 %>% filter(자산군=="전체") %>% .$평가손익 %>% sum()) - (
+        df2 %>% filter(!(자산군 %in% c("전체", "외화자산"))) %>% .$평가손익 %>% sum()
+      )
+      sum_t <- df2 %>% filter(자산군=="전체") %>% .$평가금액 %>% sum()
+      
+      df_t <- df2 %>% 
+        filter(자산군=='전체') %>% 
+        mutate(
+          평가수익률 = round(평가손익 / 장부금액 * 100,2),
+               투자비중=100) %>% 
+        select(자산군, 세부자산군, 평가금액, 평가수익률, 투자비중) %>% 
+        add_row(
+          자산군="<환차익>", 세부자산군='합산', 평가금액=sum_eval, 
+          평가수익률=round(sum_prof/sum_bal*100,2), 
+          투자비중=round(sum_eval/sum_t*100,2)
+        )
+      
+      df2 <- df2 %>% 
+        filter(!(자산군 %in% c("전체","외화자산"))) %>% 
+        mutate(
+          투자비중 = round(평가금액 / sum(평가금액) * 100,2),
+          자산군=factor(자산군, 
+                     levels=c("채권","주식","대체자산","현금성", "환차익"))) %>% 
+        arrange(자산군)
+      
+      
+      ### 자산군별 배분현황
+      self$allo0 <- df2 |>
         group_by(자산군) |>
-        mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
+        summarize(across(-세부자산군, ~sum(.x))) %>% 
+        mutate(평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
+        select(자산군,평가금액,평가수익률,투자비중) %>% 
+        bind_rows(df_t %>% select(-세부자산군))
+      
+      self$allo1 <- df2 %>% 
+        mutate(평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
+        select(자산군,세부자산군, 평가금액,평가수익률,투자비중) %>% 
+        bind_rows(df_t)
       
       ### 통화화별 배분현황
       self$allo2 <- df |>
