@@ -20,10 +20,10 @@ get_exchange_rate <- function(cur='달러'){
   
   num <- c('달러'= 1, '엔'= 2, '유로'=3, '위안'=4)
   
-  (read_html("http://finance.naver.com/marketindex/") |> 
+  (read_html("http://finance.naver.com/marketindex/") %>% 
       html_nodes("div.head_info > span.value")
-  )[num[cur]] |>
-    html_text() |> 
+  )[num[cur]] %>%
+    html_text() %>% 
     readr::parse_number()
 }
 
@@ -40,9 +40,9 @@ Ecos <- R6Class(
     #속성 초기화
     initialize = function() {
       #인증키 설정
-      get_config()$ecos |> ecos.setKey()
+      get_config()$ecos %>% ecos.setKey()
       #(속성) 통계표 목록
-      self$table_list <- statTableList() |> tibble()
+      self$table_list <- statTableList() %>% tibble()
     },
     
     #(메서드)통계표 검색
@@ -52,7 +52,7 @@ Ecos <- R6Class(
         self$table_list
       }
       else{
-        self$table_list |> 
+        self$table_list %>% 
           filter(str_detect(stat_name, name), 
                  srch_yn=='Y')
       }
@@ -65,9 +65,9 @@ Ecos <- R6Class(
         tibble(item_name='',stat_code='',item_code='',cycle='')
       }
       else {
-        statItemList(code) |> 
-          tibble() |> 
-          select(stat_name, item_name, stat_code, item_code, cycle:data_cnt) |> 
+        statItemList(code) %>% 
+          tibble() %>% 
+          select(stat_name, item_name, stat_code, item_code, cycle:data_cnt) %>% 
           mutate(stat_name = stringr::str_extract(stat_name,"(?<=\\.\\s).*"))
       }
     },
@@ -80,12 +80,12 @@ Ecos <- R6Class(
     #(메서드)아이템 저장
     save_items = function(df, name){
       
-      df2 <- df |> mutate(new_name = name, .before=1)
+      df2 <- df %>% mutate(new_name = name, .before=1)
       
-      self$read_items() |> 
-        bind_rows(df2) |> 
-        distinct() |> 
-        arrange(stat_code,item_code) |> 
+      self$read_items() %>% 
+        bind_rows(df2) %>% 
+        distinct() %>% 
+        arrange(stat_code,item_code) %>% 
         saveRDS('ecos_items.rds')
     }
   )
@@ -115,7 +115,7 @@ MyData <- R6Class(
     ##3.(메서드) 테이블 읽기 ====
     
     read = function(name){
-      dbReadTable(self$con, name) |> tibble()
+      dbReadTable(self$con, name) %>% tibble()
     },
     
     ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
@@ -374,8 +374,8 @@ AutoInvest <- R6Class(
       URL <- glue("{self$URL_BASE}/{path}")
       headers2 <- c(self$token_headers, headers)
       
-      GET(URL, query = data, add_headers(.headers = headers2)) |> 
-        content("text", encoding = 'UTF-8') |> 
+      GET(URL, query = data, add_headers(.headers = headers2)) %>% 
+        content("text", encoding = 'UTF-8') %>% 
         fromJSON()
     },
     
@@ -389,8 +389,8 @@ AutoInvest <- R6Class(
            add_headers(.headers = headers2))
 
       if (res$status_code == 200) {
-        res <- res |> 
-          content("text", encoding = 'UTF-8') |> 
+        res <- res %>% 
+          content("text", encoding = 'UTF-8') %>% 
           fromJSON()
         return(res)
       } else {
@@ -415,12 +415,12 @@ AutoInvest <- R6Class(
                  "타사상품", "외화단기사채", "외화ELS_DLS", "외화",
                  "예수금+CMA", "청약자예수", "합계")
       
-      self$GET_tbl(path, data, headers)$output1 |> 
-        tibble() |> 
+      self$GET_tbl(path, data, headers)$output1 %>% 
+        tibble() %>% 
         rename_with(~c('매입금액', '평가금액', '평가손익', 
-                       '신용대출', '순자산', '비중')) |> 
-        mutate(자산구분 = asset, .before = 1) |> 
-        mutate(across(매입금액:비중, as.numeric)) |> 
+                       '신용대출', '순자산', '비중')) %>% 
+        mutate(자산구분 = asset, .before = 1) %>% 
+        mutate(across(매입금액:비중, as.numeric)) %>% 
         filter(비중!=0)
     },
     
@@ -445,10 +445,10 @@ AutoInvest <- R6Class(
       headers <- c("tr_id" = "TTTC8434R", 
                    "custtype" = "P")
       
-      self$GET_tbl(path, data, headers)$output1 |> 
-        tibble() |> 
-        select(pdno, prdt_name, evlu_amt) |>
-        rename_with(~c('종목코드', '상품명', '평가금액')) |> 
+      self$GET_tbl(path, data, headers)$output1 %>% 
+        tibble() %>% 
+        select(pdno, prdt_name, evlu_amt) %>%
+        rename_with(~c('종목코드', '상품명', '평가금액')) %>% 
         mutate(평가금액 = as.numeric(평가금액))
       
     },
@@ -467,11 +467,11 @@ AutoInvest <- R6Class(
       )
       headers <- c("tr_id" = "TTTS3012R", "custtype" = "P")
       
-      self$GET_tbl(path, data, headers)$output1 |> 
-        tibble() |>
+      self$GET_tbl(path, data, headers)$output1 %>% 
+        tibble() %>%
         select(ovrs_pdno, ovrs_item_name, 
-               ovrs_stck_evlu_amt) |> 
-        rename_with(~c('종목코드', '상품명', '평가금액')) |> 
+               ovrs_stck_evlu_amt) %>% 
+        rename_with(~c('종목코드', '상품명', '평가금액')) %>% 
         mutate(평가금액 = as.numeric(평가금액))
     },
     
@@ -539,16 +539,16 @@ MyAssets <- R6Class(
       df1 <- self$read(table)
       df2 <- self$read(paste0(table,'_daily'))
       
-      df2 |> left_join(
-        (df1 |> transmute(계좌, 통화, 종목코드, 종목명)), 
-        by = c('계좌','종목코드')) |> 
-        filter(계좌==acct, 통화==cur) |> 
+      df2 %>% left_join(
+        (df1 %>% transmute(계좌, 통화, 종목코드, 종목명)), 
+        by = c('계좌','종목코드')) %>% 
+        filter(계좌==acct, 통화==cur) %>% 
         mutate(매입비용 = 현금지출-매입액,
                매매수익 = 매도액 - 매도원금,
                매도비용 = 매도액 + 이자배당액 - 현금수입,
                순수익 = 매매수익 + 이자배당액 - 매도비용 - 매입비용,
                순현금수입 = 입출금 + 현금수입 - 현금지출,
-               잔액 = cumsum(순현금수입)) |> 
+               잔액 = cumsum(순현금수입)) %>% 
         select(행번호, 계좌, 통화, 거래일자, 종목명, 
                매입수량:현금지출, 매입비용, 매도수량, 매도원금, 
                매도액, 매매수익, 이자배당액, 현금수입, 매도비용, 
@@ -559,18 +559,18 @@ MyAssets <- R6Class(
     get_daily_trading = function(ast, trade){
       
       expand_grid(select(ast,계좌,종목코드), 
-                  거래일자 = self$days) |> 
+                  거래일자 = self$days) %>% 
         left_join(select(ast, 계좌, 종목코드,종목명, 통화), 
-                  by = c("계좌","종목코드")) |> 
-        left_join(trade, by = c("계좌", "종목코드", "거래일자")) |> 
-        mutate(across(매입수량:입출금, ~if_else(is.na(.x),0,.x))) |> 
-        arrange(계좌, 종목코드, 거래일자) |> 
+                  by = c("계좌","종목코드")) %>% 
+        left_join(trade, by = c("계좌", "종목코드", "거래일자")) %>% 
+        mutate(across(매입수량:입출금, ~if_else(is.na(.x),0,.x))) %>% 
+        arrange(계좌, 종목코드, 거래일자) %>% 
         mutate(
           순매입수량 = 매입수량 - 매도수량,
           수익 =매도액 - 매도원금 + 이자배당액,
           비용 = 현금지출 - 매입액 + 매도액 + 이자배당액 - 현금수입,
           실현손익 = 수익 - 비용
-        ) |> 
+        ) %>% 
         select(계좌:통화, 순매입수량, 매입액, 매도원금, 
                수익, 비용, 실현손익, 현금수입, 입출금, 현금지출)
     },
@@ -591,11 +591,11 @@ MyAssets <- R6Class(
         codes <- self$pension
       }
       
-      bs_pl1 <- trade |>
+      bs_pl1 <- trade %>%
         select(계좌, 종목코드, 거래일자, 종목명, 통화)
       
-      bs_pl2 <- trade |> 
-        group_by(계좌, 종목코드) |>
+      bs_pl2 <- trade %>% 
+        group_by(계좌, 종목코드) %>%
         transmute(
           보유수량 = cumsum(순매입수량),
           장부금액 = cumsum(매입액 - 매도원금),
@@ -603,62 +603,62 @@ MyAssets <- R6Class(
           수익 = cumsum(수익),
           비용 = cumsum(비용),
           실현손익 = cumsum(실현손익)
-        ) |>
-        ungroup() |> 
+        ) %>%
+        ungroup() %>% 
         select(-계좌, -종목코드)
       
-      bs_pl <- bind_cols(bs_pl1, bs_pl2) |> 
+      bs_pl <- bind_cols(bs_pl1, bs_pl2) %>% 
         left_join(select(codes, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2), 
-                  by = c('계좌','종목코드')) |>
+                  by = c('계좌','종목코드')) %>%
         arrange(계좌, 종목코드, 거래일자)
       
       
       ###(2) 예수금 & 평잔 처리====
       if(mode=='assets'){
-        cash_w <- trade |>
-          filter(통화 == '원화') |>
-          group_by(거래일자, 계좌) |>
+        cash_w <- trade %>%
+          filter(통화 == '원화') %>%
+          group_by(거래일자, 계좌) %>%
           summarise(현금 = sum(현금수입 + 입출금 - 현금지출),
-                    .groups = 'keep') |>
-          pivot_wider(names_from = 계좌, values_from = 현금) |> 
+                    .groups = 'keep') %>%
+          pivot_wider(names_from = 계좌, values_from = 현금) %>% 
           ungroup()
         
-        cash_w_b <- cash_w |>
+        cash_w_b <- cash_w %>%
           mutate(across(-거래일자, cumsum))
         
-        cash_w_e <- cash_w_b |>
+        cash_w_e <- cash_w_b %>%
           mutate(across(-거래일자, cummean))
         
         
-        cash_d <- trade |>
-          filter(통화 == '달러') |>
-          group_by(거래일자, 계좌) |>
+        cash_d <- trade %>%
+          filter(통화 == '달러') %>%
+          group_by(거래일자, 계좌) %>%
           summarise(현금 = sum(현금수입 + 입출금 - 현금지출), 
-                    .groups = 'keep') |>
-          pivot_wider(names_from = 계좌, values_from = 현금) |> 
+                    .groups = 'keep') %>%
+          pivot_wider(names_from = 계좌, values_from = 현금) %>% 
           ungroup()
         
-        cash_d_b <- cash_d |>
+        cash_d_b <- cash_d %>%
           mutate(across(-거래일자, cumsum))
         
-        cash_d_e <- cash_d_b |>
+        cash_d_e <- cash_d_b %>%
           mutate(across(-거래일자, cummean))
         
-        cash_y <- trade |>
-          filter(통화 == '엔화') |>
-          group_by(거래일자, 계좌) |>
+        cash_y <- trade %>%
+          filter(통화 == '엔화') %>%
+          group_by(거래일자, 계좌) %>%
           summarise(현금 = sum(현금수입 + 입출금 - 현금지출), 
-                    .groups = 'keep') |>
-          pivot_wider(names_from = 계좌, values_from = 현금) |>
+                    .groups = 'keep') %>%
+          pivot_wider(names_from = 계좌, values_from = 현금) %>%
           ungroup()
         
-        cash_y_b <- cash_y |>
+        cash_y_b <- cash_y %>%
           mutate(across(-거래일자, cumsum))
         
-        cash_y_e <- cash_y_b |>
+        cash_y_e <- cash_y_b %>%
           mutate(across(-거래일자, cummean))
         
-        bs_pl |>
+        bs_pl %>%
           mutate(
             # 장부금액 = replace(장부금액, 종목명=='나무예수금', 
             #                    cash_w_b$나무),
@@ -684,7 +684,7 @@ MyAssets <- R6Class(
             실현수익률 = 실현손익 / 평잔 * 100)
         
       } else {
-        bs_pl |> 
+        bs_pl %>% 
           mutate(실현수익률 = if_else(is.na(실현손익 / 평잔 * 100), 0, 실현손익 / 평잔 * 100))
       }
       
@@ -704,18 +704,18 @@ MyAssets <- R6Class(
       #                   종목명=='롯데케미칼', 
       #                   거래일자 == self$today)$보유수량
 
-      price <- self$assets |>
-        select(계좌, 종목코드, 상품명, 평가금액) |> 
+      price <- self$assets %>%
+        select(계좌, 종목코드, 상품명, 평가금액) %>% 
         # mutate(평가금액 = replace(평가금액, 
         #                       상품명 == '우리사주 롯데케미칼', 
-        #                       p_lotte*q_lotte)) |> 
-        filter(평가금액!=0) |> 
+        #                       p_lotte*q_lotte)) %>% 
+        filter(평가금액!=0) %>% 
         # bind_rows(
           # mutate(self$my$inquire_balance(), 계좌 = '한투'),
           # mutate(self$my$inquire_balance_ovs(), 계좌 = '한투'),
           # mutate(self$my$inquire_balance_ovs('JPY'), 계좌 = '한투'),
           # mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')
-          # ) |>
+          # ) %>%
         select(계좌, 종목코드,평가금액)
 
       
@@ -736,18 +736,18 @@ MyAssets <- R6Class(
             TRUE ~ 장부금액)) %>% 
         select(-종가) 
         # left_join(
-        #   (self$assets |> select(종목코드, 기초평가손익)), 
+        #   (self$assets %>% select(종목코드, 기초평가손익)), 
         #   by="종목코드")
       
       dollar <-
-        (sum(filter(bs_pl, 통화 == '달러')$평가금액) * self$ex_usd) |> 
+        (sum(filter(bs_pl, 통화 == '달러')$평가금액) * self$ex_usd) %>% 
         round()
       
       yen <-   
-        (sum(filter(bs_pl, 통화 == '엔화')$평가금액) * self$ex_jpy) |> 
+        (sum(filter(bs_pl, 통화 == '엔화')$평가금액) * self$ex_jpy) %>% 
         round()
       
-      bs_pl |> 
+      bs_pl %>% 
         mutate(
           평가금액 = replace(평가금액, 종목명 == '달러자산', dollar),
           평가금액 = replace(평가금액, 종목명 == '엔화자산', yen),
@@ -755,14 +755,14 @@ MyAssets <- R6Class(
           # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
           평가손익 = 평가금액 - 장부금액, 
           평가수익률 = 평가손익 / 장부금액 * 100
-        ) |> 
+        ) %>% 
         arrange(desc(통화), desc(평가금액))
     },
     
     ## 6.(메서드)연금 평가반영 잔액-손익 테이블 생성========
     evaluate_bs_pl_pension = function(){
 
-      price <- self$pension |>
+      price <- self$pension %>%
         select(계좌, 종목코드, 평가금액, 기초평가손익) %>% 
         filter(평가금액!=0)
       
@@ -780,8 +780,8 @@ MyAssets <- R6Class(
         })
       }
       
-      bs_pl <- self$bs_pl_book_p |> 
-        filter(거래일자 == self$today) |> 
+      bs_pl <- self$bs_pl_book_p %>% 
+        filter(거래일자 == self$today) %>% 
         left_join(price, by=c("계좌","종목코드")) %>% 
         left_join(
           self$ks$stock_list %>% 
@@ -851,22 +851,22 @@ MyAssets <- R6Class(
           del <- c('세부자산군')
         }
         
-        class_returns <- asset_returns |> 
+        class_returns <- asset_returns %>% 
           select(-(계좌:보유수량), -세부자산군2, 
-                 -실현수익률, -평가수익률, -all_of(del)) |> 
-          mutate(across(-all_of(grp), ~.x * ex)) |> 
-          group_by(across(all_of(grp))) |> 
+                 -실현수익률, -평가수익률, -all_of(del)) %>% 
+          mutate(across(-all_of(grp), ~.x * ex)) %>% 
+          group_by(across(all_of(grp))) %>% 
           summarise(across(everything(), ~sum(.x, na.rm = TRUE)),
-                    .groups='drop') |> 
+                    .groups='drop') %>% 
           mutate(구분 = dist, .before=1)
           
-        class_returns |> 
+        class_returns %>% 
           add_row(구분 = dist, !!!grp_list, 
-                  !!(class_returns |>
-                       select(-구분,-all_of(grp)) |> 
+                  !!(class_returns %>%
+                       select(-구분,-all_of(grp)) %>% 
                        summarise(across(everything(), 
                                         ~sum(.x, na.rm=T))))
-                  )|> 
+                  )%>% 
           mutate(실현수익률 = 실현손익 / 평잔 * 100,
                  # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
                  평가수익률 = 평가손익 / 장부금액 * 100)
@@ -878,16 +878,16 @@ MyAssets <- R6Class(
         
         df <- self$bs_pl_mkt_a
         
-        krw_ret <- df |>  
-          filter(통화 == '원화') |> 
+        krw_ret <- df %>%  
+          filter(통화 == '원화') %>% 
           get_class_returns()
         
-        usd_ret <- df |> 
-          filter(통화 == '달러') |> 
+        usd_ret <- df %>% 
+          filter(통화 == '달러') %>% 
           get_class_returns()
         
-        jpy_ret <- df |> 
-          filter(통화 == '엔화') |> 
+        jpy_ret <- df %>% 
+          filter(통화 == '엔화') %>% 
           get_class_returns()
         
         bind_rows(krw_ret, usd_ret, jpy_ret)
@@ -896,27 +896,27 @@ MyAssets <- R6Class(
         
         df <- self$bs_pl_mkt_p
         
-        nhb_ret <- df |>  
-          filter(계좌 == '농협IRP') |> 
+        nhb_ret <- df %>%  
+          filter(계좌 == '농협IRP') %>% 
           get_class_returns()
         
-        shi_ret <- df |> 
-          filter(계좌 == '삼성DC') |> 
+        shi_ret <- df %>% 
+          filter(계좌 == '삼성DC') %>% 
           get_class_returns()
         
-        nhi_ret <- df |> 
-          filter(계좌 == '엔투저축연금') |> 
+        nhi_ret <- df %>% 
+          filter(계좌 == '엔투저축연금') %>% 
           get_class_returns()
         
-        kis_ret <- df |> 
-          filter(계좌 == '한투연금저축') |> 
+        kis_ret <- df %>% 
+          filter(계좌 == '한투연금저축') %>% 
           get_class_returns()
         
-        hay_ret <- df |> 
-          filter(계좌 == '엔투하영') |> 
+        hay_ret <- df %>% 
+          filter(계좌 == '엔투하영') %>% 
           get_class_returns()
         
-        ret <- df |> get_class_returns(total=T)
+        ret <- df %>% get_class_returns(total=T)
         
         bind_rows(nhb_ret, shi_ret, nhi_ret, kis_ret, hay_ret, ret)
         
@@ -931,12 +931,12 @@ MyAssets <- R6Class(
       usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
       jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)  
       
-      df <- df |> 
-        filter(자산군 != '외화자산') |>
+      df <- df %>% 
+        filter(자산군 != '외화자산') %>%
         mutate(평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
-               평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval)) |>
-        group_by(자산군, 세부자산군, 통화) |>
-        summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
+               평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval)) %>%
+        group_by(자산군, 세부자산군, 통화) %>%
+        summarize(평가금액 = sum(평가금액), .groups = 'drop') %>%
         mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2))
       
       df2 <- self$ret_a %>% 
@@ -977,8 +977,8 @@ MyAssets <- R6Class(
       
       
       ### 자산군별 배분현황
-      self$allo0 <- df2 |>
-        group_by(자산군) |>
+      self$allo0 <- df2 %>%
+        group_by(자산군) %>%
         summarize(across(-세부자산군, ~sum(.x))) %>% 
         mutate(평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
         select(자산군,평가금액,평가수익률,투자비중) %>% 
@@ -987,74 +987,96 @@ MyAssets <- R6Class(
       self$allo1 <- df2 %>% 
         mutate(평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
         select(자산군,세부자산군, 평가금액,평가수익률,투자비중) %>% 
-        bind_rows(df_t)
+        bind_rows(df_t) %>% 
+        group_by(자산군) %>% 
+        mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
       
       ### 통화화별 배분현황
-      self$allo2 <- df |>
-        group_by(통화) |>
-        summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) |> 
+      self$allo2 <- df %>%
+        group_by(통화) %>%
+        summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) %>% 
         add_row(통화='합계', 평가금액=sum(df$평가금액), 투자비중=100)
       
       
-      self$allo3 <- df |>
-        group_by(통화, 자산군) |>
+      self$allo3 <- df %>%
+        group_by(통화, 자산군) %>%
         summarize(평가금액 = sum(평가금액), 
-                  투자비중 = sum(투자비중), .groups = 'drop') |>
-        add_row(통화='합계', 평가금액 = sum(df$평가금액), 투자비중=100) |>
-        group_by(통화) |> 
+                  투자비중 = sum(투자비중), .groups = 'drop') %>%
+        add_row(통화='합계', 평가금액 = sum(df$평가금액), 투자비중=100) %>%
+        group_by(통화) %>% 
         mutate(통화별비중 = round(평가금액 / sum(평가금액) * 100,2))
       
       
       ### 불리오 배분현황
-      df_b <- self$bs_pl_mkt_a |>
+      df_b <- self$bs_pl_mkt_a %>%
         filter(계좌 == '불리오') %>% 
         mutate(평가금액 = round(평가금액*self$ex_usd,0))
       
-      self$allo4 <- df_b |>
-        group_by(세부자산군, 세부자산군2) |>
-        summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
-        mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2)) |>
+      self$allo4 <- df_b %>%
+        group_by(세부자산군, 세부자산군2) %>%
+        summarize(평가금액 = sum(평가금액), .groups = 'drop') %>%
+        mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2)) %>%
         add_row(세부자산군='합계', 
                 평가금액 = sum(df_b$평가금액), 투자비중=100)
       
-      self$allo5 <- df_b |>
-        group_by(세부자산군) |>
-        summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
-        mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2)) |>
+      self$allo5 <- df_b %>%
+        group_by(세부자산군) %>%
+        summarize(평가금액 = sum(평가금액), .groups = 'drop') %>%
+        mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2)) %>%
         add_row(세부자산군='합계', 
                 평가금액 = sum(df_b$평가금액), 투자비중=100)
     },
     
     ## 9.(메서드) 연금 자산군별 배분 현황====
     compute_allocation_p = function() {
-      df <- self$bs_pl_mkt_p |> 
-        group_by(계좌, 자산군, 세부자산군) |>
-        summarize(평가금액 = sum(평가금액), .groups = 'drop') |>
+      df <- self$bs_pl_mkt_p %>% 
+        group_by(계좌, 자산군, 세부자산군)  %>% 
+        summarize(평가금액 = sum(평가금액), .groups = 'drop') %>%
         mutate(투자비중 = round(평가금액 / sum(평가금액) * 100,2))
       
-      self$allo6 <- df |>
-        group_by(자산군) |>
-        summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) |> 
-        add_row(자산군='합계', 평가금액=sum(df$평가금액), 투자비중=100)
+      df2 <- self$ret_p %>%
+        filter(구분!='전체') %>% 
+        group_by(자산군, 세부자산군) %>% 
+        summarize(
+          평가금액 = sum(평가금액),
+          장부금액 = sum(장부금액),
+          평가손익 = sum(평가손익),
+          .groups = 'drop') %>% 
+        filter(자산군!="전체") %>% 
+        mutate(
+          투자비중 = round(평가금액 / sum(평가금액) * 100,2),
+          자산군=factor(자산군, 
+                     levels=c("채권","주식","대체자산","현금성", "전체"))) %>% 
+        arrange(자산군)
       
+      self$allo6 <-  
+        df2 %>% 
+        group_by(자산군) %>% 
+        summarize(across(-세부자산군, ~sum(.x))) %>% 
+        add_row(자산군='합계', 평가금액=sum(.$평가금액), 
+                장부금액=sum(.$장부금액), 평가손익=sum(.$평가손익),
+                투자비중=100) %>% 
+        mutate(평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
+        select(자산군,평가금액,평가수익률,투자비중)
       
-      self$allo7 <- df |>
-        group_by(자산군, 세부자산군)  |> 
-        summarize(평가금액 = sum(평가금액), 
-                  투자비중 = sum(투자비중), .groups = 'drop') |>
-        add_row(자산군='합계', 평가금액 = sum(df$평가금액), 
-                투자비중=100) |> 
-        group_by(자산군) |> 
+      self$allo7 <-  
+        df2 %>% 
+        add_row(자산군='합계', 평가금액=sum(.$평가금액), 
+                장부금액=sum(.$장부금액), 평가손익=sum(.$평가손익),
+                투자비중=100) %>% 
+        mutate(평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
+        select(자산군,세부자산군, 평가금액,평가수익률,투자비중) %>% 
+        group_by(자산군) %>% 
         mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
       
-      self$allo8 <- df |>
-        group_by(계좌) |>
-        summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) |> 
+      self$allo8 <- df %>%
+        group_by(계좌) %>%
+        summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) %>% 
         add_row(계좌='합계', 평가금액=sum(df$평가금액), 투자비중=100)
       
-      self$allo9 <- df |>
-        add_row(계좌='합계', 평가금액=sum(df$평가금액), 투자비중=100) |>
-        group_by(계좌) |>
+      self$allo9 <- df %>%
+        add_row(계좌='합계', 평가금액=sum(df$평가금액), 투자비중=100) %>%
+        group_by(계좌) %>%
         mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
     },
     
@@ -1165,7 +1187,7 @@ get_holidays <- function(start_year, end_year){
         fromJSON()
       
       if (x$response$body$items != "") {
-        x <- as_tibble(x$response$body$items$item)|> 
+        x <- as_tibble(x$response$body$items$item)%>% 
           transmute(
             기준일=as.Date(as.character(locdate), 
                         format='%Y%m%d'), 
@@ -1190,7 +1212,7 @@ Scrap_econ <- R6Class(
     initialize = function(){
       self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
                             extended_types=T)
-      get_config()$ecos |> ecos.setKey()
+      get_config()$ecos %>% ecos.setKey()
     },
     
     ##2. 일별 금융데이터 수집====
