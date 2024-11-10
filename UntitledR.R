@@ -468,3 +468,16 @@ self$allo7 <- df |>
   group_by(자산군) |> 
   mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
 
+
+
+df2 <- self$bs_pl_mkt_a %>% 
+  filter(장부금액!=0) %>% 
+  select(종목코드) %>% 
+  distinct(종목코드) %>% 
+  left_join(
+    self$assets %>% 
+      select(종목코드, 상품명) %>%
+      distinct(종목코드, 상품명), 
+    by='종목코드')
+
+df1 %>% bind_rows(df2)
