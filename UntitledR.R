@@ -412,7 +412,7 @@ df <- bs_pl %>%
 
 source("functions.R", echo=F)
 
-self <- MyAssets$new()
+self <- MyAssets$new(base_dt = '2024-11-15')
 
 df2 <- self$ret_p %>%
   filter(구분!='전체') %>% 
@@ -469,15 +469,65 @@ self$allo7 <- df |>
   mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
 
 
+df <- self$bs_pl_mkt_a
+usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
+jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)  
 
-df2 <- self$bs_pl_mkt_a %>% 
-  filter(장부금액!=0) %>% 
-  select(종목코드) %>% 
-  distinct(종목코드) %>% 
-  left_join(
-    self$assets %>% 
-      select(종목코드, 상품명) %>%
-      distinct(종목코드, 상품명), 
-    by='종목코드')
+df <- df %>% 
+  filter(자산군 != '외화자산') %>%
+  mutate(평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
+         평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval))
 
-df1 %>% bind_rows(df2)
+
+
+df1 <- self$assets %>% 
+  bind_rows(self$pension) %>% 
+  distinct(계좌, 종목코드, 자산군, 세부자산군, 상품명) %>% 
+  right_join(
+    df %>%
+      bind_rows(self$bs_pl_mkt_p) %>% 
+      filter(장부금액!=0) %>% 
+      group_by(계좌, 종목코드) %>% 
+      summarise(평가금액=sum(평가금액)), 
+    by=c('계좌','종목코드')) %>% 
+  group_by(종목코드) %>% 
+  summarise(자산군=last(자산군), 
+            세부자산군=last(세부자산군),
+            상품명 = last(상품명),
+            평가금액=sum(평가금액)) %>% 
+  select(-종목코드) %>% 
+  filter(자산군!="외화자산")
+
+df2 <- df1 %>% 
+  group_by(자산군, 세부자산군) %>% 
+  summarise(상품명 = "", 평가금액=sum(평가금액))
+
+df3 <- df1 %>% 
+  group_by(자산군) %>% 
+  summarise(세부자산군 = '', 상품명 = '', 평가금액=sum(평가금액))
+
+df4 <- df1 %>% 
+  summarise(자산군="<합계>", 세부자산군 = '', 상품명 = '', 평가금액=sum(평가금액))  
+
+bind_rows(df1,df2,df3,df4) %>% 
+  arrange(자산군, 세부자산군, desc(평가금액)) %>% 
+  mutate(평가금액=scales::comma(평가금액))
+
+df2 <- self$pension %>% 
+  distinct(계좌, 종목코드, 자산군, 세부자산군, 상품명) %>% 
+  right_join(
+    self$bs_pl_mkt_p %>% 
+      filter(장부금액!=0) %>% 
+      group_by(계좌, 종목코드) %>% 
+      summarise(평가금액=sum(평가금액)), 
+    by=c('계좌','종목코드')) %>% 
+  group_by(종목코드) %>% 
+  summarise(자산군=last(자산군), 
+            세부자산군=last(세부자산군),
+            상품명 = last(상품명),
+            평가금액=sum(평가금액)) %>% 
+  select(-종목코드)
+
+
+df1 %>% bind_rows(df2) %>% 
+  arrange(자산군, 세부자산군, desc(평가금액))
