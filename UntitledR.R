@@ -410,9 +410,6 @@ df <- bs_pl %>%
 
 
 
-source("functions.R", echo=F)
-
-self <- MyAssets$new(base_dt = '2024-11-15')
 
 df2 <- self$ret_p %>%
   filter(구분!='전체') %>% 
@@ -478,6 +475,10 @@ df <- df %>%
   mutate(평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
          평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval))
 
+
+source("functions.R", echo=F)
+
+self <- MyAssets$new(base_dt = '2024-11-15')
 
 
 df1 <- self$assets %>% 
