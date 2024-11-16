@@ -432,6 +432,20 @@ body <- dashboardBody(
           fluidRow(
             uiOutput("bs_pl_mkt_p")
           )
+        ),
+        ###e. 통합자산군별====
+        tabPanel(
+          title="통합자산군별",
+          fluidRow(
+            uiOutput("t_asset_class")
+          )
+        ),
+        ###f. 통합상품별====
+        tabPanel(
+          title="통합상품별",
+          fluidRow(
+            uiOutput("t_commodity")
+          )
         )
       )
     ),
@@ -563,24 +577,11 @@ server <- function(input, output, session) {
   ma <- reactive({
     input$base_date
     sk()
-    input$kis
     maa$run_book()
     maa$run_valuation()
     maa
   })
 
-  
-  # renew_bs <- reactive({
-  #   maa$run_book()
-  #   maa$run_valuation()
-  #   maa
-  # })
-  
-  # renew_prices <- reactive({
-  #   self$update_new_price()
-  #   self$run_valuation()
-  # })
-  
   
   ctg <- reactive({
     sk2()
@@ -1221,6 +1222,27 @@ server <- function(input, output, session) {
       set_table_properties(layout='autofit') |>
       colformat_double(j=5:9, digits = 0) |>
       colformat_double(j=10:11, digits = 2) |>
+      htmltools_value()
+  })
+  
+  ## e. 통합자산군별====
+
+  output$t_asset_class <- renderUI({
+    ma()$t_class |>
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=4, digits = 0) |>
+      htmltools_value()
+  })
+  
+  ## f. 통합상품별====
+  output$t_commodity <- renderUI({
+    ma()$t_comm |>
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=5, digits = 0) |>
       htmltools_value()
   })
   

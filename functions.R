@@ -507,7 +507,7 @@ MyAssets <- R6Class(
     allo3 = NULL, allo4 = NULL, allo5 = NULL, 
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
     allo9 = NULL, inflow_table = NULL, inflow_plot= NULL,
-    inflow_bal=NULL,
+    inflow_bal=NULL, t_class=NULL, t_comm=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(base_dt=NULL) {
@@ -1080,6 +1080,59 @@ MyAssets <- R6Class(
         mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
     },
     
+    compute_total = function(){
+      df <- self$bs_pl_mkt_a
+      
+      usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
+      jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)  
+      
+      df1 <- self$assets %>% 
+        bind_rows(self$pension) %>% 
+        distinct(계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>% 
+        right_join(
+          df %>% 
+            filter(자산군 != '외화자산') %>%
+            mutate(평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
+                   평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval))%>%
+            bind_rows(self$bs_pl_mkt_p) %>% 
+            filter(장부금액!=0) %>% 
+            group_by(계좌, 종목코드) %>% 
+            summarise(평가금액=sum(평가금액)), 
+          by=c('계좌','종목코드')) %>% 
+        group_by(종목코드) %>% 
+        summarise(자산군=last(자산군), 
+                  세부자산군=last(세부자산군),
+                  세부자산군2=last(세부자산군2),
+                  상품명 = last(상품명),
+                  평가금액=sum(평가금액)) %>% 
+        select(-종목코드) %>% 
+        filter(자산군!="외화자산")
+      
+      df2 <- df1 %>% 
+        group_by(자산군, 세부자산군, 세부자산군2) %>% 
+        summarise(상품명 = "", 평가금액=sum(평가금액))
+      
+      df3 <- df1 %>% 
+        group_by(자산군, 세부자산군) %>% 
+        summarise(세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액))
+      
+      df4 <- df1 %>% 
+        group_by(자산군) %>% 
+        summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액))
+      
+      df5 <- df1 %>% 
+        summarise(자산군="<합계>", 세부자산군 = '', 
+                  세부자산군2 = '',상품명 = '', 평가금액=sum(평가금액))  
+      
+      self$t_class <- bind_rows(df2,df3,df4,df5) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>% 
+        select(-상품명)
+      
+      
+      self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액))
+    },
+    
     ## 10.(메서드) 평가금액 포함 자료 산출====
     run_valuation = function(){
       self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
@@ -1090,6 +1143,7 @@ MyAssets <- R6Class(
       self$ret_p2 <- self$get_class_returns('pension', depth = 1)
       self$compute_allocation_a()
       self$compute_allocation_p()
+      self$compute_total()
     },
     
     ## 11.(메서드) 장부금액 및 현금성자산 추이 산출====
