@@ -918,7 +918,7 @@ MyAssets <- R6Class(
         
         ret <- df %>% get_class_returns(total=T)
         
-        bind_rows(nhb_ret, shi_ret, nhi_ret, kis_ret, hay_ret, ret)
+        bind_rows(ret, nhb_ret, shi_ret, nhi_ret, kis_ret, hay_ret)
         
       }
       
@@ -1109,20 +1109,23 @@ MyAssets <- R6Class(
         filter(자산군!="외화자산")
       
       df2 <- df1 %>% 
-        group_by(자산군, 세부자산군, 세부자산군2) %>% 
-        summarise(상품명 = "", 평가금액=sum(평가금액))
+        summarise(자산군="<합계>", 세부자산군 = '', 
+                  세부자산군2 = '',상품명 = '', 평가금액=sum(평가금액))
       
       df3 <- df1 %>% 
-        group_by(자산군, 세부자산군) %>% 
-        summarise(세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액))
+        group_by(자산군) %>% 
+        summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액)) %>% 
+        mutate(비중1 = round(평가금액/df2$평가금액, 2)*100)
       
       df4 <- df1 %>% 
-        group_by(자산군) %>% 
-        summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액))
+        group_by(자산군, 세부자산군) %>% 
+        summarise(세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액)) %>% 
+        mutate(비중2 = round(평가금액/df2$평가금액, 2)*100)
       
       df5 <- df1 %>% 
-        summarise(자산군="<합계>", 세부자산군 = '', 
-                  세부자산군2 = '',상품명 = '', 평가금액=sum(평가금액))  
+        group_by(자산군, 세부자산군, 세부자산군2) %>% 
+        summarise(상품명 = "", 평가금액=sum(평가금액)) %>% 
+        mutate(비중3 = round(평가금액/df2$평가금액, 2)*100)
       
       self$t_class <- bind_rows(df2,df3,df4,df5) %>% 
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>% 
@@ -1130,7 +1133,40 @@ MyAssets <- R6Class(
       
       
       self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>% 
-        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액))
+        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>% 
+        select(!c(비중1, 비중2, 비중3))
+    },
+    
+    total_trading = function(dates){
+      
+      if(length(dates)==1){
+        start = dates
+        end = dates
+      } else {
+        start = dates[1]
+        end = dates[2]
+      }
+      
+      df1 <- self$read('assets') %>% 
+        bind_rows(self$read('pension'))
+      
+      df2 <- self$read('assets_daily') %>% 
+        bind_rows(self$read('pension_daily')) %>% 
+        filter(between_time(거래일자, start, end))
+      
+      df3 <- df2 %>% left_join(
+        (df1 %>% transmute(계좌, 통화, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명)), 
+        by = c('계좌','종목코드')) %>% 
+        filter(자산군!='현금성') %>% 
+        filter(매입액!=0|매도액!=0) %>% 
+        select(거래일자, 자산군, 세부자산군, 세부자산군2, 계좌, 상품명, 매도액, 매입액) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2, desc(매도액), desc(매입액))
+      
+      df4 <- df3 %>% summarise(거래일자=NA_Date_, 계좌='', 자산군='', 세부자산군='',
+                               세부자산군2='', 상품명='합계', 매도액=sum(매도액), 
+                               매입액=sum(매입액))
+      df3 %>% bind_rows(df4)
+      
     },
     
     ## 10.(메서드) 평가금액 포함 자료 산출====

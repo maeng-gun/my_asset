@@ -306,6 +306,23 @@ body <- dashboardBody(
               )
             )
           )
+        ),
+        
+        ###d. 종합거래내역====
+        tabPanel(
+          title="종합거래내역",
+          fluidRow(
+            airDatepickerInput(
+              inputId = 'total_trade_date',
+              label = "거래일자",
+              range = T,
+              addon = "none",
+              value = c(Sys.Date(), Sys.Date())
+            )
+          ),
+          fluidRow(
+            uiOutput("total_trade_table")
+          )
         )
       )
     ),
@@ -1103,6 +1120,23 @@ server <- function(input, output, session) {
         htmltools_value()
   }  
   
+  ##d. 종합거래내역====
+  
+  output$total_trade_table <- renderUI({
+    
+    if(!is.null(input$total_trade_date)){
+      ma()$total_trading(input$total_trade_date)|>
+        flextable() |>
+        theme_box() |>
+        merge_v(j=2:5) |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=7:8, digits = 0) |>
+        htmltools_value() 
+    } else{
+      
+    }
+  })
+  
   # 2) 자산운용 현황====
   
 
@@ -1233,6 +1267,7 @@ server <- function(input, output, session) {
       theme_vanilla() |>
       set_table_properties(layout='autofit') |>
       colformat_double(j=4, digits = 0) |>
+      colformat_double(j=5:6, digits = 2) |>
       htmltools_value()
   })
   

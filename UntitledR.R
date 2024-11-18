@@ -471,75 +471,30 @@ source("functions.R", echo=F)
 
 self <- MyAssets$new()
 
-df <- self$bs_pl_mkt_a
+start <- '2024-11-01'
+end <- '2024-11-18'
 
-usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
-jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)  
-
-df1 <- self$assets %>% 
-  bind_rows(self$pension) %>% 
-  distinct(계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>% 
-  right_join(
-     df %>% 
-      filter(자산군 != '외화자산') %>%
-      mutate(평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
-             평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval))%>%
-      bind_rows(self$bs_pl_mkt_p) %>% 
-      filter(장부금액!=0) %>% 
-      group_by(계좌, 종목코드) %>% 
-      summarise(평가금액=sum(평가금액)), 
-    by=c('계좌','종목코드')) %>% 
-  group_by(종목코드) %>% 
-  summarise(자산군=last(자산군), 
-            세부자산군=last(세부자산군),
-            세부자산군2=last(세부자산군2),
-            상품명 = last(상품명),
-            평가금액=sum(평가금액)) %>% 
-  select(-종목코드) %>% 
-  filter(자산군!="외화자산")
-
-df2 <- df1 %>% 
-  group_by(자산군, 세부자산군, 세부자산군2) %>% 
-  summarise(상품명 = "", 평가금액=sum(평가금액))
-
-df3 <- df1 %>% 
-  group_by(자산군, 세부자산군) %>% 
-  summarise(세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액))
-
-df4 <- df1 %>% 
-  group_by(자산군) %>% 
-  summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액))
-
-df5 <- df1 %>% 
-  summarise(자산군="<합계>", 세부자산군 = '', 
-            세부자산군2 = '',상품명 = '', 평가금액=sum(평가금액))  
-
-df6 <- bind_rows(df2,df3,df4,df5) %>% 
-  arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>% 
-  mutate(평가금액=scales::comma(평가금액))
-
-
-df7 <- bind_rows(df1,df2,df3,df4,df5) %>% 
-  arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>% 
-  mutate(평가금액=scales::comma(평가금액))
+total_tranding <- function(start, end){
+  df1 <- self$read('assets') %>% 
+    bind_rows(self$read('pension'))
+  
+  df2 <- self$read('assets_daily') %>% 
+    bind_rows(self$read('pension_daily')) %>% 
+    filter(between_time(거래일자, start, end))
+  
+  df3 <- df2 %>% left_join(
+    (df1 %>% transmute(계좌, 통화, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명)), 
+    by = c('계좌','종목코드')) %>% 
+    filter(자산군!='현금성') %>% 
+    filter(매입액!=0|매도액!=0) %>% 
+    select(거래일자, 계좌, 자산군, 세부자산군, 세부자산군2, 상품명, 매도액, 매입액) %>% 
+    arrange(자산군, 세부자산군, 세부자산군2, desc(매도액), desc(매입액))
+  
+  df4 <- df3 %>% summarise(거래일자=NA_Date_, 계좌='', 자산군='', 세부자산군='',
+                           세부자산군2='', 상품명='합계', 매도액=sum(매도액), 
+                           매입액=sum(매입액))
+  df3 %>% bind_rows(df4)
+}
 
 
 
-df2 <- self$pension %>% 
-  distinct(계좌, 종목코드, 자산군, 세부자산군, 상품명) %>% 
-  right_join(
-    self$bs_pl_mkt_p %>% 
-      filter(장부금액!=0) %>% 
-      group_by(계좌, 종목코드) %>% 
-      summarise(평가금액=sum(평가금액)), 
-    by=c('계좌','종목코드')) %>% 
-  group_by(종목코드) %>% 
-  summarise(자산군=last(자산군), 
-            세부자산군=last(세부자산군),
-            상품명 = last(상품명),
-            평가금액=sum(평가금액)) %>% 
-  select(-종목코드)
-
-
-df1 %>% bind_rows(df2) %>% 
-  arrange(자산군, 세부자산군, desc(평가금액))
