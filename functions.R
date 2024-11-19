@@ -1082,58 +1082,61 @@ MyAssets <- R6Class(
     
     compute_total = function(){
       df <- self$bs_pl_mkt_a
-      
+
       usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
-      jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)  
-      
-      df1 <- self$assets %>% 
-        bind_rows(self$pension) %>% 
-        distinct(계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>% 
+      jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
+
+      df1 <- self$assets %>%
+        bind_rows(self$pension) %>%
+        distinct(계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
         right_join(
-          df %>% 
+          df %>%
             filter(자산군 != '외화자산') %>%
             mutate(평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
                    평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval))%>%
-            bind_rows(self$bs_pl_mkt_p) %>% 
-            filter(장부금액!=0) %>% 
-            group_by(계좌, 종목코드) %>% 
-            summarise(평가금액=sum(평가금액)), 
-          by=c('계좌','종목코드')) %>% 
-        group_by(종목코드) %>% 
-        summarise(자산군=last(자산군), 
+            bind_rows(self$bs_pl_mkt_p) %>%
+            filter(장부금액!=0) %>%
+            group_by(계좌, 종목코드) %>%
+            summarise(평가금액=sum(평가금액),.groups = 'drop'),
+          by=c('계좌','종목코드')) %>%
+        group_by(종목코드) %>%
+        summarise(자산군=last(자산군),
                   세부자산군=last(세부자산군),
                   세부자산군2=last(세부자산군2),
                   상품명 = last(상품명),
-                  평가금액=sum(평가금액)) %>% 
-        select(-종목코드) %>% 
+                  평가금액=sum(평가금액),
+                  .groups = 'drop') %>%
+        select(-종목코드) %>%
         filter(자산군!="외화자산")
-      
-      df2 <- df1 %>% 
-        summarise(자산군="<합계>", 세부자산군 = '', 
-                  세부자산군2 = '',상품명 = '', 평가금액=sum(평가금액))
-      
-      df3 <- df1 %>% 
-        group_by(자산군) %>% 
-        summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액)) %>% 
+
+      df2 <- df1 %>%
+        summarise(자산군="<합계>", 세부자산군 = '',
+                  세부자산군2 = '',상품명 = '', 평가금액=sum(평가금액),
+                  .groups = 'drop')
+
+      df3 <- df1 %>%
+        group_by(자산군) %>%
+        summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액)) %>%
         mutate(비중1 = round(평가금액/df2$평가금액, 2)*100)
-      
-      df4 <- df1 %>% 
-        group_by(자산군, 세부자산군) %>% 
-        summarise(세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액)) %>% 
+
+      df4 <- df1 %>%
+        group_by(자산군, 세부자산군) %>%
+        summarise(세부자산군2 = '', 상품명 = '', 평가금액=sum(평가금액),
+                  .groups = 'drop') %>%
         mutate(비중2 = round(평가금액/df2$평가금액, 2)*100)
-      
-      df5 <- df1 %>% 
-        group_by(자산군, 세부자산군, 세부자산군2) %>% 
-        summarise(상품명 = "", 평가금액=sum(평가금액)) %>% 
+
+      df5 <- df1 %>%
+        group_by(자산군, 세부자산군, 세부자산군2) %>%
+        summarise(상품명 = "", 평가금액=sum(평가금액),.groups = 'drop') %>%
         mutate(비중3 = round(평가금액/df2$평가금액, 2)*100)
-      
-      self$t_class <- bind_rows(df2,df3,df4,df5) %>% 
-        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>% 
+
+      self$t_class <- bind_rows(df2,df3,df4,df5) %>%
+        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
         select(-상품명)
-      
-      
-      self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>% 
-        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>% 
+
+
+      self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>%
+        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
         select(!c(비중1, 비중2, 비중3))
     },
     
@@ -1164,7 +1167,7 @@ MyAssets <- R6Class(
       
       df4 <- df3 %>% summarise(거래일자=NA_Date_, 계좌='', 자산군='', 세부자산군='',
                                세부자산군2='', 상품명='합계', 매도액=sum(매도액), 
-                               매입액=sum(매입액))
+                               매입액=sum(매입액),.groups = 'drop')
       df3 %>% bind_rows(df4)
       
     },
@@ -1187,12 +1190,12 @@ MyAssets <- R6Class(
       
       df1 <- self$bs_pl_book_a %>% 
         group_by(거래일자) %>% 
-        summarise(장부금액 = sum(장부금액)) %>% 
+        summarise(장부금액 = sum(장부금액), .groups='drop') %>% 
         left_join(
           self$bs_pl_book_a %>% 
             filter(자산군=='현금성', 통화=='원화') %>% 
             group_by(거래일자) %>% 
-            summarise(현금성자산 = sum(장부금액)),
+            summarise(현금성자산 = sum(장부금액), .groups='drop'),
           by = '거래일자'
         ) 
       
