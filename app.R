@@ -1266,8 +1266,9 @@ server <- function(input, output, session) {
       flextable() |>
       theme_vanilla() |>
       set_table_properties(layout='autofit') |>
-      colformat_double(j=4, digits = 0) |>
-      colformat_double(j=5:6, digits = 2) |>
+      colformat_double(j=4:5, digits = 0) |>
+      colformat_double(j=6, digits = 2) |>
+      colformat_double(j=7:9, digits = 1) |>
       htmltools_value()
   })
   
@@ -1277,7 +1278,8 @@ server <- function(input, output, session) {
       flextable() |>
       theme_vanilla() |>
       set_table_properties(layout='autofit') |>
-      colformat_double(j=5, digits = 0) |>
+      colformat_double(j=5:6, digits = 0) |>
+      colformat_double(j=7, digits = 2) |>
       htmltools_value()
   })
   

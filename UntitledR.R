@@ -471,30 +471,10 @@ source("functions.R", echo=F)
 
 self <- MyAssets$new()
 
-start <- '2024-11-01'
-end <- '2024-11-18'
+aa <- self$t_class %>% 
+  select(!c(비중1, 비중2, 비중3)) %>% 
+  mutate(기준일='2024-11-20', .before=1)
 
-total_tranding <- function(start, end){
-  df1 <- self$read('assets') %>% 
-    bind_rows(self$read('pension'))
-  
-  df2 <- self$read('assets_daily') %>% 
-    bind_rows(self$read('pension_daily')) %>% 
-    filter(between_time(거래일자, start, end))
-  
-  df3 <- df2 %>% left_join(
-    (df1 %>% transmute(계좌, 통화, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명)), 
-    by = c('계좌','종목코드')) %>% 
-    filter(자산군!='현금성') %>% 
-    filter(매입액!=0|매도액!=0) %>% 
-    select(거래일자, 계좌, 자산군, 세부자산군, 세부자산군2, 상품명, 매도액, 매입액) %>% 
-    arrange(자산군, 세부자산군, 세부자산군2, desc(매도액), desc(매입액))
-  
-  df4 <- df3 %>% summarise(거래일자=NA_Date_, 계좌='', 자산군='', 세부자산군='',
-                           세부자산군2='', 상품명='합계', 매도액=sum(매도액), 
-                           매입액=sum(매입액))
-  df3 %>% bind_rows(df4)
-}
-
-
+dbxUpsert(self$con,'return', aa, 
+          where_cols = c('기준일','자산군','세부자산군','세부자산군2'))
 
