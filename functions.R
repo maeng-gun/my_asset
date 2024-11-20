@@ -126,6 +126,12 @@ MyData <- R6Class(
     ##5.(메서드) 테이블 목록 ====
     table_list = function(){
       dbListTables(self$con)
+    },
+    
+    ##6.(메서드) 추가/갱신하기 ====
+    upsert = function(df, name, cols){
+      dbxUpsert(conn = self$con, table = name, records = df,
+                where_cols = cols)
     }
   )
 )
@@ -1144,7 +1150,9 @@ MyAssets <- R6Class(
         mutate(비중3 = round(평가금액/df2$평가금액*100, 1))
       
       df6 <- tibble_row(
-        자산군='<환차손익>', 평가손익= (sum(df3$장부금액) - df2$장부금액),
+        자산군='<환차손익>', 세부자산군='', 세부자산군2 = '',
+        평가금액=0,
+        평가손익= (sum(df3$장부금액) - df2$장부금액),
         평가수익률 = round(평가손익/df2$평가금액*100,2)
       )
       
@@ -1158,6 +1166,10 @@ MyAssets <- R6Class(
         select(!c(상품명, 장부금액)) %>% 
         bind_rows(df6)
       
+      self$t_class %>% 
+        select(!c(비중1, 비중2, 비중3)) %>% 
+        mutate(기준일=self$today, .before=1) %>% 
+        self$upsert('return', c('기준일','자산군','세부자산군','세부자산군2'))
       
       self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>%
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%

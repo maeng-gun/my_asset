@@ -471,10 +471,8 @@ source("functions.R", echo=F)
 
 self <- MyAssets$new()
 
-aa <- self$t_class %>% 
-  select(!c(비중1, 비중2, 비중3)) %>% 
-  mutate(기준일='2024-11-20', .before=1)
 
-dbxUpsert(self$con,'return', aa, 
-          where_cols = c('기준일','자산군','세부자산군','세부자산군2'))
+
+dbxUpsert(self$con,, aa, 
+          where_cols = )
 
