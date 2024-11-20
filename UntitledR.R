@@ -473,6 +473,13 @@ self <- MyAssets$new()
 
 
 
-dbxUpsert(self$con,, aa, 
-          where_cols = )
 
+self$t_class
+
+
+
+self$t_class %>% 
+  left_join(
+  df1 %>% bind_cols(df2),
+  by=c('자산군','세부자산군','세부자산군2')
+)

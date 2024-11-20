@@ -1150,26 +1150,57 @@ MyAssets <- R6Class(
         mutate(비중3 = round(평가금액/df2$평가금액*100, 1))
       
       df6 <- tibble_row(
-        자산군='<환차손익>', 세부자산군='', 세부자산군2 = '',
+        자산군='환차손익', 세부자산군='', 세부자산군2 = '',
         평가금액=0,
         평가손익= (sum(df3$장부금액) - df2$장부금액),
         평가수익률 = round(평가손익/df2$평가금액*100,2)
       )
       
-      self$t_class <- bind_rows(df2,df3,df4,df5) %>%
+       df7 <- bind_rows(df2,df3,df4,df5) %>%
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
         mutate(
           평가손익 = round(평가금액 - 장부금액,0),
-          평가수익률 = round(평가손익 / 장부금액 * 100,2),
-          .after=6
+          평가수익률 = round(평가손익 / 장부금액 * 100,2)
         ) %>% 
         select(!c(상품명, 장부금액)) %>% 
         bind_rows(df6)
       
-      self$t_class %>% 
+      df7 %>% 
         select(!c(비중1, 비중2, 비중3)) %>% 
         mutate(기준일=self$today, .before=1) %>% 
         self$upsert('return', c('기준일','자산군','세부자산군','세부자산군2'))
+      
+      dates <- self$read_obj('return') %>% 
+        distinct(기준일) %>% 
+        arrange(desc(기준일)) %>% 
+        pull()
+      
+      start <- dates[1]
+      end <- dates[2]
+      
+      df8 <- self$read_obj('return') %>% 
+        filter(기준일 %in% c(end, start)) %>% 
+        collect() %>% 
+        select(-평가금액,-평가수익률) %>% 
+        spread(key=기준일, value=평가손익, drop=T) %>% 
+        rename_with(~c("전일","당일"), .cols=4:5) %>% 
+        mutate(`전일대비(손익)` = .[[5]] - .[[4]]) %>% 
+        select(!전일:당일)
+      
+      df9 <- self$read_obj('return') %>% 
+        filter(기준일 %in% c(end, start)) %>% 
+        collect() %>% 
+        select(-평가금액,-평가손익) %>% 
+        spread(key=기준일, value=평가수익률, drop=T) %>% 
+        rename_with(~c("전일","당일"), .cols=4:5) %>% 
+        transmute(`전일대비(수익률)` = .[[5]] - .[[4]])
+      
+      self$t_class <- 
+        df7 %>% 
+        left_join(
+          df8 %>% bind_cols(df9),
+          by=c('자산군','세부자산군','세부자산군2')
+        )
       
       self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>%
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
