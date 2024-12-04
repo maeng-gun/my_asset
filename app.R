@@ -593,6 +593,7 @@ server <- function(input, output, session) {
   
   ma <- reactive({
     input$base_date
+    input$kis
     sk()
     maa$run_book()
     maa$run_valuation()
@@ -1143,8 +1144,8 @@ server <- function(input, output, session) {
   observeEvent(input$kis,{
     w1$show()
 
-    maa$update_new_price()
-    maa$run_valuation()
+    ma()$update_new_price()
+    ma()$run_valuation()
 
     w1$hide()
   })  
