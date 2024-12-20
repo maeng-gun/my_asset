@@ -26,7 +26,13 @@ sidebar <- dashboardSidebar(
       tabName = 'trading_record'
     ),
     menuItem(
-      text = "자산운용 현황",
+      text = "통합 자산운용 현황",
+      icon = icon("sack-dollar"),
+      tabName = "pf_total",
+      selected = T
+    ),
+    menuItem(
+      text = "계좌별 자산운용 현황",
       icon = icon("sack-dollar"),
       tabName = "pf_bs_pl"
     ),
@@ -326,12 +332,45 @@ body <- dashboardBody(
         )
       )
     ),
-    ##2) 자산운용 현황====
+    ##2) 통합 자산운용 현황====
     tabItem(
-      tabName = 'pf_bs_pl',
+      tabName = 'pf_total',
       actionButton('kis','주가 업데이트'),
       br(),
       br(),
+      tabBox(
+        id='pf_box2',
+        width=12,
+        status='primary',
+        type='tabs',
+        
+        ###a. 통합손익현황====
+        tabPanel(
+          title="통합손익현황",
+          fluidRow(
+            plotOutput("total_profit", height = "800px")
+          )
+        ),
+        
+        ###b. 통합자산군별====
+        tabPanel(
+          title="통합자산군별",
+          fluidRow(
+            uiOutput("t_asset_class")
+          )
+        ),
+        ###c. 통합상품별====
+        tabPanel(
+          title="통합상품별",
+          fluidRow(
+            uiOutput("t_commodity")
+          )
+        )
+      )
+    ),
+    ##3) 계좌별 자산운용 현황====
+    tabItem(
+      tabName = 'pf_bs_pl',
       tabBox(
         id='pf_box1',
         width=12,
@@ -449,24 +488,11 @@ body <- dashboardBody(
           fluidRow(
             uiOutput("bs_pl_mkt_p")
           )
-        ),
-        ###e. 통합자산군별====
-        tabPanel(
-          title="통합자산군별",
-          fluidRow(
-            uiOutput("t_asset_class")
-          )
-        ),
-        ###f. 통합상품별====
-        tabPanel(
-          title="통합상품별",
-          fluidRow(
-            uiOutput("t_commodity")
-          )
         )
       )
     ),
-    ##3) 자산/유동성 추이====
+    
+    ##4) 자산/유동성 추이====
     tabItem(
       tabName = "pf_liquid",
       box(
@@ -1138,7 +1164,40 @@ server <- function(input, output, session) {
     }
   })
   
-  # 2) 자산운용 현황====
+  # 2) 통합 자산운용 현황====
+  
+  ## a. 통합손익현황====
+  
+  output$total_profit <- renderPlot({
+    ma()$plot_total_profit()
+  })
+  
+  ## b. 통합자산군별====
+  
+  output$t_asset_class <- renderUI({
+    ma()$t_class |>
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=c(4,8,10), digits = 0) |>
+      colformat_double(j=c(9,11), digits = 2) |>
+      colformat_double(j=5:7, digits = 1) |>
+      htmltools_value()
+  })
+  
+  ## c. 통합상품별====
+  output$t_commodity <- renderUI({
+    ma()$t_comm |>
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=5:6, digits = 0) |>
+      colformat_double(j=7, digits = 2) |>
+      htmltools_value()
+  })
+  
+  
+  # 3) 계좌별 자산운용 현황====
   
 
   observeEvent(input$kis,{
@@ -1260,29 +1319,6 @@ server <- function(input, output, session) {
       htmltools_value()
   })
   
-  ## e. 통합자산군별====
-
-  output$t_asset_class <- renderUI({
-    ma()$t_class |>
-      flextable() |>
-      theme_vanilla() |>
-      set_table_properties(layout='autofit') |>
-      colformat_double(j=c(4,8,10), digits = 0) |>
-      colformat_double(j=c(9,11), digits = 2) |>
-      colformat_double(j=5:7, digits = 1) |>
-      htmltools_value()
-  })
-  
-  ## f. 통합상품별====
-  output$t_commodity <- renderUI({
-    ma()$t_comm |>
-      flextable() |>
-      theme_vanilla() |>
-      set_table_properties(layout='autofit') |>
-      colformat_double(j=5:6, digits = 0) |>
-      colformat_double(j=7, digits = 2) |>
-      htmltools_value()
-  })
   
   # 3) 자산/유동성 추이====
   

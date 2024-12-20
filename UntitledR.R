@@ -473,13 +473,55 @@ self <- MyAssets$new()
 
 
 
+self$initialize()
 
-self$t_class
+df <- self$read_obj('return') %>% 
+  filter(자산군=='<합계>') %>% 
+  collect() %>% 
+  transmute(기준일=as.Date(기준일),평가금액)
 
+df1 <- df %>% full_join(
+    self$pension_daily %>%
+      bind_rows(self$assets_daily) %>% 
+      filter(거래일자 %>% between(first(df$기준일),last(df$기준일))) %>% 
+      group_by(거래일자) %>% 
+      summarise(입출금=sum(입출금)) %>% 
+      rename(기준일=거래일자),
+    by='기준일'
+  ) %>% 
+  arrange(기준일) %>% 
+  fill(평가금액, .direction = 'down') %>% 
+  mutate(입출금=na.fill(입출금,0)) %>% 
+  mutate(
+    일간수익률 = na.fill((평가금액-입출금-lag(평가금액))/lag(평가금액)*100,0),
+    누적수익률 = (cumprod(일간수익률/100+1)-1)*100,
+    일간손익= na.fill(diff_vec(평가금액, silent = T)-입출금,0)/10000,
+    손익누계= cumsum(일간손익))
 
+fig1 <- df1 %>% 
+  ggplot(aes(x=기준일)) +
+  geom_line(aes(y=누적수익률))+
+  geom_bar(aes(y=일간수익률), stat='identity')+
+  scale_y_continuous(
+    breaks = function(x){seq(
+      floor(x[1] / 0.25) * 0.25,  # 최소값을 0.25 단위로 내림
+      ceiling(x[2] / 0.25) * 0.25,  # 최대값을 0.25 단위로 올림
+      by = 0.25  # 0.25 간격
+    )}, sec.axis = dup_axis(name=NULL)
+  )+
+  theme(text=element_text(size=20))
+  
+fig2 <- df1 %>% 
+  ggplot(aes(x=기준일)) +
+  geom_line(aes(y=손익누계))+
+  geom_bar(aes(y=일간손익), stat='identity') +
+  scale_y_continuous(
+    breaks = function(x){seq(
+      floor(x[1] / 50) * 50,
+      ceiling(x[2] / 50) * 50,
+      by = 50  
+    )}, sec.axis = dup_axis(name=NULL)
+  )  +
+  theme(text=element_text(size=20))
 
-self$t_class %>% 
-  left_join(
-  df1 %>% bind_cols(df2),
-  by=c('자산군','세부자산군','세부자산군2')
-)
+gridExtra::grid.arrange(fig1,fig2,nrow=2)
