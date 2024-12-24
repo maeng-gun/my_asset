@@ -495,7 +495,8 @@ AutoInvest <- R6Class(
   )
 )
 
-#[클래스] MyAssets====
+
+#[클래스] MyAssets ====
 MyAssets <- R6Class(
   classname = "MyAssets",
   inherit = MyData,
@@ -528,7 +529,7 @@ MyAssets <- R6Class(
       }
       
       self$year <- year(self$today)
-      self$days <- seq(make_date(self$year,1,1), 
+      self$days <- seq(make_date(2024,1,1), 
                        make_date(self$year,12,31),by='day')
       self$run_book()
       self$update_new_price()
@@ -537,6 +538,7 @@ MyAssets <- R6Class(
     },
     
     ## 2.(메서드) 거래내역 기록 테이블====
+    #   - '거래내역' 화면에 들어갈 테이블 산출(회계/계좌/통화별)
     get_trading_record = function(table, acct, cur){
       
       if(table=="투자자산"){table <- 'assets'}
@@ -562,11 +564,15 @@ MyAssets <- R6Class(
     },
     
     ## 3.(메서드) 계좌거래 내역 전처리 ====
-    get_daily_trading = function(ast, trade){
+    #   - 회계/계좌/통화별로 각각 기록된 거래내역들을 통합하여
+    #   - 모든 일자에 대한 통합된 거래기록을 산출
+    #   - 잔액/손익 테이블(bs_pl)을 만들기 위한 전단계
+    
+    get_daily_trading = function(ast_info, trade){
       
-      expand_grid(select(ast,계좌,종목코드), 
+      expand_grid(select(ast_info,계좌,종목코드), 
                   거래일자 = self$days) %>% 
-        left_join(select(ast, 계좌, 종목코드,종목명, 통화), 
+        left_join(select(ast_info, 계좌, 종목코드,종목명, 통화), 
                   by = c("계좌","종목코드")) %>% 
         left_join(trade, by = c("계좌", "종목코드", "거래일자")) %>% 
         mutate(across(매입수량:입출금, ~if_else(is.na(.x),0,.x))) %>% 
@@ -583,7 +589,8 @@ MyAssets <- R6Class(
     
     
     ## 4.(메서드)운용자산 잔액-손익 테이블 생성====
-    get_bs_pl = function(mode = 'assets') {
+    #   - 거래내역에 기초해 모든 시점의 장부금액/평잔/손익을 산출
+    self$get_bs_pl <-  function(mode = 'assets') {
       
       ###(1) 기본 테이블 생성====
       
@@ -597,23 +604,44 @@ MyAssets <- R6Class(
         codes <- self$pension
       }
       
+      #거래상에 존재하는 모든 종목들의 테이블 형식 세팅
       bs_pl1 <- trade %>%
         select(계좌, 종목코드, 거래일자, 종목명, 통화)
       
+      #거래기록을 시점별 잔액 기록으로 변환
       bs_pl2 <- trade %>% 
         group_by(계좌, 종목코드) %>%
         transmute(
+          계좌, 종목코드, 거래일자, 수익, 비용, 실현손익,
           보유수량 = cumsum(순매입수량),
           장부금액 = cumsum(매입액 - 매도원금),
+          # 평잔 = cummean(장부금액),
+          # 수익 = cumsum(수익),
+          # 비용 = cumsum(비용),
+          # 실현손익 = cumsum(실현손익)
+        ) %>%
+        ungroup() %>% 
+        arrange(계좌, 종목코드, 거래일자)
+        # select(-계좌, -종목코드)
+      
+      bs_pl3 <- bs_pl2 %>% 
+        group_by(계좌, 종목코드,연도=year(거래일자)) %>% 
+        transmute(
+          계좌, 종목코드, 거래일자, 
           평잔 = cummean(장부금액),
           수익 = cumsum(수익),
           비용 = cumsum(비용),
           실현손익 = cumsum(실현손익)
-        ) %>%
+        ) %>% 
         ungroup() %>% 
-        select(-계좌, -종목코드)
+        arrange(계좌, 종목코드, 거래일자)
       
-      bs_pl <- bind_cols(bs_pl1, bs_pl2) %>% 
+
+      bs_pl <- bind_cols(
+        bs_pl1,
+        bs_pl2 %>% select(-계좌:-실현손익),
+        bs_pl3 %>% select(-연도:-거래일자)
+      ) %>% 
         left_join(select(codes, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2), 
                   by = c('계좌','종목코드')) %>%
         arrange(계좌, 종목코드, 거래일자)
@@ -633,7 +661,9 @@ MyAssets <- R6Class(
           mutate(across(-거래일자, cumsum))
         
         cash_w_e <- cash_w_b %>%
-          mutate(across(-거래일자, cummean))
+          group_by(연도=year(거래일자)) %>% 
+          mutate(across(-거래일자, cummean)) %>% 
+          ungroup() %>% select(-연도)
         
         
         cash_d <- trade %>%
@@ -648,7 +678,9 @@ MyAssets <- R6Class(
           mutate(across(-거래일자, cumsum))
         
         cash_d_e <- cash_d_b %>%
-          mutate(across(-거래일자, cummean))
+          group_by(연도=year(거래일자)) %>% 
+          mutate(across(-거래일자, cummean)) %>% 
+          ungroup() %>% select(-연도)
         
         cash_y <- trade %>%
           filter(통화 == '엔화') %>%
@@ -662,7 +694,9 @@ MyAssets <- R6Class(
           mutate(across(-거래일자, cumsum))
         
         cash_y_e <- cash_y_b %>%
-          mutate(across(-거래일자, cummean))
+          group_by(연도=year(거래일자)) %>% 
+          mutate(across(-거래일자, cummean)) %>% 
+          ungroup() %>% select(-연도)
         
         bs_pl %>%
           mutate(

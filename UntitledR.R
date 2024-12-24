@@ -388,83 +388,6 @@ self$stock_list %>%
 self <- MyAssets$new()
 
 
-ks <- KrxStocks$new()
-
-
-
-df <- bs_pl %>% 
-  left_join(
-    ks$stock_list %>% 
-      select(종목코드, 종가),
-    by='종목코드'
-  ) %>% 
-  filter(평잔!=0) %>% 
-  mutate(
-    장부금액 = if_else(장부금액<1, 0, 장부금액),
-    평가금액 = case_when(
-      !is.na(평가금액) ~ 평가금액,
-      !is.na(종가) ~ 종가*보유수량,
-      TRUE ~ 장부금액)) %>% 
-  select(-종가)
-
-
-
-
-
-df2 <- self$ret_p %>%
-  filter(구분!='전체') %>% 
-  group_by(자산군, 세부자산군) %>% 
-  summarize(
-    평가금액 = sum(평가금액),
-    장부금액 = sum(장부금액),
-    평가손익 = sum(평가손익),
-    .groups = 'drop') %>% 
-  filter(자산군!="전체") %>% 
-  mutate(
-    투자비중 = round(평가금액 / sum(평가금액) * 100,2),
-    자산군=factor(자산군, 
-               levels=c("채권","주식","대체자산","현금성", "전체"))) %>% 
-  arrange(자산군)
-
-df
-
-self$allo0 <-  
-  df2 |>
-  group_by(자산군) |>
-  summarize(across(-세부자산군, ~sum(.x))) %>% 
-  add_row(자산군='합계', 평가금액=sum(.$평가금액), 
-          장부금액=sum(.$장부금액), 평가손익=sum(.$평가손익),
-          투자비중=100) %>% 
-  mutate(평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
-  select(자산군,평가금액,평가수익률,투자비중)
-
-self$allo1 <-  
-  df2 %>% 
-  add_row(자산군='합계', 평가금액=sum(.$평가금액), 
-          장부금액=sum(.$장부금액), 평가손익=sum(.$평가손익),
-          투자비중=100) %>% 
-  mutate(평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
-  select(자산군,세부자산군, 평가금액,평가수익률,투자비중) %>% 
-  group_by(자산군) |> 
-  mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
-
-
-
-self$allo6 <- df |>
-  group_by(자산군) |>
-  summarize(평가금액 = sum(평가금액), 투자비중 = sum(투자비중)) |> 
-  add_row(자산군='합계', 평가금액=sum(df$평가금액), 투자비중=100)
-
-
-self$allo7 <- df |>
-  group_by(자산군, 세부자산군)  |> 
-  summarize(평가금액 = sum(평가금액), 
-            투자비중 = sum(투자비중), .groups = 'drop') |>
-  add_row(자산군='합계', 평가금액 = sum(df$평가금액), 
-          투자비중=100) |> 
-  group_by(자산군) |> 
-  mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
-
 
 
 source("functions.R", echo=F)
@@ -473,55 +396,9 @@ self <- MyAssets$new()
 
 
 
-self$initialize()
 
-df <- self$read_obj('return') %>% 
-  filter(자산군=='<합계>') %>% 
-  collect() %>% 
-  transmute(기준일=as.Date(기준일),평가금액)
 
-df1 <- df %>% full_join(
-    self$pension_daily %>%
-      bind_rows(self$assets_daily) %>% 
-      filter(거래일자 %>% between(first(df$기준일),last(df$기준일))) %>% 
-      group_by(거래일자) %>% 
-      summarise(입출금=sum(입출금)) %>% 
-      rename(기준일=거래일자),
-    by='기준일'
-  ) %>% 
-  arrange(기준일) %>% 
-  fill(평가금액, .direction = 'down') %>% 
-  mutate(입출금=na.fill(입출금,0)) %>% 
-  mutate(
-    일간수익률 = na.fill((평가금액-입출금-lag(평가금액))/lag(평가금액)*100,0),
-    누적수익률 = (cumprod(일간수익률/100+1)-1)*100,
-    일간손익= na.fill(diff_vec(평가금액, silent = T)-입출금,0)/10000,
-    손익누계= cumsum(일간손익))
 
-fig1 <- df1 %>% 
-  ggplot(aes(x=기준일)) +
-  geom_line(aes(y=누적수익률))+
-  geom_bar(aes(y=일간수익률), stat='identity')+
-  scale_y_continuous(
-    breaks = function(x){seq(
-      floor(x[1] / 0.25) * 0.25,  # 최소값을 0.25 단위로 내림
-      ceiling(x[2] / 0.25) * 0.25,  # 최대값을 0.25 단위로 올림
-      by = 0.25  # 0.25 간격
-    )}, sec.axis = dup_axis(name=NULL)
-  )+
-  theme(text=element_text(size=20))
-  
-fig2 <- df1 %>% 
-  ggplot(aes(x=기준일)) +
-  geom_line(aes(y=손익누계))+
-  geom_bar(aes(y=일간손익), stat='identity') +
-  scale_y_continuous(
-    breaks = function(x){seq(
-      floor(x[1] / 50) * 50,
-      ceiling(x[2] / 50) * 50,
-      by = 50  
-    )}, sec.axis = dup_axis(name=NULL)
-  )  +
-  theme(text=element_text(size=20))
 
-gridExtra::grid.arrange(fig1,fig2,nrow=2)
+
+
