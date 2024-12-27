@@ -19,6 +19,14 @@ header <- dashboardHeader(
 sidebar <- dashboardSidebar(
   sidebarMenu(
     id = 'menu_tabs',
+    airDatepickerInput(
+      inputId = 'base_date',
+      label = "기준일",
+      addon = "none",
+      value = Sys.Date()
+    ),
+    actionButton('kis','주가 업데이트'),
+    br(),
     sidebarHeader("포트폴리오 관리"),
     menuItem(
       text = "자산운용 내역 기록",
@@ -71,12 +79,6 @@ body <- dashboardBody(
     ##1) 자산운용 내역 기록====
     tabItem(
       tabName = 'trading_record',
-      airDatepickerInput(
-        inputId = 'base_date',
-        label = "기준일",
-        addon = "none",
-        value = Sys.Date()
-      ),
       tabBox(
         width=12,
         status='primary',
@@ -335,8 +337,6 @@ body <- dashboardBody(
     ##2) 통합 자산운용 현황====
     tabItem(
       tabName = 'pf_total',
-      actionButton('kis','주가 업데이트'),
-      br(),
       br(),
       tabBox(
         id='pf_box2',

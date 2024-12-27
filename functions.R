@@ -590,7 +590,7 @@ MyAssets <- R6Class(
     
     ## 4.(메서드)운용자산 잔액-손익 테이블 생성====
     #   - 거래내역에 기초해 모든 시점의 장부금액/평잔/손익을 산출
-    self$get_bs_pl <-  function(mode = 'assets') {
+    get_bs_pl = function(mode = 'assets') {
       
       ###(1) 기본 테이블 생성====
       
@@ -863,53 +863,57 @@ MyAssets <- R6Class(
       ### 1) 통화별/계좌별 수익률 산출함수====
       get_class_returns <- function(asset_returns, total=F) {
         
-        if(mode=='assets') {
-          dist <- asset_returns$통화[1]
-          if(dist=="달러"){ 
-            ex <- self$ex_usd 
-          } else if(dist=="엔화"){ 
-            ex <- self$ex_jpy 
-          } else { 
-            ex <- 1
-          }
+        if(nrow(asset_returns)==0){
+          return(tibble())
         } else {
-          if(total){
-            dist <- '전체'
+          if(mode=='assets') {
+            dist <- asset_returns$통화[1]
+            if(dist=="달러"){ 
+              ex <- self$ex_usd 
+            } else if(dist=="엔화"){ 
+              ex <- self$ex_jpy 
+            } else { 
+              ex <- 1
+            }
           } else {
-            dist <- asset_returns$계좌[1]
+            if(total){
+              dist <- '전체'
+            } else {
+              dist <- asset_returns$계좌[1]
+            }
+            ex = 1
           }
-          ex = 1
-        }
-        
-        if(depth==2){
-          grp <- c('자산군','세부자산군')
-          grp_list <- list(자산군='전체', 세부자산군=NA)
-          del <- NULL
-        } else {
-          grp <- c('자산군')
-          grp_list <- list(자산군='전체')
-          del <- c('세부자산군')
-        }
-        
-        class_returns <- asset_returns %>% 
-          select(-(계좌:보유수량), -세부자산군2, 
-                 -실현수익률, -평가수익률, -all_of(del)) %>% 
-          mutate(across(-all_of(grp), ~.x * ex)) %>% 
-          group_by(across(all_of(grp))) %>% 
-          summarise(across(everything(), ~sum(.x, na.rm = TRUE)),
-                    .groups='drop') %>% 
-          mutate(구분 = dist, .before=1)
           
-        class_returns %>% 
-          add_row(구분 = dist, !!!grp_list, 
-                  !!(class_returns %>%
-                       select(-구분,-all_of(grp)) %>% 
-                       summarise(across(everything(), 
-                                        ~sum(.x, na.rm=T))))
-                  )%>% 
-          mutate(실현수익률 = 실현손익 / 평잔 * 100,
-                 # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
-                 평가수익률 = 평가손익 / 장부금액 * 100)
+          if(depth==2){
+            grp <- c('자산군','세부자산군')
+            grp_list <- list(자산군='전체', 세부자산군=NA)
+            del <- NULL
+          } else {
+            grp <- c('자산군')
+            grp_list <- list(자산군='전체')
+            del <- c('세부자산군')
+          }
+          
+          class_returns <- asset_returns %>% 
+            select(-(계좌:보유수량), -세부자산군2, 
+                   -실현수익률, -평가수익률, -all_of(del)) %>% 
+            mutate(across(-all_of(grp), ~.x * ex)) %>% 
+            group_by(across(all_of(grp))) %>% 
+            summarise(across(everything(), ~sum(.x, na.rm = TRUE)),
+                      .groups='drop') %>% 
+            mutate(구분 = dist, .before=1)
+          
+          class_returns %>% 
+            add_row(구분 = dist, !!!grp_list, 
+                    !!(class_returns %>%
+                         select(-구분,-all_of(grp)) %>% 
+                         summarise(across(everything(), 
+                                          ~sum(.x, na.rm=T))))
+            )%>% 
+            mutate(실현수익률 = 실현손익 / 평잔 * 100,
+                   # 운용수익률 = (실현손익 + 평가손익증감) / 평잔 * 100,
+                   평가수익률 = 평가손익 / 장부금액 * 100)
+        }
       }
       
     
