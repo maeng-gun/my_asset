@@ -154,20 +154,10 @@ KrxStocks <- R6Class(
       }
       self$user.agent <- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36 '
       self$referer <- 'http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201'
-      
-      set_wd <- function(y){
-        self$this_wd <- self$get_workdays(y)
-        self$last_wd <- self$this_wd %>%
-          filter(기준일<=date) %>%
-          pull(기준일) %>% last()
-      }
-      
-      set_wd(year(date))
-      
-      if(length(self$last_wd)==0){
-        set_wd(year(date)-1)
-      }
-      
+      self$this_wd <- self$get_workdays(year(date))
+      self$last_wd <- self$this_wd %>% 
+        filter(기준일<=date) %>% 
+        pull(기준일) %>% last()
       self$stock_list <- self$get_stock_list()
     },
     
@@ -926,6 +916,7 @@ MyAssets <- R6Class(
         }
       }
       
+    
       ### 2) 자산 수익률====
       if(mode=='assets'){
         
@@ -1133,7 +1124,6 @@ MyAssets <- R6Class(
         mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
     },
     
-    ## 10.(메서드) 통합 자산군별 손익 변화====
     compute_total = function(){
       df <- self$bs_pl_mkt_a
       
