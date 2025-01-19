@@ -534,7 +534,7 @@ MyAssets <- R6Class(
       self$run_book()
       self$update_new_price()
       self$run_valuation()
-      self$get_inflow()
+      # self$get_inflow()
     },
     
     ## 2.(메서드) 거래내역 기록 테이블====
@@ -803,7 +803,7 @@ MyAssets <- R6Class(
     evaluate_bs_pl_pension = function(){
 
       price <- self$pension %>%
-        select(계좌, 종목코드, 평가금액, 기초평가손익) %>% 
+        select(계좌, 종목코드, 평가금액) %>% 
         filter(평가금액!=0)
       
       get_fund_price <- function(code){
@@ -1282,11 +1282,13 @@ MyAssets <- R6Class(
       
     },
     
-    plot_total_profit = function(){
+    plot_total_profit = function(start, end){
       df <- self$read_obj('return') %>% 
         filter(자산군=='<합계>') %>% 
         collect() %>% 
-        transmute(기준일=as.Date(기준일),평가금액)
+        transmute(기준일=as.Date(기준일),평가금액) %>% 
+        filter(기준일>=start, 기준일<=end)
+        
       
       df1 <- df %>% full_join(
         self$pension_daily %>%
@@ -1335,6 +1337,41 @@ MyAssets <- R6Class(
       gridExtra::grid.arrange(fig1,fig2,nrow=2)
     },
     
+    compute_t_profit = function(){
+      tibble(거래일자=as.Date('2023-12-31'),
+             투자평잔 = 63019405,
+             투자실현손익 = 2376343,
+             연금평잔 = 0,
+             연금실현손익 = 0,
+             총실현손익 = 2376343,
+             평가손익 = 1643492,
+             총손익 = 4019835) %>% 
+        bind_rows(
+          self$bs_pl_book_a %>%
+            filter(통화=='원화') %>% 
+            group_by(거래일자) %>% 
+            summarise(투자평잔=sum(평잔), 투자실현손익=sum(실현손익)) %>% 
+            left_join(
+              self$bs_pl_book_p %>% 
+                group_by(거래일자) %>% 
+                summarise(연금평잔=sum(평잔), 연금실현손익=sum(실현손익)),
+              by='거래일자'
+            ) %>% 
+            left_join(
+              self$read('return') %>% 
+                filter(자산군=='<합계>') %>% 
+                mutate(거래일자=as.Date(기준일)) %>% 
+                select(거래일자, 평가손익),
+              by='거래일자'
+            ) %>% 
+            transmute(거래일자, 투자평잔, 투자실현손익, 연금평잔, 연금실현손익,
+                      총실현손익=투자실현손익+연금실현손익,
+                      평가손익,
+                      총손익=총실현손익+평가손익)
+        ) %>% 
+        filter(거래일자<=self$today)
+    },
+    
     ## 10.(메서드) 평가금액 포함 자료 산출====
     run_valuation = function(){
       self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
@@ -1349,55 +1386,134 @@ MyAssets <- R6Class(
     },
     
     ## 11.(메서드) 장부금액 및 현금성자산 추이 산출====
-    get_inflow = function(){
+    get_funds = function(){
       
-      df1 <- self$bs_pl_book_a %>% 
-        group_by(거래일자) %>% 
-        summarise(장부금액 = sum(장부금액), .groups='drop') %>% 
-        left_join(
-          self$bs_pl_book_a %>% 
-            filter(자산군=='현금성', 통화=='원화') %>% 
-            group_by(거래일자) %>% 
-            summarise(현금성자산 = sum(장부금액), .groups='drop'),
-          by = '거래일자'
-        ) 
+      df1 <- self$bs_pl_mkt_a %>% 
+        mutate(계정='투자만기') %>% 
+        bind_rows(
+          self$bs_pl_mkt_p %>% mutate(계정='연금만기')
+        )
       
-      y <- df1 %>% filter(거래일자 == today()-1)
-      
-      df3 <- 
-        self$read('inflow') %>% 
-        filter(거래일자 > today())
-        
       df2 <- df1 %>% 
-        filter(거래일자 >= today()) %>%
-        select(거래일자) %>% 
+        filter(자산군=='채권', 세부자산군=='직접', 
+               통화=='원화', 평가금액>0) %>% 
+        select(계정, 종목코드, 평가금액) %>% 
         left_join(
-          df3, 
-          by='거래일자') %>% 
-        replace_na(list(순자금유입=0, 만기상환=0)) %>% 
-        mutate(across(-거래일자, cumsum)) %>% 
-        transmute(
-          거래일자,
-          장부금액 = y$장부금액+순자금유입,
-          현금성자산 = y$현금성자산+순자금유입+만기상환)
-      
-      self$inflow_bal <- df1 %>% 
-        filter(거래일자 < today()) %>% 
-        bind_rows(df2)
-      
-      self$inflow_table <- 
-        df3 %>% 
-        left_join(self$inflow_bal, by='거래일자') %>% 
-        arrange(거래일자)
+          self$assets %>% 
+            bind_rows(self$pension) %>% 
+            select(종목코드, 만기일),
+          by='종목코드'
+        ) %>% 
+        filter(만기일>=self$today)
       
       
-      self$inflow_plot <- self$inflow_bal %>% 
-        pivot_longer(cols=-거래일자, names_to = '구분', values_to = '금액') %>% 
-        mutate(금액 = 금액/10000) %>% 
-        ggplot(aes(x=거래일자,y=금액, color=구분))+
-        geom_line(linewidth=2)+
-        facet_grid(rows='구분', scales = 'free_y')
+      last_y <- df2 %>% arrange(만기일) %>% 
+        pull() %>% last() %>% year()
+      
+      
+      df <- tibble(
+        거래일자 = seq(self$today, make_date(last_y,12,31), by=1)) %>% 
+        left_join(
+          df1 %>% 
+            filter(자산군=='현금성', 통화=='원화', 평가금액>0) %>% 
+            select(거래일자, 계정,평가금액) %>% 
+            group_by(거래일자, 계정) %>% summarise(만기상환=sum(평가금액)) %>% 
+            bind_rows(
+              df2 %>% select(거래일자=만기일, 계정, 만기상환=평가금액)
+            )%>% 
+            group_by(거래일자,계정) %>% 
+            summarise(만기상환=sum(만기상환)) %>% 
+            ungroup() %>% 
+            spread(계정,만기상환,fill = 0),
+          by='거래일자'
+        ) %>% 
+        left_join(
+          self$read('inflow') %>% select(-행번호),
+          by='거래일자'
+        ) %>% 
+        mutate(across(-거래일자, ~replace_na(.,0))) %>% 
+        group_by(거래연월=tsibble::yearmonth(거래일자)) %>% 
+        summarise(across(-거래일자,sum)) %>% 
+        transmute(거래월= tsibble::yearmonth(거래연월) %>% 
+                    format(format = '%Y-%m') %>% 
+                    as.character(), 
+                  투자가용자금=투자만기+투자유출입, 
+                  연금가용자금=연금만기+연금유출입,
+                  총가용자금=투자가용자금+연금가용자금)
+      
+      df3 <- df1 %>% filter(통화=='원화', 자산군!='현금성') %>% 
+        group_by(계정) %>% 
+        summarise(평가금액=sum(평가금액)) %>% 
+        spread(계정, 평가금액)
+      
+      df4 <- df2 %>% 
+        group_by(계정) %>% 
+        summarise(만기상환=sum(평가금액)) %>% 
+        ungroup() %>% 
+        spread(계정,만기상환,fill = 0)
+      
+      s1 <- sum(df$투자가용자금)
+      s2 <- sum(df$연금가용자금)
+      s3 <- df3$투자만기 - sum(df4$투자만기)
+      s4 <- df3$연금만기 - sum(df4$연금만기)
+      
+      
+      df %>% 
+        add_row(거래월 = c('자금누계', '보유자산', '총자산누계'),
+                투자가용자금 = c(s1, s3, s1+s3),
+                연금가용자금 = c(s2, s4, s2+s4),
+                총가용자금= c(s1+s2, s3+s4, s1+s2+s3+s4))
     },
+    
+    # get_inflow = function(){
+    #   
+    #   df1 <- self$bs_pl_book_a %>% 
+    #     group_by(거래일자) %>% 
+    #     summarise(장부금액 = sum(장부금액), .groups='drop') %>% 
+    #     left_join(
+    #       self$bs_pl_book_a %>% 
+    #         filter(자산군=='현금성', 통화=='원화') %>% 
+    #         group_by(거래일자) %>% 
+    #         summarise(현금성자산 = sum(장부금액), .groups='drop'),
+    #       by = '거래일자'
+    #     ) 
+    #   
+    #   y <- df1 %>% filter(거래일자 == today()-1)
+    #   
+    #   df3 <- 
+    #     self$read('inflow') %>% 
+    #     filter(거래일자 > today())
+    #     
+    #   df2 <- df1 %>% 
+    #     filter(거래일자 >= today()) %>%
+    #     select(거래일자) %>% 
+    #     left_join(
+    #       df3, 
+    #       by='거래일자') %>% 
+    #     replace_na(list(순자금유입=0, 만기상환=0)) %>% 
+    #     mutate(across(-거래일자, cumsum)) %>% 
+    #     transmute(
+    #       거래일자,
+    #       장부금액 = y$장부금액+순자금유입,
+    #       현금성자산 = y$현금성자산+순자금유입+만기상환)
+    #   
+    #   self$inflow_bal <- df1 %>% 
+    #     filter(거래일자 < today()) %>% 
+    #     bind_rows(df2)
+    #   
+    #   self$inflow_table <- 
+    #     df3 %>% 
+    #     left_join(self$inflow_bal, by='거래일자') %>% 
+    #     arrange(거래일자)
+    #   
+    #   
+    #   self$inflow_plot <- self$inflow_bal %>% 
+    #     pivot_longer(cols=-거래일자, names_to = '구분', values_to = '금액') %>% 
+    #     mutate(금액 = 금액/10000) %>% 
+    #     ggplot(aes(x=거래일자,y=금액, color=구분))+
+    #     geom_line(linewidth=2)+
+    #     facet_grid(rows='구분', scales = 'free_y')
+    # },
     
     ## 12.(메서드) 장부잔액 자료 산출====
     run_book = function(){

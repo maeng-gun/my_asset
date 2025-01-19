@@ -3,6 +3,7 @@ library(bs4Dash)
 library(waiter)
 library(flextable)
 library(shinyWidgets)
+library(lubridate)
 import::from(shinyjs, useShinyjs, extendShinyjs, js)
 
 # <User Interface> ====
@@ -45,7 +46,7 @@ sidebar <- dashboardSidebar(
       tabName = "pf_bs_pl"
     ),
     menuItem(
-      text = "자산/유동성 추이",
+      text = "유동성 관리",
       icon = icon("chart-line"),
       tabName = "pf_liquid"
     ),
@@ -348,18 +349,60 @@ body <- dashboardBody(
         tabPanel(
           title="통합손익현황",
           fluidRow(
-            plotOutput("total_profit", height = "800px")
+            column(
+              width = 2,
+              airDatepickerInput(
+                inputId = 'total_s_date',
+                label = "시작일",
+                addon = "none",
+                value = make_date(year(Sys.Date()),1,1)
+              ),
+              airDatepickerInput(
+                inputId = 'total_e_date',
+                label = "종료일",
+                addon = "none",
+                value = Sys.Date()
+              )
+            ),
+            column(
+              width = 10,
+              plotOutput("total_profit", height = "800px")
+            )
+            
+          )
+        ),
+        ###b. 손익시계열====
+        tabPanel(
+          title="손익시계열",
+          fluidRow(
+            uiOutput("t_profit1")
+          ),
+          fluidRow(
+            column(
+              width=2,
+              airDatepickerInput(
+                inputId = 't_profit_date',
+                label = "조회연월",
+                addon = "none",
+                view = 'months',
+                value = Sys.Date()
+              )
+            ),
+            column(
+              width=10,
+              uiOutput("t_profit2")
+            )
           )
         ),
         
-        ###b. 통합자산군별====
+        ###c. 통합자산군별====
         tabPanel(
           title="통합자산군별",
           fluidRow(
             uiOutput("t_asset_class")
           )
         ),
-        ###c. 통합상품별====
+        ###d. 통합상품별====
         tabPanel(
           title="통합상품별",
           fluidRow(
@@ -492,7 +535,7 @@ body <- dashboardBody(
       )
     ),
     
-    ##4) 자산/유동성 추이====
+    ##4) 유동성 관리====
     tabItem(
       tabName = "pf_liquid",
       box(
@@ -500,20 +543,26 @@ body <- dashboardBody(
         width = 12,
         status = 'info',
         solidHeader = T,
-        title = "자산/유동성 추이",
+        title = "유동성 관리",
         collapsible = F,
         fluidRow(
+          column(
+            width = 2,
+            valueBoxOutput("liq1", width=NULL),
+            valueBoxOutput("liq2", width=NULL),
+            valueBoxOutput("liq3", width=NULL),
+          ),
           column(
             width = 2,
             uiOutput('manage_inflow'),
           ),
           column(
-            width = 5,
-            uiOutput('inflow_table')
+            width = 4,
+            uiOutput('inflow_table1')
           ),
           column(
-            width = 5,
-            plotOutput('inflow_plot')
+            width = 4,
+            uiOutput('inflow_table2')
           )
         )
       )
@@ -899,10 +948,11 @@ server <- function(input, output, session) {
           label = "평가금액",
           value = 0
         ),
-        autonumericInput(
-          inputId = 'init_e_pl',
-          label = "기초평가손익",
-          value = 0
+        airDatepickerInput(
+          inputId = 'maturity_date',
+          label = "만기일",
+          addon = "none",
+          value = Sys.Date()
         )
       )
     )
@@ -1000,8 +1050,8 @@ server <- function(input, output, session) {
       updateSelectInput(session, 'ass_cur', selected = t_rows$통화)
       updateAutonumericInput(session, 'eval_price',
                              value = t_rows$평가금액)
-      updateAutonumericInput(session, 'init_e_pl',
-                             value = t_rows$기초평가손익)
+      updateAutonumericInput(session, 'maturity_date',
+                             value = t_rows$만기일)
     }
     else{
       
@@ -1020,8 +1070,8 @@ server <- function(input, output, session) {
       updateSelectInput(session, 'ass_cur', selected = NULL)
       updateAutonumericInput(session, 'eval_price',
                              value = 0)
-      updateAutonumericInput(session, 'init_e_pl',
-                             value = 0)
+      updateAutonumericInput(session, 'maturity_date',
+                             value = Sys.Date)
       
     }
   })
@@ -1035,7 +1085,7 @@ server <- function(input, output, session) {
       상품명=input$comm_name, 통화=input$ass_cur, 
       자산군=input$ass_class, 
       세부자산군=input$ass_class1, 세부자산군2=input$ass_class2,
-      기초평가손익=input$init_e_pl
+      만기일=input$maturity_date
     )
   })
   
@@ -1169,10 +1219,50 @@ server <- function(input, output, session) {
   ## a. 통합손익현황====
   
   output$total_profit <- renderPlot({
-    ma()$plot_total_profit()
+    ma()$plot_total_profit(
+      input$total_s_date,input$total_e_date)
   })
   
-  ## b. 통합자산군별====
+  ## b. 손익시계열====
+  
+  output$t_profit1 <- renderUI({
+    ma()$compute_t_profit() %>% 
+      group_by(연도=year(거래일자)) %>% 
+      summarise(across(-거래일자, last)) %>% 
+      transmute(
+        연도=as.character(연도), 
+        투자평잔, 
+        투자실현손익, 
+        투자수익률 = 투자실현손익 / 투자평잔 * 100,
+        연금평잔, 
+        연금실현손익,
+        연금수익률 = 연금실현손익 / 연금평잔 * 100,
+        평가손익증감 = if_else(연도==2023, first(평가손익),
+                         diff_vec(평가손익,silent = T)),
+        총평잔 = 투자평잔+연금평잔,
+        총기간손익 = 투자실현손익+연금실현손익+평가손익증감,
+        총기간수익률 = 총기간손익 / 총평잔 * 100
+      ) %>% 
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=c(2,3,5,6,8,9,10), digits = 0) |>
+      colformat_double(j=c(4,7,11), digits = 2) |>
+      htmltools_value()
+  })
+  
+  output$t_profit2 <- renderUI({
+    ma()$compute_t_profit() %>% 
+      filter(year(거래일자)==year(input$t_profit_date),
+             month(거래일자)==month(input$t_profit_date)) %>% 
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=2:8, digits = 0) %>% 
+      htmltools_value()
+  })
+  
+  ## c. 통합자산군별====
   
   output$t_asset_class <- renderUI({
     ma()$t_class |>
@@ -1320,7 +1410,7 @@ server <- function(input, output, session) {
   })
   
   
-  # 3) 자산/유동성 추이====
+  # 3) 유동성 관리====
   
   ### * 메뉴 설정====
   output$manage_inflow <- renderUI({
@@ -1339,14 +1429,14 @@ server <- function(input, output, session) {
           width='100%'
       ),
       autonumericInput(
-        inputId = 'net_inflow',
-        label = "순자금유입",
+        inputId = 'payment',
+        label = "투자유출입",
         value = 0,
         width='100%'
       ),
       autonumericInput(
-        inputId = 'payment',
-        label = "만기상환",
+        inputId = 'payment2',
+        label = "연금유출입",
         value = 0,
         width='100%'
       ),
@@ -1377,92 +1467,152 @@ server <- function(input, output, session) {
   ### * 테이블 설정====
   
   reset_inflow <- reactive({
-    input$inflow_new
-    input$inflow_mod
-    input$inflow_del
-    ma()$get_inflow()
-    ma()$inflow_table
+    ma()$read('inflow') %>%
+      filter(거래일자 >= ma()$today)
+  })
+  # 
+  
+  liq <- reactiveValues(
+    a = NULL, b= NULL, c=NULL, d=NULL
+  )
+  
+  output$inflow_table1 <- renderUI({
+    
+    liq$c <- reset_inflow()
+    liq$c %>% 
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      htmltools_value(ft.align = 'center')
   })
   
   update_manage_inflow <-  reactive({
     updateSelectInput(session, 'new3',
-                      choices = c('신규', rv$inflow$행번호),
+                      choices = c('신규', liq$c$행번호),
                       selected = '신규')
   })
   
-  output$inflow_table <- renderUI({
-    if(!is.null(rv$inflow)){
-      rv$inflow |>
-        flextable() |>
-        theme_vanilla() |>
-        set_table_properties(layout='autofit') |>
-        htmltools_value(ft.align = 'center')
-    } else {
-    }
+  output$inflow_table2 <- renderUI({
+    ma()$get_funds() %>% 
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      htmltools_value(ft.align = 'center')
   })
+
+
+  output$liq1 <- renderValueBox({
+    liq$a <- ma()$bs_pl_mkt_a %>% 
+      filter(자산군=='현금성', 
+             통화=='원화', 
+             평가금액>0) %>%
+      pull(평가금액) %>% sum()
+    
+    valueBox(
+      value = liq$a %>% 
+        format(big.mark = ",", scientific = FALSE) %>% 
+        p(style = "font-size: 300%;"),
+      width = NULL,
+      subtitle = p("투자계정 유동성",
+                   style = "font-size: 150%;"),
+      color = "primary"
+    )
+  })
+  
+  output$liq2 <- renderValueBox({
+    
+    liq$b <- ma()$bs_pl_mkt_p %>% 
+      filter(자산군=='현금성', 
+             통화=='원화', 
+             평가금액>0) %>%
+      pull(평가금액) %>% sum()
+    
+    valueBox(
+      value = liq$b %>% 
+        format(big.mark = ",", scientific = FALSE) %>% 
+        p(style = "font-size: 300%;")
+      ,
+      width = NULL,
+      subtitle = p("연금계정 유동성",
+                   style = "font-size: 150%;"),
+      color = "primary"
+    )
+  })
+  
+  output$liq3 <- renderValueBox({
+    valueBox(
+      value = (liq$a + liq$b) %>% 
+        format(big.mark = ",", scientific = FALSE) %>% 
+        p(style = "font-size: 300%;")
+      ,
+      width = NULL,
+      subtitle = p("총 유동성",
+                   style = "font-size: 150%;"),
+      color = "primary"
+    )
+  })
+  
   
   ### * 신규/구분 설정====
   observeEvent(input$new3,{
     if(input$new3 != "신규"){
-      rv$inflow <- reset_inflow()
-      t_rows <- filter(rv$inflow, 행번호 == input$new3)
+      t_rows <- filter(liq$c, 행번호 == input$new3)
       updateAirDateInput(session, 'trading_date2', value = t_rows$거래일자)
-      updateAutonumericInput(session, 'net_inflow', value = t_rows$순자금유입)
-      updateAutonumericInput(session, 'payment', value = t_rows$만기상환)
-      
+      updateAutonumericInput(session, 'payment', value = t_rows$투자유출입)
+      updateAutonumericInput(session, 'payment2', value = t_rows$연금유출입)
+
     } else {
-      rv$inflow <- reset_inflow()
       update_manage_inflow()
       updateAirDateInput(session, 'trading_date2', value = Sys.Date())
-      updateAutonumericInput(session, 'net_inflow', value = 0)
       updateAutonumericInput(session, 'payment', value = 0)
+      updateAutonumericInput(session, 'payment2', value = 0)
     }
   })
-  
+
   ### * 추가/수정/삭제 선택시====
   observe({
-    rv$inflow_new <- tibble::tibble_row(
+    liq$d <- tibble::tibble_row(
       행번호=0, 거래일자 = input$trading_date2,
-      순자금유입=input$net_inflow,
-      만기상환=input$payment
+      투자유출입=input$payment,
+      연금유출입=input$payment2
     )
   })
-  
+
   observeEvent(input$inflow_new,{
-    
-    rv$inflow_new$행번호 <- tail(ma()$read('inflow')$행번호, 1)+1
-    dbxInsert(ma()$con, 'inflow', rv$inflow_new)
-    rv$inflow <- reset_inflow()
+
+    liq$d$행번호 <- tail(ma()$read('inflow')$행번호, 1)+1
+    dbxInsert(ma()$con, 'inflow', liq$d)
+    liq$c <- reset_inflow()
     update_manage_inflow()
     sk(!sk())
   })
-  
+
   observeEvent(input$inflow_mod,{
-    rv$inflow_new$행번호 <- input$new3
-    dbxUpdate(ma()$con, 'inflow', rv$inflow_new, where_cols = c("행번호"))
-    rv$inflow <- reset_inflow()
+    liq$d$행번호 <- input$new3
+    dbxUpdate(ma()$con, 'inflow', liq$d, where_cols = c("행번호"))
+    liq$c <- reset_inflow()
     update_manage_inflow()
     sk(!sk())
   })
-  
+
   observeEvent(input$inflow_del,{
     dbxDelete(ma()$con, 'inflow', tibble::tibble_row(행번호=input$new3))
-    rv$inflow <- reset_inflow()
+    liq$c <- reset_inflow()
     update_manage_inflow()
     sk(!sk())
   })
   
   ### * 그래프 설정====
-  output$inflow_plot <- renderPlot({
-    sk()
-    ma()$inflow_plot +
-      theme(
-        text = element_text(size = 20),
-        legend.position = "none",
-        axis.title = element_blank()
-      )+
-      scale_x_date(date_labels = '%m', date_breaks = '1 months')
-  })
+  # output$inflow_plot <- renderPlot({
+  #   sk()
+  #   ma()$inflow_plot +
+  #     theme(
+  #       text = element_text(size = 20),
+  #       legend.position = "none",
+  #       axis.title = element_blank()
+  #     )+
+  #     scale_x_date(date_labels = '%m', date_breaks = '1 months')
+  # })
   
   
   
