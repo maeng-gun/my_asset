@@ -546,23 +546,31 @@ body <- dashboardBody(
         title = "유동성 관리",
         collapsible = F,
         fluidRow(
-          column(
-            width = 2,
-            valueBoxOutput("liq1", width=NULL),
-            valueBoxOutput("liq2", width=NULL),
-            valueBoxOutput("liq3", width=NULL),
+          fluidRow(
+            column(width=4,
+                   valueBoxOutput("liq1", width=12)),
+            column(width=4,
+                   valueBoxOutput("liq2", width=12)),
+            column(width=4,
+                   valueBoxOutput("liq3", width=12)),
           ),
-          column(
-            width = 2,
-            uiOutput('manage_inflow'),
-          ),
-          column(
-            width = 4,
-            uiOutput('inflow_table1')
-          ),
-          column(
-            width = 4,
-            uiOutput('inflow_table2')
+          fluidRow(
+            column(
+              width = 1,
+              uiOutput('manage_inflow'),
+            ),
+            column(
+              width = 3,
+              uiOutput('inflow_table1')
+            ),
+            column(
+              width = 4,
+              uiOutput('maturity_table')
+            ),
+            column(
+              width = 4,
+              uiOutput('inflow_table2')
+            )
           )
         )
       )
@@ -1491,6 +1499,29 @@ server <- function(input, output, session) {
                       choices = c('신규', liq$c$행번호),
                       selected = '신규')
   })
+  
+  
+  output$maturity_table <- renderUI({
+    ma()$bs_pl_mkt_a %>% 
+      bind_rows(ma()$bs_pl_mkt_p) %>% 
+      filter(자산군=='채권', 세부자산군=='직접', 
+             통화=='원화', 평가금액>0) %>% 
+      select(계좌, 종목명, 종목코드, 평가금액) %>% 
+      left_join(
+        ma()$assets %>% 
+          bind_rows(ma()$pension) %>% 
+          select(종목코드, 만기일),
+        by='종목코드'
+      ) %>% 
+      filter(만기일>=ma()$today) %>% 
+      select(계좌, 종목명, 평가금액, 만기일) %>% 
+      arrange(만기일) %>% 
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      htmltools_value(ft.align = 'center')
+  })
+  
   
   output$inflow_table2 <- renderUI({
     ma()$get_funds() %>% 

@@ -956,13 +956,19 @@ MyAssets <- R6Class(
           filter(계좌 == '한투연금저축') %>% 
           get_class_returns()
         
+        nhjyirp_ret <- df %>% 
+          filter(계좌 == '엔투IRP') %>% 
+          get_class_returns()
+        
         hay_ret <- df %>% 
           filter(계좌 == '엔투하영') %>% 
           get_class_returns()
         
+        
         ret <- df %>% get_class_returns(total=T)
         
-        bind_rows(ret, nhb_ret, shi_ret, nhi_ret, kis_ret, hay_ret)
+        bind_rows(ret, nhb_ret, shi_ret, nhi_ret, 
+                  kis_ret, nhjyirp_ret, hay_ret)
         
       }
       
