@@ -1410,7 +1410,7 @@ MyAssets <- R6Class(
             select(종목코드, 만기일),
           by='종목코드'
         ) %>% 
-        filter(만기일>=self$today)
+        filter(만기일>self$today)
       
       
       last_y <- df2 %>% arrange(만기일) %>% 
