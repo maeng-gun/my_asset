@@ -546,31 +546,29 @@ body <- dashboardBody(
         title = "유동성 관리",
         collapsible = F,
         fluidRow(
-          fluidRow(
-            column(width=4,
-                   valueBoxOutput("liq1", width=12)),
-            column(width=4,
-                   valueBoxOutput("liq2", width=12)),
-            column(width=4,
-                   valueBoxOutput("liq3", width=12)),
+          column(width=4,
+                 valueBoxOutput("liq1", width=NULL)),
+          column(width=4,
+                 valueBoxOutput("liq2", width=NULL)),
+          column(width=4,
+                 valueBoxOutput("liq3", width=NULL)),
+        ),
+        fluidRow(
+          column(
+            width = 1,
+            uiOutput('manage_inflow'),
           ),
-          fluidRow(
-            column(
-              width = 1,
-              uiOutput('manage_inflow'),
-            ),
-            column(
-              width = 3,
-              uiOutput('inflow_table1')
-            ),
-            column(
-              width = 4,
-              uiOutput('maturity_table')
-            ),
-            column(
-              width = 4,
-              uiOutput('inflow_table2')
-            )
+          column(
+            width = 3,
+            uiOutput('inflow_table1')
+          ),
+          column(
+            width = 4,
+            uiOutput('maturity_table')
+          ),
+          column(
+            width = 4,
+            uiOutput('inflow_table2')
           )
         )
       )
