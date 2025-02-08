@@ -394,4 +394,29 @@ source("functions.R", echo=F)
 
 self <- MyAssets$new()
 
-s
+
+
+self$t_class %>% 
+  select(1:7) %>% 
+  filter(세부자산군=="",세부자산군2=="")
+
+df <- self$read('allocation')
+
+sum(df$목표1,na.rm = T)
+
+.data
+
+
+df <- self$t_class %>% select(1:7) %>% 
+  left_join(
+    self$read('allocation') %>% 
+      add_row(자산군='현금성', 세부자산군="", 
+              목표1 = 100-sum(.$목표1, na.rm = T)) %>% 
+      mutate(세부자산군2 = '', .after=2),
+    by=c('자산군','세부자산군', '세부자산군2')
+  )
+
+df %>% mutate(
+  목표금액 = na_if(df$평가금액[[1]]*(coalesce(목표1,0)+coalesce(목표2,0))/100,0), 
+  .before=목표1) %>% 
+  mutate(과부족 = 평가금액-목표금액)

@@ -575,9 +575,69 @@ body <- dashboardBody(
     ),
     ##5) 자산배분 현황====
     tabItem(
-      tabName = "assset_allo"
+      tabName = "asset_allo",
+      box(
+        id='list_box',
+        width = 12,
+        status = 'info',
+        solidHeader = T,
+        title = "유동성 관리",
+        collapsible = F,
+        fluidRow(
+          column(
+            width = 2,
+            div("자산군", align = 'center'),
+            numericInput(
+              inputId = 'ass_bond',
+              label = "채권",
+              value = 0
+            ),
+            numericInput(
+              inputId = 'ass_stock',
+              label = "주식",
+              value = 0
+            ),
+            numericInput(
+              inputId = 'ass_alter',
+              label = "대체투자",
+              value = 0
+            ),
+            br(),
+            div("세부자산군", align = 'center'),
+            numericInput(
+              inputId = 'ass_bond_dr',
+              label = "채권_직접",
+              value = 0
+            ),
+            numericInput(
+              inputId = 'ass_stock_dev',
+              label = "주식_신흥국",
+              value = 0
+            ),
+            numericInput(
+              inputId = 'ass_alter_com',
+              label = "대체투자_상품",
+              value = 0
+            ),
+            br(),
+            actionButton(
+              inputId = "allo_renew",
+              label = "수정",
+              status = "info",
+              width='100%'
+            )
+          ),
+          column(
+            width = 10,
+            uiOutput('allocation_table')
+          )
+        )
+      )
     )
       
+    
+    
+    
     
     # tabItem(
     #   tabName = "ecos_stat",
@@ -585,13 +645,14 @@ body <- dashboardBody(
     #     width=12,
     #     status='primary',
     #     type='tabs',
-    #     ###a. 선정 아이템====
+    
+    #     ###a. 선정 아이템===
     #     tabPanel(
     #       title = "선정 아이템",
     #       icon=icon('square-check'),
     #       tableOutput('selected_item')
         ),
-        ###b. 통계표 조회====
+        ###b. 통계표 조회===
         # tabPanel(
         #   title = "통계표 조회",
         #   icon=icon('table-list'),
@@ -600,7 +661,7 @@ body <- dashboardBody(
         #     column(9,tableOutput('ecos_stat_tables'))
         #   )
         # ),
-        ###c. 아이템 추가====
+        ###c. 아이템 추가===
     #     tabPanel(
     #       title = "아이템 추가",
     #       icon=icon('square-plus'),
@@ -624,7 +685,7 @@ body <- dashboardBody(
     #     )
     #   )
     # ),
-    ##5) 경제지표 시계열====
+    ##5) 경제지표 시계열===
     # tabItem(
     #   tabName = "econ_series",
     #   fluidRow(
@@ -1420,7 +1481,7 @@ server <- function(input, output, session) {
   })
   
   
-  # 3) 유동성 관리====
+  # 4) 유동성 관리====
   
   ### * 메뉴 설정====
   output$manage_inflow <- renderUI({
@@ -1648,9 +1709,98 @@ server <- function(input, output, session) {
   # })
   
   
+  # 5) 자산배분 현황====
   
-  # 4) 한국은행 지표선정====
-  ## b. 통계표 조회====
+  update_new_allo <- reactive({
+    
+    input$allo_renew
+    df <- ma()$read('allocation')
+    
+    updateNumericInput(inputId = 'ass_bond', 
+                       value = df$목표1[[7]])
+    updateNumericInput(inputId = 'ass_stock', 
+                       value = df$목표1[[4]])
+    updateNumericInput(inputId = 'ass_alter', 
+                       value = df$목표1[[1]])
+    updateNumericInput(inputId = 'ass_bond_dr', 
+                       value = df$목표2[[8]])
+    updateNumericInput(inputId = 'ass_stock_dev', 
+                       value = df$목표2[[5]])
+    updateNumericInput(inputId = 'ass_alter_com', 
+                       value = df$목표2[[2]])
+  })
+  
+  observeEvent(T,{
+    update_new_allo()
+  }, once = T)
+  
+  observeEvent(input$allo_renew,{
+    df <- ma()$read('allocation') %>% 
+      mutate(목표1 = c(input$ass_alter, NA, NA,
+                       input$ass_stock, NA, NA,
+                       input$ass_bond, NA, NA),
+             목표2 = c(NA, input$ass_alter_com,
+                       input$ass_alter - input$ass_alter_com,
+                       NA, input$ass_stock_dev,
+                      input$ass_stock - input$ass_stock_dev,
+                       NA, input$ass_bond_dr,
+                      input$ass_bond - input$ass_bond_dr))
+    
+    dbWriteTable(ma()$con, 'allocation', df, 
+                 overwrite = TRUE, row.names = FALSE)
+    
+    update_new_allo()
+  })
+  
+  
+  
+  
+  output$allocation_table <- renderUI({
+    input$allo_renew
+    
+    df <- ma()$t_class %>% select(1:7) %>% 
+      left_join(
+        ma()$read('allocation') %>% 
+          add_row(자산군='현금성', 세부자산군="", 
+                  목표1 = 100-sum(.$목표1, na.rm = T)) %>% 
+          mutate(세부자산군2 = '', .after=2),
+        by=c('자산군','세부자산군', '세부자산군2')
+      )
+    
+    df %>% mutate(
+      목표금액 = na_if(df$평가금액[[1]]*(coalesce(목표1,0)+coalesce(목표2,0))/100,0), 
+      .before=목표1) %>% 
+      mutate(과부족 = 평가금액-목표금액) %>% 
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=c(4,8,11), digits = 0) |>
+      # colformat_double(j=c(9,11), digits = 2) |>
+      colformat_double(j=c(5:7,9:10), digits = 1) |>
+      htmltools_value()
+  })
+  
+  
+  
+  
+  # 4) 한국은행 지표선정===
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  ## b. 통계표 조회===
   # observeEvent(input$name,{
   #   rv$df <- ec$find_stat(input$name)
   #   updateSelectizeInput(session, 'name_in', 
@@ -1659,9 +1809,9 @@ server <- function(input, output, session) {
   #   
   # })
   
-  ## c. 아이템 추가==== 
+  ## c. 아이템 추가===
   
-  ### * 통계표 이름==== 
+  ### * 통계표 이름=== 
   # observeEvent(input$name_in,{
   #   
   #   rv$name_in <- input$name_in
@@ -1686,7 +1836,7 @@ server <- function(input, output, session) {
   #                        selected = rv$code)
   # })
   
-  ### * 통계표 코드==== 
+  ### * 통계표 코드===
   # observeEvent(input$code_in,{
   #   tryCatch({
   #     rv$df2 <- ec$find_items(input$code_in)
@@ -1704,7 +1854,7 @@ server <- function(input, output, session) {
   #                        selected = '전체')
   # })
   
-  ### * 아이템이름==== 
+  ### * 아이템이름===
   # observeEvent(input$item_in,{
   #   if(is.null(input$item_in)||input$item_in=='전체'){
   #     rv$df3 <- rv$df2
@@ -1722,7 +1872,7 @@ server <- function(input, output, session) {
   #                        selected = '전체')        
   # })
   
-  ### * 데이터주기====    
+  ### * 데이터주기===    
   # observeEvent(input$cyl_in,{
   #   if(is.null(input$cyl_in)||input$cyl_in=='전체'){
   #     rv$df4 <- rv$df3
@@ -1736,7 +1886,7 @@ server <- function(input, output, session) {
   #                        selected = input$cyl_in)
   # })
   
-  ## * 아이템 추가====
+  ## * 아이템 추가===
   # observeEvent(input$add_item,{
   #   ec$save_items(rv$df5, input$ecos_name)
   #   sendSweetAlert(title="추가하였습니다!", type='success')
@@ -1750,7 +1900,7 @@ server <- function(input, output, session) {
   # })
   
   
-  # 5) 한국은행 지표선정====
+  # 5) 한국은행 지표선정===
   
   
   
