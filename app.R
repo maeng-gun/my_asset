@@ -1336,8 +1336,8 @@ server <- function(input, output, session) {
       add_header_row(values = c("","투자계정","연금계정","총계정"), 
                      colwidths = c(1,3,3,5)) %>% 
       set_table_properties(layout='autofit') |>
-      colformat_double(j=c(2,3,5,6,8,9,10), digits = 0) |>
-      colformat_double(j=c(4,7,11), digits = 2) |>
+      colformat_double(j=c(2,3,5,6,8,9,10,11), digits = 0) |>
+      colformat_double(j=c(4,7,12), digits = 2) |>
       htmltools_value()
   })
   
