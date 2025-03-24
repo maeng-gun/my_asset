@@ -945,7 +945,7 @@ MyAssets <- R6Class(
           get_class_returns()
         
         shi_ret <- df %>% 
-          filter(계좌 == '삼성DC') %>% 
+          filter(계좌 == '미래DC') %>% 
           get_class_returns()
         
         nhi_ret <- df %>% 
