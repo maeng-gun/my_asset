@@ -1276,7 +1276,7 @@ server <- function(input, output, session) {
       ma()$total_trading(input$total_trade_date)|>
         flextable() |>
         theme_box() |>
-        merge_v(j=2:5) |>
+        merge_v(j=1:5) |>
         set_table_properties(layout='autofit') |>
         colformat_double(j=7:8, digits = 0) |>
         htmltools_value() 
@@ -1744,7 +1744,7 @@ server <- function(input, output, session) {
     updateNumericInput(inputId = 'ass_bond_dr', 
                        value = df$목표2[[8]])
     updateNumericInput(inputId = 'ass_stock_dev', 
-                       value = df$목표2[[5]])
+                       value = df$목표2[[6]])
     updateNumericInput(inputId = 'ass_alter_com', 
                        value = df$목표2[[2]])
   })
@@ -1758,12 +1758,15 @@ server <- function(input, output, session) {
       mutate(목표1 = c(input$ass_alter, NA, NA,
                        input$ass_stock, NA, NA,
                        input$ass_bond, NA, NA),
-             목표2 = c(NA, input$ass_alter_com,
+             목표2 = c(NA, 
                        input$ass_alter - input$ass_alter_com,
-                       NA, input$ass_stock_dev,
-                      input$ass_stock - input$ass_stock_dev,
-                       NA, input$ass_bond_dr,
-                      input$ass_bond - input$ass_bond_dr))
+                       input$ass_alter_com,
+                       NA, 
+                       input$ass_stock - input$ass_stock_dev,
+                       input$ass_stock_dev,
+                       NA, 
+                       input$ass_bond - input$ass_bond_dr,
+                       input$ass_bond_dr))
     
     dbWriteTable(ma()$con, 'allocation', df, 
                  overwrite = TRUE, row.names = FALSE)
