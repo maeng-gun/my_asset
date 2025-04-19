@@ -320,13 +320,62 @@ body <- dashboardBody(
         ###d. 종합거래내역====
         tabPanel(
           title="종합거래내역",
-          fluidRow(
-            airDatepickerInput(
-              inputId = 'total_trade_date',
-              label = "거래일자",
-              range = T,
-              addon = "none",
-              value = c(Sys.Date(), Sys.Date())
+          box(
+            id='list_box',
+            width = 12,
+            status = 'info',
+            solidHeader = T,
+            title = "입력사항",
+            collapsible = F,
+            fluidRow(
+              column(
+                width = 2,
+                airDatepickerInput(
+                  inputId = 'total_trade_date',
+                  label = "거래일자",
+                  range = T,
+                  addon = "none",
+                  value = c(Sys.Date(), Sys.Date())
+                )
+              ),
+              column(
+                width = 3,
+                selectInput(
+                  inputId = 'total_ass1',
+                  label = "자산군",
+                  choices = c("전체","대체자산","외화자산",
+                              "주식","채권")
+                )
+              ),
+              column(
+                width = 3,
+                selectInput(
+                  inputId = 'total_ass2',
+                  label = "세부자산군",
+                  choices = c("전체","부동산인프라","상품",
+                              "달러자산","엔화자산","선진국",
+                              "신흥국","간접","직접")
+                )
+              ),
+              column(
+                width = 3,
+                selectInput(
+                  inputId = 'total_ass3',
+                  label = "세부자산군2",
+                  choices = c("전체","부동산","인프라",
+                              "에너지","원자재","",
+                              "섹터","인덱스","종목",
+                              "신흥국","선진국")
+                )
+              ),
+              column(
+                width = 1,
+                selectInput(
+                  inputId = 'total_curr',
+                  label = "통화",
+                  choices = c("전체","원화","달러","엔화")
+                )
+              )
             )
           ),
           fluidRow(
@@ -1270,16 +1319,40 @@ server <- function(input, output, session) {
   
   ##d. 종합거래내역====
   
+  total_table <- reactive({
+    ma()$total_trading(input$total_trade_date)
+  })
+  
+  
   output$total_trade_table <- renderUI({
     
     if(!is.null(input$total_trade_date)){
-      ma()$total_trading(input$total_trade_date)|>
+      
+      df <- total_table()
+      
+      if(input$total_ass1!="전체"){
+        df <- df %>% filter(자산군==input$total_ass1)
+      }
+      
+      if(input$total_ass2!="전체"){
+        df <- df %>% filter(세부자산군==input$total_ass2)
+      }
+      
+      if(input$total_ass3!="전체"){
+        df <- df %>% filter(세부자산군2==input$total_ass3)
+      }
+      
+      if(input$total_curr!="전체"){
+        df <- df %>% filter(통화==input$total_curr)
+      }
+      
+      df |>
         flextable() |>
         theme_box() |>
         merge_v(j=1:5) |>
         set_table_properties(layout='autofit') |>
         colformat_double(j=7:8, digits = 0) |>
-        htmltools_value() 
+        htmltools_value(ft.align = 'center') 
     } else{
       
     }

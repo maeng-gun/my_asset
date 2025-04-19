@@ -1278,14 +1278,14 @@ MyAssets <- R6Class(
         by = c('계좌','종목코드')) %>% 
         filter(자산군!='현금성') %>% 
         filter(매입액!=0|매도액!=0) %>% 
-        select(자산군, 세부자산군, 세부자산군2, 거래일자, 계좌, 상품명, 매입액, 매도액) %>% 
-        arrange(자산군, 세부자산군, 세부자산군2, 거래일자, desc(매입액), desc(매도액))
+        select(자산군, 세부자산군, 세부자산군2, 통화, 거래일자, 계좌, 상품명, 매입액, 매도액) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2, 통화, 거래일자, desc(매입액), desc(매도액))
       
       df4 <- df3 %>% summarise(거래일자=NA_Date_, 계좌='', 자산군='', 세부자산군='',
                                세부자산군2='', 상품명='합계', 매도액=sum(매도액), 
                                매입액=sum(매입액),.groups = 'drop')
-      df3 %>% bind_rows(df4)
       
+      df3 %>% bind_rows(df4)
     },
     
     plot_total_profit = function(start, end){
