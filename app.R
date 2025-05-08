@@ -404,7 +404,7 @@ body <- dashboardBody(
                 inputId = 'total_s_date',
                 label = "시작일",
                 addon = "none",
-                value = make_date(year(Sys.Date()),1,1)
+                value = make_date(year(Sys.Date()),1,1)-1
               ),
               airDatepickerInput(
                 inputId = 'total_e_date',
