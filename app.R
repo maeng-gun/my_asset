@@ -457,6 +457,13 @@ body <- dashboardBody(
           fluidRow(
             uiOutput("t_commodity")
           )
+        ),
+        ###d. 통합상품별2====
+        tabPanel(
+          title="통합상품별2",
+          fluidRow(
+            uiOutput("t_commodity2")
+          )
         )
       )
     ),
@@ -622,7 +629,7 @@ body <- dashboardBody(
         )
       )
     ),
-    ##5) 자산배분 현황====
+      ##5) 자산배분 현황====
     tabItem(
       tabName = "asset_allo",
       box(
@@ -654,8 +661,23 @@ body <- dashboardBody(
             br(),
             div("세부자산군", align = 'center'),
             numericInput(
-              inputId = 'ass_bond_dr',
-              label = "채권_직접",
+              inputId = 'ass_bond_sol',
+              label = "채권_국채",
+              value = 0
+            ),
+            numericInput(
+              inputId = 'ass_bond_nr',
+              label = "채권_만기무위험",
+              value = 0
+            ),
+            numericInput(
+              inputId = 'ass_bond_cor',
+              label = "채권_만기회사채",
+              value = 0
+            ),
+            numericInput(
+              inputId = 'ass_bond_ig',
+              label = "채권_투자등급",
               value = 0
             ),
             numericInput(
@@ -1449,6 +1471,15 @@ server <- function(input, output, session) {
       htmltools_value()
   })
   
+  ## c. 통합상품별2====
+  output$t_commodity2 <- renderUI({
+    ma()$t_comm2 |>
+      flextable() |>
+      theme_vanilla() |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=6, digits = 0) |>
+      htmltools_value()
+  })
   
   # 3) 계좌별 자산운용 현황====
   
@@ -1814,12 +1845,18 @@ server <- function(input, output, session) {
                        value = df$목표1[[4]])
     updateNumericInput(inputId = 'ass_alter', 
                        value = df$목표1[[1]])
-    updateNumericInput(inputId = 'ass_bond_dr', 
+    updateNumericInput(inputId = 'ass_bond_sol', 
                        value = df$목표2[[8]])
+    updateNumericInput(inputId = 'ass_bond_ig', 
+                       value = df$목표2[[9]])
+    updateNumericInput(inputId = 'ass_bond_nr', 
+                       value = df$목표2[[10]])
+    updateNumericInput(inputId = 'ass_bond_cor', 
+                       value = df$목표2[[11]])
     updateNumericInput(inputId = 'ass_stock_dev', 
                        value = df$목표2[[6]])
     updateNumericInput(inputId = 'ass_alter_com', 
-                       value = df$목표2[[2]])
+                       value = df$목표2[[3]])
   })
   
   observeEvent(T,{
@@ -1830,7 +1867,7 @@ server <- function(input, output, session) {
     df <- ma()$read('allocation') %>% 
       mutate(목표1 = c(input$ass_alter, NA, NA,
                        input$ass_stock, NA, NA,
-                       input$ass_bond, NA, NA),
+                       input$ass_bond, NA, NA, NA, NA, NA),
              목표2 = c(NA, 
                        input$ass_alter - input$ass_alter_com,
                        input$ass_alter_com,
@@ -1838,8 +1875,11 @@ server <- function(input, output, session) {
                        input$ass_stock - input$ass_stock_dev,
                        input$ass_stock_dev,
                        NA, 
-                       input$ass_bond - input$ass_bond_dr,
-                       input$ass_bond_dr))
+                       input$ass_bond_sol,
+                       input$ass_bond_ig,
+                       input$ass_bond_nr, 
+                       input$ass_bond_cor,
+                       input$ass_bond - input$ass_bond_sol - input$ass_bond_ig - input$ass_bond_nr - input$ass_bond_cor))
     
     dbWriteTable(ma()$con, 'allocation', df, 
                  overwrite = TRUE, row.names = FALSE)

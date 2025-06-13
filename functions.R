@@ -514,7 +514,7 @@ MyAssets <- R6Class(
     allo3 = NULL, allo4 = NULL, allo5 = NULL, 
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
     allo9 = NULL, inflow_table = NULL, inflow_plot= NULL,
-    inflow_bal=NULL, t_class=NULL, t_comm=NULL,
+    inflow_bal=NULL, t_class=NULL, t_comm=NULL, t_comm2=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(base_dt=NULL) {
@@ -1138,7 +1138,7 @@ MyAssets <- R6Class(
       usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
       jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
       
-      df0 <- self$assets %>%
+      df00 <- self$assets %>%
         bind_rows(self$pension) %>%
         distinct(통화, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
         right_join(
@@ -1152,7 +1152,9 @@ MyAssets <- R6Class(
             filter(장부금액!=0) %>%
             group_by(계좌, 종목코드) %>%
             summarise(장부금액 = sum(장부금액), 평가금액=sum(평가금액),.groups = 'drop'),
-          by=c('계좌','종목코드')) %>%
+          by=c('계좌','종목코드'))
+      
+      df0 <- df00 %>% 
         group_by(종목코드) %>%
         summarise(통화=last(통화),
                   자산군=last(자산군),
@@ -1254,6 +1256,10 @@ MyAssets <- R6Class(
         ) %>% 
         select(!c(비중1, 비중2, 비중3, 장부금액)) %>% 
         bind_rows(df6)
+      
+      self$t_comm2 <- df00 %>%
+        select(자산군, 세부자산군, 세부자산군2, 계좌, 상품명, 평가금액) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액))
     },
     
     total_trading = function(dates){
