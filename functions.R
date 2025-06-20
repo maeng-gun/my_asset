@@ -1130,6 +1130,34 @@ MyAssets <- R6Class(
         mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
     },
     
+    compute_total2 = function(){
+      
+      
+      self$bs_pl_book_a %>% 
+        bind_rows(self$bs_pl_book_p) %>% 
+        group_by(연월=tsibble::yearmonth(거래일자)) %>% 
+        filter(거래일자 == max(거래일자)) %>% 
+        ungroup() %>% 
+        group_by(거래일자, 통화, 자산군, 세부자산군) %>% 
+        summarise(평잔=sum(평잔), 실현손익=sum(실현손익)) %>% 
+        group_by(거래일자,통화) %>% 
+        mutate(통화별평잔= sum(평잔)) %>% 
+        group_by(거래일자) %>% 
+        mutate(달러자산 = 평잔[세부자산군=='달러자산'],
+               엔화자산 = 평잔[세부자산군=='엔화자산'],
+               평잔 = case_when(
+                 통화=='달러' ~ 달러자산 * 평잔 / 통화별평잔,
+                 통화=='엔화' ~ 엔화자산 * 평잔 / 통화별평잔,
+                 TRUE ~ 평잔
+               )
+        )
+        
+               
+        
+    
+        
+    },
+    
     compute_total = function(){
       df <- self$bs_pl_mkt_a
       
@@ -1137,22 +1165,49 @@ MyAssets <- R6Class(
       jpy_bs <- round(filter(df, 통화=='엔화')$장부금액 * self$ex_jpy,0)
       usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
       jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
+
+      
+      df000 <- df %>%
+        mutate(
+          장부금액 = replace(장부금액, 통화 == '달러', usd_bs),
+          장부금액 = replace(장부금액, 통화 == '엔화', jpy_bs),
+          평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
+          평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval))%>%
+        bind_rows(self$bs_pl_mkt_p) %>%
+        filter(장부금액!=0) %>%
+        group_by(계좌, 종목코드)
       
       df00 <- self$assets %>%
         bind_rows(self$pension) %>%
         distinct(통화, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
         right_join(
-          df %>%
-            mutate(
-              장부금액 = replace(장부금액, 통화 == '달러', usd_bs),
-              장부금액 = replace(장부금액, 통화 == '엔화', jpy_bs),
-              평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
-              평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval))%>%
-            bind_rows(self$bs_pl_mkt_p) %>%
-            filter(장부금액!=0) %>%
-            group_by(계좌, 종목코드) %>%
+           df000 %>%
             summarise(장부금액 = sum(장부금액), 평가금액=sum(평가금액),.groups = 'drop'),
           by=c('계좌','종목코드'))
+      
+      df01 <- self$assets %>%
+        bind_rows(self$pension) %>%
+        distinct(통화, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
+        right_join(
+          df000 %>%
+            summarise(평잔 = sum(평잔), 실현손익 = sum(실현손익), 장부금액 = sum(장부금액), 평가금액=sum(평가금액),.groups = 'drop'),
+          by=c('계좌','종목코드'))%>% 
+        group_by(종목코드) %>%
+        summarise(통화=last(통화),
+                  자산군=last(자산군),
+                  세부자산군=last(세부자산군),
+                  세부자산군2=last(세부자산군2),
+                  상품명 = last(상품명),
+                  평잔 = sum(평잔),
+                  실현손익 = sum(실현손익),
+                  장부금액=sum(장부금액),
+                  평가금액=sum(평가금액),
+                  .groups = 'drop') %>% 
+        select(-종목코드)
+      
+      df02 <- df01 %>% group_by(통화, 자산군, 세부자산군, 세부자산군2) %>%
+             summarise(평잔 = sum(평잔), 실현손익 = sum(실현손익), 장부금액=sum(장부금액), 평가금액=sum(평가금액),
+                       .groups = 'drop') %>% mutate(장부금액 = if_else(통화=="달러", 0, 장부금액))
       
       df0 <- df00 %>% 
         group_by(종목코드) %>%
@@ -1408,7 +1463,7 @@ MyAssets <- R6Class(
         )
       
       df2 <- df1 %>% 
-        filter(자산군=='채권', 세부자산군=='직접', 
+        filter(자산군=='채권', 세부자산군 %in% c('만기무위험','만기회사채'), 
                통화=='원화', 평가금액>0) %>% 
         select(계정, 종목코드, 평가금액) %>% 
         left_join(
@@ -1429,7 +1484,7 @@ MyAssets <- R6Class(
         left_join(
           df1 %>% 
             filter(자산군=='현금성', 통화=='원화', 평가금액>0) %>% 
-            select(거래일자, 계정,평가금액) %>% 
+            select(거래일자, 계정, 평가금액) %>% 
             group_by(거래일자, 계정) %>% summarise(만기상환=sum(평가금액)) %>% 
             bind_rows(
               df2 %>% select(거래일자=만기일, 계정, 만기상환=평가금액)

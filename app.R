@@ -1690,7 +1690,7 @@ server <- function(input, output, session) {
   output$maturity_table <- renderUI({
     ma()$bs_pl_mkt_a %>% 
       bind_rows(ma()$bs_pl_mkt_p) %>% 
-      filter(자산군=='채권', 세부자산군=='직접', 
+      filter(자산군=='채권', 세부자산군 %in% c('만기무위험','만기회사채'), 
              통화=='원화', 평가금액>0) %>% 
       select(계좌, 종목명, 종목코드, 평가금액) %>% 
       left_join(
