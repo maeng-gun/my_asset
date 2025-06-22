@@ -1132,29 +1132,80 @@ MyAssets <- R6Class(
     
     compute_total2 = function(){
       
+      df <- self$bs_pl_mkt_a %>% 
+        filter(평잔>=1)
       
-      self$bs_pl_book_a %>% 
-        bind_rows(self$bs_pl_book_p) %>% 
-        group_by(연월=tsibble::yearmonth(거래일자)) %>% 
-        filter(거래일자 == max(거래일자)) %>% 
+      usd_bs <- round(filter(df, 통화=='달러')$장부금액 * self$ex_usd,0)
+      jpy_bs <- round(filter(df, 통화=='엔화')$장부금액 * self$ex_jpy,0)
+      usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
+      jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
+      usd_eqbal <- round(filter(df, 통화=='달러')$평잔 * self$ex_usd,0)
+      jpy_eqbal <- round(filter(df, 통화=='엔화')$평잔 * self$ex_jpy,0)
+      usd_rev <- round(filter(df, 통화=='달러')$수익 * self$ex_usd,0)
+      jpy_rev <- round(filter(df, 통화=='엔화')$수익 * self$ex_jpy,0)
+      usd_prof <- round(filter(df, 통화=='달러')$실현손익 * self$ex_usd,0)
+      jpy_prof <- round(filter(df, 통화=='엔화')$실현손익 * self$ex_jpy,0)
+      
+      df2 <- df %>%
+        mutate(
+          장부금액 = replace(장부금액, 통화 == '달러', usd_bs),
+          장부금액 = replace(장부금액, 통화 == '엔화', jpy_bs),
+          평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
+          평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval),
+          평잔 = replace(평잔, 통화 == '달러', usd_eqbal),
+          평잔 = replace(평잔, 통화 == '엔화', jpy_eqbal),
+          수익 = replace(수익, 통화 == '달러', usd_rev),
+          수익 = replace(수익, 통화 == '엔화', jpy_rev),
+          실현손익 = replace(실현손익, 통화 == '달러', usd_prof),
+          실현손익 = replace(실현손익, 통화 == '엔화', jpy_prof)) %>%  
+        bind_rows(self$bs_pl_mkt_p) %>% 
+        group_by(계좌, 자산군) %>% 
+        summarise(across(c(장부금액, 평가금액, 평잔, 
+                  수익, 실현손익), sum )) %>% 
         ungroup() %>% 
-        group_by(거래일자, 통화, 자산군, 세부자산군) %>% 
-        summarise(평잔=sum(평잔), 실현손익=sum(실현손익)) %>% 
-        group_by(거래일자,통화) %>% 
-        mutate(통화별평잔= sum(평잔)) %>% 
-        group_by(거래일자) %>% 
-        mutate(달러자산 = 평잔[세부자산군=='달러자산'],
-               엔화자산 = 평잔[세부자산군=='엔화자산'],
-               평잔 = case_when(
-                 통화=='달러' ~ 달러자산 * 평잔 / 통화별평잔,
-                 통화=='엔화' ~ 엔화자산 * 평잔 / 통화별평잔,
-                 TRUE ~ 평잔
-               )
-        )
-        
-               
-        
-    
+        mutate(평가손익 = 평가금액-장부금액,
+               세전수익률 = 수익/평잔*100,
+               세후수익률 = 실현손익/평잔*100,
+               평가수익률 = 평가손익/장부금액*100,
+               계좌 = factor(계좌, 
+                           levels = c("한투ISA","한투","불리오",
+                                      "엔투하영", "엔투저축연금",
+                                      "한투연금저축", "미래DC", 
+                                      "농협IRP","엔투IRP")),
+               자산군 = factor(자산군, 
+                            levels = c("주식","대체자산",
+                                       "채권","현금성", 
+                                       "외화자산"))) %>% 
+        arrange(계좌, 자산군)
+      
+      f <- df2[df2$자산군=='외화자산', ]
+      
+      b <- df2 %>% 
+        filter(계좌=='불리오') %>% 
+        mutate(손익=실현손익+평가손익) %>% 
+        summarise(across(c(장부금액,평가금액,평잔,수익,실현손익,평가손익,손익),sum))
+      
+    　df2[df2$자산군=='외화자산', ] <- 
+        list(계좌="한투",자산군="외화자산", 장부금액=0,평가금액=0,
+             평잔=0, 
+             수익=f$수익,
+             실현손익=f$실현손익,
+             평가손익=f$평가손익-b$손익,
+             세전수익률=(f$수익/(f$평잔-b$평잔))*100,
+             세후수익률=(f$실현손익/(f$평잔-b$평잔))*100,
+             평가수익률=((f$평가손익-b$손익)/f$장부금액)*100)
+      
+      df3 <- df2 %>% 
+        mutate(자산군="") %>% 
+        group_by(계좌, 자산군) %>% 
+        summarise(across(c(장부금액, 평가금액, 평잔, 
+                           수익, 실현손익), sum )) %>% 
+        ungroup() %>% 
+        mutate(평가손익 = 평가금액-장부금액,
+               세전수익률 = 수익/평잔*100,
+               세후수익률 = 실현손익/평잔*100,
+               평가수익률 = 평가손익/평잔*100)
+
         
     },
     
@@ -1254,7 +1305,7 @@ MyAssets <- R6Class(
         자산군='환차손익', 세부자산군='', 세부자산군2 = '',
         평가금액=0,
         평가손익= (sum(df3$장부금액) - df2$장부금액),
-        평가수익률 = round(평가손익/df2$평가금액*100,2)
+        평가수익률 = round(평가손익/df2$장부금액*100,2)
       )
       
        df7 <- bind_rows(df2,df3,df4,df5) %>%
