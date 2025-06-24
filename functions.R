@@ -515,6 +515,7 @@ MyAssets <- R6Class(
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
     allo9 = NULL, inflow_table = NULL, inflow_plot= NULL,
     inflow_bal=NULL, t_class=NULL, t_comm=NULL, t_comm2=NULL,
+    t_comm3=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(base_dt=NULL) {
@@ -534,6 +535,7 @@ MyAssets <- R6Class(
       self$run_book()
       self$update_new_price()
       self$run_valuation()
+      self$compute_total2()
       # self$get_inflow()
     },
     
@@ -1161,39 +1163,36 @@ MyAssets <- R6Class(
         bind_rows(self$bs_pl_mkt_p) %>% 
         group_by(계좌, 자산군) %>% 
         summarise(across(c(장부금액, 평가금액, 평잔, 
-                  수익, 실현손익), sum )) %>% 
-        ungroup() %>% 
-        mutate(평가손익 = 평가금액-장부금액,
-               세전수익률 = 수익/평잔*100,
-               세후수익률 = 실현손익/평잔*100,
-               평가수익률 = 평가손익/장부금액*100,
-               계좌 = factor(계좌, 
+                  수익, 실현손익), sum )) %>%
+        mutate(계좌 = factor(계좌, 
                            levels = c("한투ISA","한투","불리오",
                                       "엔투하영", "엔투저축연금",
                                       "한투연금저축", "미래DC", 
-                                      "농협IRP","엔투IRP")),
+                                      "농협IRP","엔투IRP","합계")),
                자산군 = factor(자산군, 
-                            levels = c("주식","대체자산",
+                            levels = c("","주식","대체자산",
                                        "채권","현금성", 
                                        "외화자산"))) %>% 
-        arrange(계좌, 자산군)
-      
-      f <- df2[df2$자산군=='외화자산', ]
-      
-      b <- df2 %>% 
-        filter(계좌=='불리오') %>% 
-        mutate(손익=실현손익+평가손익) %>% 
-        summarise(across(c(장부금액,평가금액,평잔,수익,실현손익,평가손익,손익),sum))
-      
-    　df2[df2$자산군=='외화자산', ] <- 
-        list(계좌="한투",자산군="외화자산", 장부금액=0,평가금액=0,
-             평잔=0, 
-             수익=f$수익,
-             실현손익=f$실현손익,
-             평가손익=f$평가손익-b$손익,
-             세전수익률=(f$수익/(f$평잔-b$평잔))*100,
-             세후수익률=(f$실현손익/(f$평잔-b$평잔))*100,
-             평가수익률=((f$평가손익-b$손익)/f$장부금액)*100)
+        ungroup()
+    
+    #   f <- df2[df2$자산군=='외화자산', ]
+    #   
+    #   b <- df2 %>% 
+    #     filter(계좌=='불리오') %>% 
+    #     mutate(손익=실현손익+평가손익) %>% 
+    #     summarise(across(c(장부금액,평가금액,평잔,수익,실현손익,평가손익,손익),sum))
+    #   
+    # 　df2[df2$자산군=='외화자산', ] <- 
+    #     list(계좌="한투",자산군="외화자산", 
+    #          장부금액=f$장부금액,
+    #          평가금액=f$평가금액,
+    #          평잔=f$평잔, 
+    #          수익=f$수익,
+    #          실현손익=f$실현손익,
+    #          평가손익=f$평가손익-b$손익,
+    #          세전수익률=(f$수익/(f$평잔-b$평잔))*100,
+    #          세후수익률=(f$실현손익/(f$평잔-b$평잔))*100,
+    #          평가수익률=((f$평가손익-b$손익)/f$장부금액)*100)
       
       df3 <- df2 %>% 
         mutate(자산군="") %>% 
@@ -1206,6 +1205,57 @@ MyAssets <- R6Class(
                세후수익률 = 실현손익/평잔*100,
                평가수익률 = 평가손익/평잔*100)
 
+      df4 <- df3 %>% filter(계좌!='불리오') %>% 
+        summarise(계좌='합계',자산군='',across(장부금액:실현손익,sum)) %>% 
+        mutate(평가손익 = 평가금액-장부금액,
+               세전수익률 = 수익/평잔*100,
+               세후수익률 = 실현손익/평잔*100,
+               평가수익률 = 평가손익/평잔*100)
+      
+      df5 <- df2 %>% 
+        filter(계좌!="불리오") %>% 
+        mutate(계좌="종합") %>% 
+        group_by(계좌, 자산군) %>% 
+        summarise(across(c(장부금액, 평가금액, 평잔, 
+                           수익, 실현손익), sum )) %>% 
+        ungroup() %>% 
+        mutate(계좌='원화',
+               평가손익 = 평가금액-장부금액,
+               세전수익률 = 수익/평잔*100,
+               세후수익률 = 실현손익/평잔*100,
+               평가수익률 = 평가손익/평잔*100) %>% 
+        bind_rows(
+          df2 %>% 
+            filter(계좌=='불리오') %>% mutate(계좌='외화')
+        ) %>% 
+        mutate(자산군 = factor(자산군, 
+                            levels = c("","주식","대체자산",
+                                       "채권","현금성", 
+                                       "외화자산"))) %>% 
+        arrange(자산군, desc(계좌)) %>% 
+        
+        
+      df6 <- bind_rows(df5, df4,
+        
+        ( bind_rows(df2, df3) %>%
+        mutate(계좌 = factor(계좌, 
+                           levels = c("한투ISA","한투","불리오",
+                                      "엔투하영", "엔투저축연금",
+                                      "한투연금저축", "미래DC", 
+                                      "농협IRP","엔투IRP","합계")),
+               자산군 = factor(자산군, 
+                            levels = c("","주식","대체자산",
+                                       "채권","현금성", 
+                                       "외화자산"))) %>% 
+        arrange(계좌, 자산군))) %>% 
+        select(-장부금액,-수익)
+      
+      self$t_comm3 <- df6 %>% 
+        left_join(df3 %>% select(계좌, 총평가=평가금액), by='계좌') %>% 
+        mutate(총평가=if_else(계좌=='원화'|계좌=='외화'|계좌=='합계',
+                           df4$평가금액,총평가),
+               총평가=if_else(자산군=='외화자산',0,총평가),
+               비중 = 평가금액/총평가*100, .after=3) %>% select(-총평가)
         
     },
     

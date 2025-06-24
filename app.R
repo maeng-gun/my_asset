@@ -479,42 +479,45 @@ body <- dashboardBody(
         ###a. 투자자산현황====
         tabPanel(
           title="투자현황",
-          h5("1. 자산군별 배분현황"),
-          br(),
           fluidRow(
-            column(
-              width = 4,
-              uiOutput("allo0")
-            ),
-            column(
-              width = 8,
-              uiOutput("allo1")
-            )
-          ),
-          h5("2. 통화별 배분현황"),
-          br(),
-          fluidRow(
-            column(
-              width = 4,
-              uiOutput("allo2")
-            ),
-            column(
-              width = 8,
-              uiOutput("allo3")
-            )
-          ),
-          h5("3. 불리오 배분현황"),
-          br(),
-          fluidRow(
-            column(
-              width = 4,
-              uiOutput("allo5")
-            ),
-            column(
-              width = 8,
-              uiOutput("allo4")
-            )
+            uiOutput("total_accounts")
           )
+          # h5("1. 자산군별 배분현황"),
+          # br(),
+          # fluidRow(
+          #   column(
+          #     width = 4,
+          #     uiOutput("allo0")
+          #   ),
+          #   column(
+          #     width = 8,
+          #     uiOutput("allo1")
+          #   )
+          # ),
+          # h5("2. 통화별 배분현황"),
+          # br(),
+          # fluidRow(
+          #   column(
+          #     width = 4,
+          #     uiOutput("allo2")
+          #   ),
+          #   column(
+          #     width = 8,
+          #     uiOutput("allo3")
+          #   )
+          # ),
+          # h5("3. 불리오 배분현황"),
+          # br(),
+          # fluidRow(
+          #   column(
+          #     width = 4,
+          #     uiOutput("allo5")
+          #   ),
+          #   column(
+          #     width = 8,
+          #     uiOutput("allo4")
+          #   )
+          # )
         ),
         ###b. 투자손익현황====
         tabPanel(
@@ -539,33 +542,33 @@ body <- dashboardBody(
           )
         ),
         ###c. 연금현황====
-        tabPanel(
-          title="연금현황",
-          h5("1. 자산군별 배분현황"),
-          br(),
-          fluidRow(
-            column(
-              width = 4,
-              uiOutput("allo6")
-            ),
-            column(
-              width = 8,
-              uiOutput("allo7")
-            )
-          ),
-          h5("2. 계좌별 배분현황"),
-          br(),
-          fluidRow(
-            column(
-              width = 4,
-              uiOutput("allo8")
-            ),
-            column(
-              width = 8,
-              uiOutput("allo9")
-            )
-          )
-        ),
+        # tabPanel(
+        #   title="연금현황",
+        #   h5("1. 자산군별 배분현황"),
+        #   br(),
+        #   fluidRow(
+        #     column(
+        #       width = 4,
+        #       uiOutput("allo6")
+        #     ),
+        #     column(
+        #       width = 8,
+        #       uiOutput("allo7")
+        #     )
+        #   ),
+        #   h5("2. 계좌별 배분현황"),
+        #   br(),
+        #   fluidRow(
+        #     column(
+        #       width = 4,
+        #       uiOutput("allo8")
+        #     ),
+        #     column(
+        #       width = 8,
+        #       uiOutput("allo9")
+        #     )
+        #   )
+        # ),
         ###d. 연금손익현황====
         tabPanel(
           title="연금손익현황",
@@ -1495,17 +1498,29 @@ server <- function(input, output, session) {
     
  ## a. 투자자산현황====
 
-  ###* 자산군별 배분현황====
-  output$allo0 <- renderUI({render_allo(ma()$allo0)})
-  output$allo1 <- renderUI({render_allo(ma()$allo1)})
+  output$total_accounts <- renderUI({
+    ma()$t_comm3 %>% 
+      flextable() |>
+      theme_vanilla() |>
+      merge_v(j=1) |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=3:7, digits = 0) |>
+      colformat_double(j=8:10, digits = 2) |>
+      htmltools_value()
+    
+  })
   
-  ###* 통화별 배분현황====
-  output$allo2 <- renderUI({render_allo(ma()$allo2)})
-  output$allo3 <- renderUI({render_allo(ma()$allo3)})
-  
-  ###* 불리오 배분현황====
-  output$allo5 <- renderUI({render_allo(ma()$allo5)})
-  output$allo4 <- renderUI({render_allo(ma()$allo4)})
+  # ###* 자산군별 배분현황
+  # output$allo0 <- renderUI({render_allo(ma()$allo0)})
+  # output$allo1 <- renderUI({render_allo(ma()$allo1)})
+  # twhdyd
+  # ###* 통화별 배분현황
+  # output$allo2 <- renderUI({render_allo(ma()$allo2)})
+  # output$allo3 <- renderUI({render_allo(ma()$allo3)})
+  # 
+  # ###* 불리오 배분현황
+  # output$allo5 <- renderUI({render_allo(ma()$allo5)})
+  # output$allo4 <- renderUI({render_allo(ma()$allo4)})
  
 
   ## b. 투자손익현황====
@@ -1554,11 +1569,11 @@ server <- function(input, output, session) {
 
 
   
-  ## c. 연금자산현황====
-  output$allo6 <- renderUI({render_allo(ma()$allo6)})
-  output$allo7 <- renderUI({render_allo(ma()$allo7)})
-  output$allo8 <- renderUI({render_allo(ma()$allo8)})
-  output$allo9 <- renderUI({render_allo(ma()$allo9)})
+  ## c. 연금자산현황
+  # output$allo6 <- renderUI({render_allo(ma()$allo6)})
+  # output$allo7 <- renderUI({render_allo(ma()$allo7)})
+  # output$allo8 <- renderUI({render_allo(ma()$allo8)})
+  # output$allo9 <- renderUI({render_allo(ma()$allo9)})
   
   ## d. 연금손익현황====
   
