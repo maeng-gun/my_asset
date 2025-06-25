@@ -1504,8 +1504,8 @@ server <- function(input, output, session) {
       theme_vanilla() |>
       merge_v(j=1) |>
       set_table_properties(layout='autofit') |>
-      colformat_double(j=3:7, digits = 0) |>
-      colformat_double(j=8:10, digits = 2) |>
+      colformat_double(j=c(3,5:7), digits = 0) |>
+      colformat_double(j=c(4,8:10), digits = 2) |>
       htmltools_value()
     
   })
