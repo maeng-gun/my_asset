@@ -427,20 +427,16 @@ body <- dashboardBody(
             uiOutput("t_profit1")
           ),
           fluidRow(
-            column(
-              width=2,
-              airDatepickerInput(
-                inputId = 't_profit_date',
-                label = "조회연월",
-                addon = "none",
-                view = 'months',
-                value = Sys.Date()
-              )
-            ),
-            column(
-              width=10,
-              uiOutput("t_profit2")
+            airDatepickerInput(
+              inputId = 't_profit_date',
+              label = "조회연월",
+              addon = "none",
+              view = 'months',
+              value = Sys.Date()
             )
+          ),
+          fluidRow(
+            uiOutput("t_profit2")
           )
         ),
         
@@ -1376,7 +1372,7 @@ server <- function(input, output, session) {
         theme_box() |>
         merge_v(j=1:5) |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=7:8, digits = 0) |>
+        colformat_double(j=7:11, digits = 0) |>
         htmltools_value(ft.align = 'center') 
     } else{
       
@@ -1400,42 +1396,44 @@ server <- function(input, output, session) {
       summarise(across(-거래일자, last)) %>% 
       transmute(
         연도=as.character(연도), 
+        총평잔 = 투자평잔+연금평잔,
+        평가손익,
+        평가손익증감 = if_else(연도==2023, first(평가손익),
+                         diff_vec(평가손익,silent = T)),
+        총실현손익 = 투자실현손익+연금실현손익,
+        총기간손익 = 총실현손익+평가손익증감,
+        총기간수익률 = 총기간손익 / 총평잔 * 100,
         투자평잔, 
         투자실현손익, 
         투자실현수익률 = 투자실현손익 / 투자평잔 * 100,
         연금평잔, 
         연금실현손익,
         연금실현수익률 = 연금실현손익 / 연금평잔 * 100,
-        총평잔 = 투자평잔+연금평잔,
-        총실현손익 = 투자실현손익+연금실현손익,
-        평가손익증감 = if_else(연도==2023, first(평가손익),
-                         diff_vec(평가손익,silent = T)),
-        총기간손익 = 총실현손익+평가손익증감,
-        총기간수익률 = 총기간손익 / 총평잔 * 100
       ) %>% 
       flextable() |>
       theme_box() |>
       set_header_labels(
         values = list(
           연도="연도",
+          총평잔="연평균잔액",
+          평가손익="평가손익(누계)",
+          평가손익증감="평가손익증감(A)",
+          총실현손익="실현손익(B)",
+          총기간손익 = "연간총손익(A+B)",
+          총기간수익률 = "연간총수익률",
           투자평잔="연평균잔액",
           투자실현손익="실현손익",
           투자실현수익률 = "실현수익률",
           연금평잔="연평균잔액", 
           연금실현손익="실현손익",
-          연금실현수익률 = "실현수익률",
-          총평잔="연평균잔액",
-          총실현손익="실현손익",
-          평가손익증감="평가손익증감",
-          총기간손익 = "연간총손익",
-          총기간수익률 = "연간총수익률"
+          연금실현수익률 = "실현수익률"
         )
       ) %>%
-      add_header_row(values = c("","투자계정","연금계정","총계정"), 
-                     colwidths = c(1,3,3,5)) %>% 
+      add_header_row(values = c("","총계정","투자계정","연금계정"), 
+                     colwidths = c(1,6,3,3)) %>% 
       set_table_properties(layout='autofit') |>
-      colformat_double(j=c(2,3,5,6,8,9,10,11), digits = 0) |>
-      colformat_double(j=c(4,7,12), digits = 2) |>
+      colformat_double(j=c(2,3,4,5,6,8,9,11,12), digits = 0) |>
+      colformat_double(j=c(7,10,13), digits = 2) |>
       htmltools_value()
   })
   
@@ -1504,8 +1502,8 @@ server <- function(input, output, session) {
       theme_vanilla() |>
       merge_v(j=1) |>
       set_table_properties(layout='autofit') |>
-      colformat_double(j=c(3,5:7), digits = 0) |>
-      colformat_double(j=c(4,8:10), digits = 2) |>
+      colformat_double(j=c(5:8), digits = 0) |>
+      colformat_double(j=c(4,9:11), digits = 2) |>
       htmltools_value()
     
   })
@@ -1915,7 +1913,14 @@ server <- function(input, output, session) {
                   목표1 = 100-sum(.$목표1, na.rm = T)) %>% 
           mutate(세부자산군2 = '', .after=2),
         by=c('자산군','세부자산군', '세부자산군2')
-      )
+      ) %>% 
+      mutate(
+        자산군=factor(자산군, 
+                   levels=c("<합계>","주식","대체자산","채권",
+                            "현금성", "환차손익"))
+      ) %>% 
+      arrange(자산군)
+      
     
     df %>% mutate(
       목표금액 = na_if(df$평가금액[[1]]*(coalesce(목표1,0)+coalesce(목표2,0))/100,0), 

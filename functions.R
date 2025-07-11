@@ -149,7 +149,7 @@ KrxStocks <- R6Class(
     ##1. 속성 초기화 ====
     initialize = function(date=NULL){
       if(is.null(date)){
-        if(hour(now())>=9){date <- today()}
+        if(now()>=update(now(), hour=9, minute=21, second=0)){date <- today()}
         else {date <- today() - 1}
       }
       self$user.agent <- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36 '
@@ -706,13 +706,10 @@ MyAssets <- R6Class(
             #                    cash_w_b$나무),
             장부금액 = replace(장부금액, 종목명=='한투예수금', 
                                cash_w_b$한투),
-            장부금액 = replace(장부금액, 종목명=='한투CMA예수금',
-                               cash_w_b$한투CMA),
             장부금액 = replace(장부금액, 종목명=='한투ISA예수금',
                                cash_w_b$한투ISA),
             # 평잔 = replace(평잔, 종목명=='나무예수금', cash_w_e$나무),
             평잔 = replace(평잔, 종목명=='한투예수금', cash_w_e$한투),
-            평잔 = replace(평잔, 종목명=='한투CMA예수금', cash_w_e$한투CMA),
             평잔 = replace(평잔, 종목명=='한투ISA예수금', cash_w_e$한투ISA),
             장부금액 = replace(장부금액, 종목명=='불리오달러', 
                                cash_d_b$불리오),
@@ -736,9 +733,10 @@ MyAssets <- R6Class(
     evaluate_bs_pl_assets = function() {
       
       # if (is.null(self$bl) && is.null(self$my)) {
-        # self$bl <- AutoInvest$new('boolio')
+      if (is.null(self$bl)) {
+        self$bl <- AutoInvest$new('boolio')
         # self$my <- AutoInvest$new('my')
-      # }
+      }
       
       
       # p_lotte <- as.integer(self$bl$get_current_price("011170")$stck_prpr)
@@ -752,12 +750,12 @@ MyAssets <- R6Class(
         #                       상품명 == '우리사주 롯데케미칼', 
         #                       p_lotte*q_lotte)) %>% 
         filter(평가금액!=0) %>% 
-        # bind_rows(
+        bind_rows(
           # mutate(self$my$inquire_balance(), 계좌 = '한투'),
           # mutate(self$my$inquire_balance_ovs(), 계좌 = '한투'),
           # mutate(self$my$inquire_balance_ovs('JPY'), 계좌 = '한투'),
-          # mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')
-          # ) %>%
+          mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')
+          ) %>%
         select(계좌, 종목코드,평가금액)
 
       
@@ -769,7 +767,7 @@ MyAssets <- R6Class(
             select(종목코드, 종가),
           by='종목코드'
         ) %>% 
-        filter(평잔!=0) %>% 
+        filter(평잔>0.02) %>% 
         mutate(
           장부금액 = if_else(장부금액<1, 0, 장부금액),
           평가금액 = case_when(
@@ -1134,8 +1132,7 @@ MyAssets <- R6Class(
     
     compute_total2 = function(){
       
-      df <- self$bs_pl_mkt_a %>% 
-        filter(평잔>=1)
+      df <- self$bs_pl_mkt_a
       
       usd_bs <- round(filter(df, 통화=='달러')$장부금액 * self$ex_usd,0)
       jpy_bs <- round(filter(df, 통화=='엔화')$장부금액 * self$ex_jpy,0)
@@ -1161,7 +1158,7 @@ MyAssets <- R6Class(
           실현손익 = replace(실현손익, 통화 == '달러', usd_prof),
           실현손익 = replace(실현손익, 통화 == '엔화', jpy_prof)) %>%  
         bind_rows(self$bs_pl_mkt_p) %>% 
-        group_by(계좌, 자산군) %>% 
+        group_by(계좌, 자산군, 통화) %>% 
         summarise(across(c(장부금액, 평가금액, 평잔, 
                   수익, 실현손익), sum )) %>% 
         mutate(평가손익 = 평가금액-장부금액,
@@ -1200,7 +1197,7 @@ MyAssets <- R6Class(
       
       df3 <- df2 %>% 
         mutate(자산군="") %>% 
-        group_by(계좌, 자산군) %>% 
+        group_by(계좌, 자산군, 통화) %>% 
         summarise(across(c(장부금액, 평가금액, 평잔, 
                            수익, 실현손익), sum )) %>% 
         ungroup() %>% 
@@ -1209,29 +1206,34 @@ MyAssets <- R6Class(
                세후수익률 = 실현손익/평잔*100,
                평가수익률 = 평가손익/장부금액*100)
 
-      df4 <- df3 %>% filter(계좌!='불리오') %>% 
-        summarise(계좌='합계',자산군='',across(장부금액:실현손익,sum)) %>% 
+      df4 <- df3 %>% filter(통화=='원화') %>% 
+        summarise(계좌='합계',자산군='',통화='',
+                  across(장부금액:실현손익,sum)) %>% 
         mutate(평가손익 = 평가금액-장부금액,
                세전수익률 = 수익/평잔*100,
                세후수익률 = 실현손익/평잔*100,
                평가수익률 = 평가손익/장부금액*100)
       
       df5 <- df2 %>% 
-        filter(계좌!="불리오") %>% 
-        mutate(계좌="종합") %>% 
-        group_by(계좌, 자산군) %>% 
+        filter(통화=="원화") %>% 
+        mutate(계좌="전체") %>% 
+        group_by(계좌, 자산군, 통화) %>% 
         summarise(across(c(장부금액, 평가금액, 평잔, 
                            수익, 실현손익), sum )) %>% 
         ungroup() %>% 
-        mutate(계좌='원화',
+        bind_rows(
+          df2 %>% 
+            filter(통화!='원화') %>% mutate(계좌='전체') %>% 
+            group_by(계좌, 자산군, 통화) %>% 
+            summarise(across(c(장부금액, 평가금액, 평잔, 
+                               수익, 실현손익), sum )) %>% 
+            ungroup()
+        ) %>% 
+        mutate(계좌='전체',
                평가손익 = 평가금액-장부금액,
                세전수익률 = 수익/평잔*100,
                세후수익률 = 실현손익/평잔*100,
                평가수익률 = 평가손익/장부금액*100) %>% 
-        bind_rows(
-          df2 %>% 
-            filter(계좌=='불리오') %>% mutate(계좌='외화')
-        ) %>% 
         mutate(자산군 = factor(자산군, 
                             levels = c("","주식","대체자산",
                                        "채권","현금성", 
@@ -1254,20 +1256,20 @@ MyAssets <- R6Class(
         arrange(계좌, 자산군))) %>% 
         select(-장부금액,-수익)
       
-      
-      
-      df7 <- df3 %>% select(계좌, 총평가=평가금액) %>% 
+
+      df7 <- df3 %>% group_by(계좌) %>% summarise(총평가=sum(평가금액)) %>% 
         mutate(총평가 = if_else(계좌=='한투', 
                              총평가-filter(df2,자산군=='외화자산')$평가금액, 총평가))
       
       self$t_comm3 <- df6 %>% 
         left_join(df7, by='계좌') %>% 
-        mutate(총평가=if_else(계좌=='원화'|계좌=='외화'|계좌=='합계',
+        mutate(총평가=if_else(계좌=='전체'|계좌=='합계',
                            df4$평가금액,총평가),
                총평가=if_else(자산군=='외화자산',0,총평가),
                비중 = 평가금액/총평가*100, .after=3) %>% 
         select(-총평가) %>% 
-        mutate(비중=if_else(자산군=='외화자산',0,비중))
+        mutate(비중=if_else(자산군=='외화자산',0,비중),
+               비중=if_else((계좌=='한투'&자산군==''),0,비중))
         
     },
     
@@ -1426,8 +1428,12 @@ MyAssets <- R6Class(
         bind_rows(df6)
       
       self$t_comm2 <- df00 %>%
-        select(자산군, 세부자산군, 세부자산군2, 계좌, 상품명, 평가금액) %>% 
-        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액))
+        mutate(
+          평가손익 = round(평가금액 - 장부금액,0),
+          평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
+        select(자산군, 세부자산군, 세부자산군2, 계좌, 상품명, 
+               평가금액, 평가손익, 평가수익률) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2, desc(평가수익률))
     },
     
     total_trading = function(dates){
