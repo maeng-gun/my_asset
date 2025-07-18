@@ -515,7 +515,7 @@ MyAssets <- R6Class(
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
     allo9 = NULL, inflow_table = NULL, inflow_plot= NULL,
     inflow_bal=NULL, t_class=NULL, t_comm=NULL, t_comm2=NULL,
-    t_comm3=NULL,
+    t_comm3=NULL, t_comm4=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(base_dt=NULL) {
@@ -1261,7 +1261,7 @@ MyAssets <- R6Class(
         mutate(총평가 = if_else(계좌=='한투', 
                              총평가-filter(df2,자산군=='외화자산')$평가금액, 총평가))
       
-      self$t_comm3 <- df6 %>% 
+      df8 <- df6 %>% 
         left_join(df7, by='계좌') %>% 
         mutate(총평가=if_else(계좌=='전체'|계좌=='합계',
                            df4$평가금액,총평가),
@@ -1270,6 +1270,25 @@ MyAssets <- R6Class(
         select(-총평가) %>% 
         mutate(비중=if_else(자산군=='외화자산',0,비중),
                비중=if_else((계좌=='한투'&자산군==''),0,비중))
+      
+      
+      df9 <- self$read_obj('return') %>% 
+        filter(year(기준일)==year(self$today)-1) %>% 
+        filter(기준일==max(기준일, na.rm=T), 
+               세부자산군=='', 세부자산군2=='') %>% 
+        collect() %>% transmute(자산군=c('','대체자산','주식',
+                                      '채권','현금성','외화자산'), 
+                                통화=c('','원화','원화','원화','원화','원화'), 
+                                전년평가손익=평가손익)
+      
+      self$t_comm3 <- df8 %>% filter(계좌 %in% c("전체","합계")) %>% 
+        left_join(df9, by=c('자산군','통화')) %>% 
+        mutate(평가손익증감=평가손익-전년평가손익, 
+               총손익 = 실현손익+평가손익증감, .after='평가손익') %>% 
+        select(-평가수익률, -평가손익, -전년평가손익) %>% 
+        mutate(총수익률=총손익/평잔*100)
+      
+      self$t_comm4 <- df8 %>% filter(!(계좌 %in% c("전체","합계")))
         
     },
     
@@ -1501,8 +1520,8 @@ MyAssets <- R6Class(
         geom_bar(aes(y=일간수익률), stat='identity')+
         scale_y_continuous(
           breaks = function(x){seq(
-            floor(x[1] / 0.25) * 0.25,  # 최소값을 0.25 단위로 내림
-            ceiling(x[2] / 0.25) * 0.25,  # 최대값을 0.25 단위로 올림
+            floor(x[1] / 0.5) * 0.5,  # 최소값을 0.25 단위로 내림
+            ceiling(x[2] / 0.5) * 0.5,  # 최대값을 0.25 단위로 올림
             by = 0.25  # 0.25 간격
           )}, sec.axis = dup_axis(name=NULL)
         )+
@@ -1514,9 +1533,9 @@ MyAssets <- R6Class(
         geom_bar(aes(y=일간손익), stat='identity') +
         scale_y_continuous(
           breaks = function(x){seq(
-            floor(x[1] / 50) * 50,
-            ceiling(x[2] / 50) * 50,
-            by = 50  
+            floor(x[1] / 100) * 100,
+            ceiling(x[2] / 100) * 100,
+            by = 100  
           )}, sec.axis = dup_axis(name=NULL)
         )+
         theme(text=element_text(size=20))

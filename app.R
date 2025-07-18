@@ -476,7 +476,11 @@ body <- dashboardBody(
         tabPanel(
           title="투자현황",
           fluidRow(
-            uiOutput("total_accounts")
+            uiOutput("total_accounts1")
+          ),
+          br(),
+          fluidRow(
+            uiOutput("total_accounts2")
           )
           # h5("1. 자산군별 배분현황"),
           # br(),
@@ -1496,8 +1500,20 @@ server <- function(input, output, session) {
     
  ## a. 투자자산현황====
 
-  output$total_accounts <- renderUI({
+  output$total_accounts1 <- renderUI({
     ma()$t_comm3 %>% 
+      flextable() |>
+      theme_vanilla() |>
+      merge_v(j=1) |>
+      set_table_properties(layout='autofit') |>
+      colformat_double(j=c(5:9), digits = 0) |>
+      colformat_double(j=c(4,10:12), digits = 2) |>
+      htmltools_value()
+    
+  })
+  
+  output$total_accounts2 <- renderUI({
+    ma()$t_comm4 %>% 
       flextable() |>
       theme_vanilla() |>
       merge_v(j=1) |>
@@ -1507,7 +1523,6 @@ server <- function(input, output, session) {
       htmltools_value()
     
   })
-  
   # ###* 자산군별 배분현황
   # output$allo0 <- renderUI({render_allo(ma()$allo0)})
   # output$allo1 <- renderUI({render_allo(ma()$allo1)})
