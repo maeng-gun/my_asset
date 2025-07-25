@@ -1294,13 +1294,12 @@ MyAssets <- R6Class(
     
     compute_total = function(){
       df <- self$bs_pl_mkt_a
-      
       usd_bs <- round(filter(df, 통화=='달러')$장부금액 * self$ex_usd,0)
       jpy_bs <- round(filter(df, 통화=='엔화')$장부금액 * self$ex_jpy,0)
       usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
       jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
 
-      
+
       df000 <- df %>%
         mutate(
           장부금액 = replace(장부금액, 통화 == '달러', usd_bs),
@@ -1310,148 +1309,164 @@ MyAssets <- R6Class(
         bind_rows(self$bs_pl_mkt_p) %>%
         filter(장부금액!=0) %>%
         group_by(계좌, 종목코드)
-      
+
       df00 <- self$assets %>%
         bind_rows(self$pension) %>%
         distinct(통화, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
         right_join(
            df000 %>%
-            summarise(장부금액 = sum(장부금액), 평가금액=sum(평가금액),.groups = 'drop'),
+            summarise(
+              보유수량 = sum(보유수량),
+              장부금액 = sum(장부금액),
+              평가금액=sum(평가금액),.groups = 'drop'),
           by=c('계좌','종목코드'))
-      
+
       df01 <- self$assets %>%
         bind_rows(self$pension) %>%
         distinct(통화, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
         right_join(
           df000 %>%
-            summarise(평잔 = sum(평잔), 실현손익 = sum(실현손익), 장부금액 = sum(장부금액), 평가금액=sum(평가금액),.groups = 'drop'),
-          by=c('계좌','종목코드'))%>% 
+            summarise(평잔 = sum(평잔),
+                      보유수량=sum(보유수량),
+                      실현손익 = sum(실현손익),
+                      장부금액 = sum(장부금액),
+                      평가금액=sum(평가금액),.groups = 'drop'),
+          by=c('계좌','종목코드'))%>%
         group_by(종목코드) %>%
         summarise(통화=last(통화),
                   자산군=last(자산군),
                   세부자산군=last(세부자산군),
                   세부자산군2=last(세부자산군2),
                   상품명 = last(상품명),
+                  보유수량=sum(보유수량),
                   평잔 = sum(평잔),
                   실현손익 = sum(실현손익),
                   장부금액=sum(장부금액),
                   평가금액=sum(평가금액),
-                  .groups = 'drop') %>% 
+                  .groups = 'drop') %>%
         select(-종목코드)
-      
+
       df02 <- df01 %>% group_by(통화, 자산군, 세부자산군, 세부자산군2) %>%
-             summarise(평잔 = sum(평잔), 실현손익 = sum(실현손익), 장부금액=sum(장부금액), 평가금액=sum(평가금액),
+             summarise(평잔 = sum(평잔), 실현손익 = sum(실현손익), 보유수량=0,
+                       장부금액=sum(장부금액), 평가금액=sum(평가금액),
                        .groups = 'drop') %>% mutate(장부금액 = if_else(통화=="달러", 0, 장부금액))
-      
-      df0 <- df00 %>% 
+
+      df0 <- df00 %>%
         group_by(종목코드) %>%
         summarise(통화=last(통화),
                   자산군=last(자산군),
                   세부자산군=last(세부자산군),
                   세부자산군2=last(세부자산군2),
                   상품명 = last(상품명),
+                  보유수량=sum(보유수량),
                   장부금액=sum(장부금액),
                   평가금액=sum(평가금액),
-                  .groups = 'drop') %>% 
+                  .groups = 'drop') %>%
         select(-종목코드)
-      
-      df2 <- df0 %>% 
-        filter(통화=='원화') %>% 
-        select(-통화) %>% 
+
+      df2 <- df0 %>%
+        filter(통화=='원화') %>%
+        select(-통화) %>%
         summarise(자산군="<합계>", 세부자산군 = '',
-                  세부자산군2 = '',상품명 = '', 장부금액=sum(장부금액), 
+                  세부자산군2 = '',상품명 = '', 보유수량=0,
+                  장부금액=sum(장부금액),
                   평가금액=sum(평가금액), .groups = 'drop')
-      
-      df1 <- df0 %>% 
-        select(-통화) %>% 
+
+      df1 <- df0 %>%
+        select(-통화) %>%
         filter(자산군!="외화자산")
-      
+
       df3 <- df1 %>%
         group_by(자산군) %>%
-        summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 장부금액=sum(장부금액), 
+        summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 보유수량=0,
+                  장부금액=sum(장부금액),
                   평가금액=sum(평가금액)) %>%
         mutate(비중1 = round(평가금액/df2$평가금액*100, 1))
-      
+
       df4 <- df1 %>%
         group_by(자산군, 세부자산군) %>%
-        summarise(세부자산군2 = '', 상품명 = '', 장부금액=sum(장부금액), 
+        summarise(세부자산군2 = '', 상품명 = '', 보유수량=0,
+                  장부금액=sum(장부금액),
                   평가금액=sum(평가금액), .groups = 'drop') %>%
         mutate(비중2 = round(평가금액/df2$평가금액*100, 1))
-      
+
       df5 <- df1 %>%
         group_by(자산군, 세부자산군, 세부자산군2) %>%
-        summarise(상품명 = "", 장부금액=sum(장부금액), 평가금액=sum(평가금액),
+        summarise(상품명 = "", 보유수량=0, 장부금액=sum(장부금액), 평가금액=sum(평가금액),
                   .groups = 'drop') %>%
         mutate(비중3 = round(평가금액/df2$평가금액*100, 1))
-      
+
       df6 <- tibble_row(
         자산군='환차손익', 세부자산군='', 세부자산군2 = '',
+        보유수량=0,
         평가금액=0,
         평가손익= (sum(df3$장부금액) - df2$장부금액),
         평가수익률 = round(평가손익/df2$장부금액*100,2)
       )
-      
+
        df7 <- bind_rows(df2,df3,df4,df5) %>%
+         select(-보유수량) %>%
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
         mutate(
           평가손익 = round(평가금액 - 장부금액,0),
           평가수익률 = round(평가손익 / 장부금액 * 100,2)
-        ) %>% 
-        select(!c(상품명, 장부금액)) %>% 
-        bind_rows(df6)
-      
-      df7 %>% 
-        select(!c(비중1, 비중2, 비중3)) %>% 
-        mutate(기준일=self$today, .before=1) %>% 
+        ) %>%
+        select(!c(상품명, 장부금액)) %>%
+        bind_rows(df6 %>%
+                    select(-보유수량))
+
+      df7 %>%
+        select(!c(비중1, 비중2, 비중3)) %>%
+        mutate(기준일=self$today, .before=1) %>%
         self$upsert('return', c('기준일','자산군','세부자산군','세부자산군2'))
-      
-      dates <- self$read_obj('return') %>% 
-        distinct(기준일) %>% 
-        arrange(desc(기준일)) %>% 
+
+      dates <- self$read_obj('return') %>%
+        distinct(기준일) %>%
+        arrange(desc(기준일)) %>%
         pull()
-      
+
       start <- dates[1]
       end <- dates[2]
-      
-      df8 <- self$read_obj('return') %>% 
-        filter(기준일 %in% c(end, start)) %>% 
-        collect() %>% 
-        select(-평가금액,-평가수익률) %>% 
-        spread(key=기준일, value=평가손익, drop=T) %>% 
-        rename_with(~c("전일","당일"), .cols=4:5) %>% 
-        mutate(`전일대비(손익)` = .[[5]] - .[[4]]) %>% 
+
+      df8 <- self$read_obj('return') %>%
+        filter(기준일 %in% c(end, start)) %>%
+        collect() %>%
+        select(-평가금액,-평가수익률) %>%
+        spread(key=기준일, value=평가손익, drop=T) %>%
+        rename_with(~c("전일","당일"), .cols=4:5) %>%
+        mutate(`전일대비(손익)` = .[[5]] - .[[4]]) %>%
         select(!전일:당일)
-      
-      df9 <- self$read_obj('return') %>% 
-        filter(기준일 %in% c(end, start)) %>% 
-        collect() %>% 
-        select(-평가금액,-평가손익) %>% 
-        spread(key=기준일, value=평가수익률, drop=T) %>% 
-        rename_with(~c("전일","당일"), .cols=4:5) %>% 
+
+      df9 <- self$read_obj('return') %>%
+        filter(기준일 %in% c(end, start)) %>%
+        collect() %>%
+        select(-평가금액,-평가손익) %>%
+        spread(key=기준일, value=평가수익률, drop=T) %>%
+        rename_with(~c("전일","당일"), .cols=4:5) %>%
         transmute(`전일대비(수익률)` = .[[5]] - .[[4]])
-      
-      self$t_class <- 
-        df7 %>% 
+
+      self$t_class <-
+        df7 %>%
         left_join(
           df8 %>% bind_cols(df9),
           by=c('자산군','세부자산군','세부자산군2')
         )
-      
+
       self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>%
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
         mutate(
           평가손익 = round(평가금액 - 장부금액,0),
           평가수익률 = round(평가손익 / 장부금액 * 100,2)
-        ) %>% 
-        select(!c(비중1, 비중2, 비중3, 장부금액)) %>% 
+        ) %>%
+        select(!c(비중1, 비중2, 비중3, 장부금액)) %>%
         bind_rows(df6)
-      
+
       self$t_comm2 <- df00 %>%
         mutate(
           평가손익 = round(평가금액 - 장부금액,0),
-          평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>% 
-        select(자산군, 세부자산군, 세부자산군2, 계좌, 상품명, 
-               평가금액, 평가손익, 평가수익률) %>% 
+          평가수익률 = round(평가손익 / 장부금액 * 100,2)) %>%
+        select(자산군, 세부자산군, 세부자산군2, 계좌, 상품명, 보유수량,
+               평가금액, 평가손익, 평가수익률) %>%
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가수익률))
     },
     
