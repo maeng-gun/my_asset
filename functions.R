@@ -535,7 +535,6 @@ MyAssets <- R6Class(
       self$run_book()
       self$update_new_price()
       self$run_valuation()
-      self$compute_total2()
       # self$get_inflow()
     },
     
@@ -1604,6 +1603,7 @@ MyAssets <- R6Class(
       self$compute_allocation_a()
       self$compute_allocation_p()
       self$compute_total()
+      self$compute_total2()
     },
     
     ## 11.(메서드) 장부금액 및 현금성자산 추이 산출====
