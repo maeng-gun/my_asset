@@ -1534,12 +1534,14 @@ MyAssets <- R6Class(
         geom_bar(aes(y=일간수익률), stat='identity')+
         scale_y_continuous(
           breaks = function(x){seq(
-            floor(x[1] / 0.5) * 0.5,  # 최소값을 0.25 단위로 내림
-            ceiling(x[2] / 0.5) * 0.5,  # 최대값을 0.25 단위로 올림
-            by = 0.25  # 0.25 간격
+            floor(x[1] / 2.5) * 2.5,  # 최소값 단위
+            ceiling(x[2] / 2.5) * 2.5,  # 최대값 단위
+            by = 2.5  # 0.25 간격
           )}, sec.axis = dup_axis(name=NULL)
         )+
-        theme(text=element_text(size=20))
+        scale_x_date(date_breaks = "1 month", date_labels = "%Y-%m") +
+        theme(text=element_text(size=20),
+              axis.text.x = element_text(angle = 45, hjust = 1))
       
       fig2 <- df1 %>% 
         ggplot(aes(x=기준일)) +
@@ -1547,12 +1549,14 @@ MyAssets <- R6Class(
         geom_bar(aes(y=일간손익), stat='identity') +
         scale_y_continuous(
           breaks = function(x){seq(
-            floor(x[1] / 100) * 100,
-            ceiling(x[2] / 100) * 100,
-            by = 100  
+            floor(x[1] / 500) * 500,
+            ceiling(x[2] / 500) * 500,
+            by = 500  
           )}, sec.axis = dup_axis(name=NULL)
         )+
-        theme(text=element_text(size=20))
+        scale_x_date(date_breaks = "1 month", date_labels = "%Y-%m") +
+        theme(text=element_text(size=20),
+              axis.text.x = element_text(angle = 45, hjust = 1))
       
       gridExtra::grid.arrange(fig1,fig2,nrow=2)
     },
