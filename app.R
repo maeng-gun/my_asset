@@ -801,11 +801,6 @@ server <- function(input, output, session) {
   sk <- reactiveVal(T)
   sk2 <- reactiveVal(T)
   
-  md <- MyData$new('mydata.sqlite')
-  ass_init <- md$read('assets')
-  pen_init <- md$read('pension')
-  ctg_init <- readRDS("categories.rds")
-  
   maa <- MyAssets$new()
   
   observeEvent(input$base_date,{
@@ -878,7 +873,7 @@ server <- function(input, output, session) {
     
     updateSelectInput(
       session, 'ass_name2', 
-      choices = (ma()$read(rv$type2) |> 
+      choices = (maa$read(rv$type2) |> 
                    filter(계좌==input$ass_account2,
                           통화==input$ass_cur2))$종목명)
   })
@@ -894,7 +889,7 @@ server <- function(input, output, session) {
       mode <- 'pen_account'
     }
     updateSelectInput(session, 'ass_account2',
-                      choices = unique(ma()$read(rv$type2)$계좌))
+                      choices = unique(maa$read(rv$type2)$계좌))
     rv$trade <- reset_trade()
     update_new_trade()
   })
@@ -903,7 +898,7 @@ server <- function(input, output, session) {
 
     updateSelectInput(
       session, 'ass_cur2',
-      choices = unique((ma()$read(rv$type2) |> 
+      choices = unique((maa$read(rv$type2) |> 
                           filter(계좌==input$ass_account2))$통화)
     )
     rv$trade <- reset_trade()
@@ -948,7 +943,7 @@ server <- function(input, output, session) {
   observe({
     if(!is.null(input$ass_name2)){
       trade_ticker <- 
-        bind_rows(ma()$read('assets'), ma()$read('pension')) |> 
+        bind_rows(maa$read('assets'), maa$read('pension')) |> 
         filter(계좌 == input$ass_account2,
                통화 == input$ass_cur2,
                종목명 == input$ass_name2) |> 
@@ -973,11 +968,11 @@ server <- function(input, output, session) {
 
   observeEvent(input$ass_trade_new,{
     if(input$type2 == "투자자산"){
-      rv$trade_new$행번호 <- tail(ma()$read('assets_daily')$행번호, 1)+1
-      dbxInsert(ma()$con, 'assets_daily', rv$trade_new)
+      rv$trade_new$행번호 <- tail(maa$read('assets_daily')$행번호, 1)+1
+      dbxInsert(maa$con, 'assets_daily', rv$trade_new)
     } else {
-      rv$trade_new$행번호 <- tail(ma()$read('pension_daily')$행번호, 1)+1
-      dbxInsert(ma()$con, 'pension_daily', rv$trade_new)
+      rv$trade_new$행번호 <- tail(maa$read('pension_daily')$행번호, 1)+1
+      dbxInsert(maa$con, 'pension_daily', rv$trade_new)
     }
     sk(!sk())
     # renew_bs()
@@ -989,11 +984,11 @@ server <- function(input, output, session) {
   observeEvent(input$ass_trade_mod,{
     rv$trade_new$행번호 <- input$new2
     if(input$type2 == "투자자산"){
-      dbxUpdate(ma()$con, 'assets_daily', rv$trade_new, 
+      dbxUpdate(maa$con, 'assets_daily', rv$trade_new, 
                 where_cols = c("행번호"))
 
     } else {
-      dbxUpdate(ma()$con, 'pension_daily', rv$trade_new, 
+      dbxUpdate(maa$con, 'pension_daily', rv$trade_new, 
                 where_cols = c("행번호"))
     }
     sk(!sk())
@@ -1005,9 +1000,9 @@ server <- function(input, output, session) {
   observeEvent(input$ass_trade_del,{
     rv$trade_new$행번호 <- input$new2
     if(input$type2 == "투자자산"){
-      dbxDelete(ma()$con, 'assets_daily', rv$trade_new)
+      dbxDelete(maa$con, 'assets_daily', rv$trade_new)
     } else {
-      dbxDelete(ma()$con, 'pension_daily', rv$trade_new)
+      dbxDelete(maa$con, 'pension_daily', rv$trade_new)
     }
     sk(!sk())
     # renew_bs()
@@ -1121,10 +1116,10 @@ server <- function(input, output, session) {
     input$ticker_mod
     input$ticker_del
     if(input$type1 == "투자자산"){
-      ma()$read('assets') |> 
+      maa$read('assets') |> 
         filter(계좌==input$ass_account)
     } else {
-      ma()$read('pension') |> 
+      maa$read('pension') |> 
         filter(계좌==input$ass_account)}
   })
   
@@ -1237,11 +1232,11 @@ server <- function(input, output, session) {
   observeEvent(input$ticker_new,{
     
     if(input$type1 == "투자자산"){
-      rv$ticker_new$행번호 <- tail(ma()$read('assets')$행번호, 1)+1
-      dbxInsert(ma()$con, 'assets', rv$ticker_new)
+      rv$ticker_new$행번호 <- tail(maa$read('assets')$행번호, 1)+1
+      dbxInsert(maa$con, 'assets', rv$ticker_new)
     } else {
-      rv$ticker_new$행번호 <- tail(ma()$read('pension')$행번호, 1)+1
-      dbxInsert(ma()$con, 'pension', rv$ticker_new)
+      rv$ticker_new$행번호 <- tail(maa$read('pension')$행번호, 1)+1
+      dbxInsert(maa$con, 'pension', rv$ticker_new)
     }
 
     sk(!sk())
@@ -1255,9 +1250,9 @@ server <- function(input, output, session) {
   observeEvent(input$ticker_mod,{
     rv$ticker_new$행번호 <- input$new1
     if(input$type1 == "투자자산"){
-      dbxUpdate(ma()$con, 'assets', rv$ticker_new, where_cols = c("행번호"))
+      dbxUpdate(maa$con, 'assets', rv$ticker_new, where_cols = c("행번호"))
     } else {
-      dbxUpdate(ma()$con, 'pension', rv$ticker_new, where_cols = c("행번호"))
+      dbxUpdate(maa$con, 'pension', rv$ticker_new, where_cols = c("행번호"))
     }
     sk(!sk())
     # renew_bs()
@@ -1269,9 +1264,9 @@ server <- function(input, output, session) {
   observeEvent(input$ticker_del,{
     rv$ticker_new$행번호 <- input$new1
     if(input$type1 == "투자자산"){
-      dbxDelete(ma()$con, 'assets', rv$ticker_new)
+      dbxDelete(maa$con, 'assets', rv$ticker_new)
     } else {
-      dbxDelete(ma()$con, 'pension', rv$ticker_new)
+      dbxDelete(maa$con, 'pension', rv$ticker_new)
     }
     sk(!sk())
     # renew_bs()
@@ -1689,7 +1684,7 @@ server <- function(input, output, session) {
   ### * 테이블 설정====
   
   reset_inflow <- reactive({
-    ma()$read('inflow') %>%
+    maa$read('inflow') %>%
       filter(거래일자 >= ma()$today)
   })
   # 
@@ -1825,8 +1820,8 @@ server <- function(input, output, session) {
 
   observeEvent(input$inflow_new,{
 
-    liq$d$행번호 <- tail(ma()$read('inflow')$행번호, 1)+1
-    dbxInsert(ma()$con, 'inflow', liq$d)
+    liq$d$행번호 <- tail(maa$read('inflow')$행번호, 1)+1
+    dbxInsert(maa$con, 'inflow', liq$d)
     liq$c <- reset_inflow()
     update_manage_inflow()
     sk(!sk())
@@ -1834,14 +1829,14 @@ server <- function(input, output, session) {
 
   observeEvent(input$inflow_mod,{
     liq$d$행번호 <- input$new3
-    dbxUpdate(ma()$con, 'inflow', liq$d, where_cols = c("행번호"))
+    dbxUpdate(maa$con, 'inflow', liq$d, where_cols = c("행번호"))
     liq$c <- reset_inflow()
     update_manage_inflow()
     sk(!sk())
   })
 
   observeEvent(input$inflow_del,{
-    dbxDelete(ma()$con, 'inflow', tibble::tibble_row(행번호=input$new3))
+    dbxDelete(maa$con, 'inflow', tibble::tibble_row(행번호=input$new3))
     liq$c <- reset_inflow()
     update_manage_inflow()
     sk(!sk())
@@ -1865,7 +1860,7 @@ server <- function(input, output, session) {
   update_new_allo <- reactive({
     
     input$allo_renew
-    df <- ma()$read('allocation')
+    df <- maa$read('allocation')
     
     updateNumericInput(inputId = 'ass_bond', 
                        value = df$목표1[[7]])
@@ -1892,7 +1887,7 @@ server <- function(input, output, session) {
   }, once = T)
   
   observeEvent(input$allo_renew,{
-    df <- ma()$read('allocation') %>% 
+    df <- maa$read('allocation') %>% 
       mutate(목표1 = c(input$ass_alter, NA, NA,
                        input$ass_stock, NA, NA,
                        input$ass_bond, NA, NA, NA, NA, NA),
@@ -1909,7 +1904,7 @@ server <- function(input, output, session) {
                        input$ass_bond_cor,
                        input$ass_bond - input$ass_bond_sol - input$ass_bond_ig - input$ass_bond_nr - input$ass_bond_cor))
     
-    dbWriteTable(ma()$con, 'allocation', df, 
+    dbWriteTable(maa$con, 'allocation', df, 
                  overwrite = TRUE, row.names = FALSE)
     
     update_new_allo()
