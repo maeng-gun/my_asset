@@ -9,22 +9,25 @@ library(rvest)
 library(RSQLite)
 library(dbx)
 library(tidyquant)
+library(googlesheets4)
 
+gs4_auth(path = "secrets/myassets-477503-1825275f1d2e.json")
 
 get_config <- function(){
-  yaml::read_yaml(file = 'config.yaml', 
+  yaml::read_yaml(file = 'secrets/config.yaml', 
                   readLines.warn = F)
 }
 
 get_exchange_rate <- function(cur='달러'){
   
   num <- c('달러'= 1, '엔'= 2, '유로'=3, '위안'=4)
-  
-  (read_html("http://finance.naver.com/marketindex/") %>% 
-      html_nodes("div.head_info > span.value")
-  )[num[cur]] %>%
-    html_text() %>% 
-    readr::parse_number()
+  suppressWarnings({
+    (read_html("http://finance.naver.com/marketindex/") %>% 
+        html_nodes("div.head_info > span.value")
+    )[num[cur]] %>%
+      html_text() %>% 
+      readr::parse_number()
+  })
 }
 
 
@@ -136,6 +139,52 @@ MyData <- R6Class(
   )
 )
 
+#[클래스] MyData2 ====
+MyData2 <- R6Class(
+  
+  classname = 'MyData2',
+  public=list(
+    
+    con=NULL,
+    
+    ##1. 속성 초기화 ====
+    initialize = function(sheet_id){
+      
+      self$ss_id <- sheet_id
+      
+    },
+    
+    ##2.(메서드) 테이블 추가 ====
+    write = function(name, table){
+      write_sheet(ss = self$ss_id, sheet = name, data = table)
+    },
+    
+    ##3.(메서드) 테이블 읽기 ====
+    
+    read = function(name){
+      read_sheet(ss = self$ss_id, sheet = name) %>% tibble()
+    },
+    
+    ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
+    # read_obj = function(name){
+    #   tbl(self$con, name)
+    # },
+    
+    ##5.(메서드) 테이블 목록 ====
+    table_list = function(){
+      sheet_names(ss = self$ss_id)
+    },
+    
+    ##6.(메서드) 추가/갱신하기 ====
+    upsert = function(df, name, cols){
+      dbxUpsert(conn = self$con, table = name, records = df,
+                where_cols = cols)
+    }
+  )
+)
+
+
+
 #[클래스] KrxStocks ====
 KrxStocks <- R6Class(
   
@@ -236,17 +285,19 @@ KrxStocks <- R6Class(
                       mktId = "ALL",
                       trdDd = yyyymmdd)
       
-      self$post_krx('data', params1) %>% 
-        bind_rows(
-          self$post_krx('data', params2) %>% 
-            mutate(MKT_ID='STK')
-        ) %>% 
-        select(종목코드=ISU_SRT_CD, 종목명=ISU_ABBRV, 
-               종가=TDD_CLSPRC, 시장구분=MKT_ID) %>% 
-        mutate(시장구분=case_match(시장구분, 'STK'~'코스피', 'KSQ'~'코스닥', 
-                               'KNX'~'코넥스'),
-               종가 = readr::parse_number(종가)) %>% 
-        filter(str_ends(종목코드,'0'))
+      suppressWarnings({
+        self$post_krx('data', params1) %>% 
+          bind_rows(
+            self$post_krx('data', params2) %>% 
+              mutate(MKT_ID='STK')
+          ) %>% 
+          select(종목코드=ISU_SRT_CD, 종목명=ISU_ABBRV, 
+                 종가=TDD_CLSPRC, 시장구분=MKT_ID) %>% 
+          mutate(시장구분=case_match(시장구분, 'STK'~'코스피', 'KSQ'~'코스닥', 
+                                 'KNX'~'코넥스'),
+                 종가 = readr::parse_number(종가)) %>% 
+          filter(str_ends(종목코드,'0'))
+      })
     },
     
     ##4.(메서드) 종목코드 찾기 ====
@@ -280,7 +331,7 @@ AutoInvest <- R6Class(
     ## 속성 초기화 ====
     initialize = function(account="my"){
       cfg <- get_config()
-      self$token_tmp <- paste0("KIS", account)
+      self$token_tmp <- paste0("secrets/KIS", account)
       
       if (!file.exists(self$token_tmp)) {
         file.create(self$token_tmp)
@@ -518,23 +569,18 @@ MyAssets <- R6Class(
     t_comm3=NULL, t_comm4=NULL,
     
     ## 1. 속성 초기화====
-    initialize = function(base_dt=NULL) {
+    initialize = function() {
       
       self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
                             extended_types=T)
       
-      if (!is.null(base_dt)) {
-        self$today <- ymd(base_dt)
-      } else {
-        self$today <- today()
-      }
-      
+      self$today <- today()
       self$year <- year(self$today)
       self$days <- seq(make_date(2024,1,1), 
                        make_date(self$year,12,31),by='day')
       self$run_book()
       self$update_new_price()
-      self$run_valuation()
+      # self$run_valuation()
       # self$get_inflow()
     },
     
@@ -545,8 +591,10 @@ MyAssets <- R6Class(
       if(table=="투자자산"){table <- 'assets'}
       else {table <- 'pension'}
       
-      df1 <- self$read(table)
-      df2 <- self$read(paste0(table,'_daily'))
+      suppressWarnings({
+        df1 <- self$read(table)
+        df2 <- self$read(paste0(table,'_daily'))
+      })
       
       df2 %>% left_join(
         (df1 %>% transmute(계좌, 통화, 종목코드, 종목명)), 
@@ -1159,7 +1207,7 @@ MyAssets <- R6Class(
         bind_rows(self$bs_pl_mkt_p) %>% 
         group_by(계좌, 자산군, 통화) %>% 
         summarise(across(c(장부금액, 평가금액, 평잔, 
-                  수익, 실현손익), sum )) %>% 
+                  수익, 실현손익), sum ), .groups = 'drop') %>% 
         mutate(평가손익 = 평가금액-장부금액,
                세전수익률 = 수익/평잔*100,
                세후수익률 = 실현손익/평잔*100,
@@ -1198,7 +1246,7 @@ MyAssets <- R6Class(
         mutate(자산군="") %>% 
         group_by(계좌, 자산군, 통화) %>% 
         summarise(across(c(장부금액, 평가금액, 평잔, 
-                           수익, 실현손익), sum )) %>% 
+                           수익, 실현손익), sum ), .groups = 'drop') %>% 
         ungroup() %>% 
         mutate(평가손익 = 평가금액-장부금액,
                세전수익률 = 수익/평잔*100,
@@ -1218,14 +1266,15 @@ MyAssets <- R6Class(
         mutate(계좌="전체") %>% 
         group_by(계좌, 자산군, 통화) %>% 
         summarise(across(c(장부금액, 평가금액, 평잔, 
-                           수익, 실현손익), sum )) %>% 
+                           수익, 실현손익), sum ),
+                  .groups = 'drop') %>% 
         ungroup() %>% 
         bind_rows(
           df2 %>% 
             filter(통화!='원화') %>% mutate(계좌='전체') %>% 
             group_by(계좌, 자산군, 통화) %>% 
             summarise(across(c(장부금액, 평가금액, 평잔, 
-                               수익, 실현손익), sum )) %>% 
+                               수익, 실현손익), sum ), .groups = 'drop') %>% 
             ungroup()
         ) %>% 
         mutate(계좌='전체',
@@ -1479,8 +1528,10 @@ MyAssets <- R6Class(
         end = dates[2]
       }
       
+      
       df1 <- self$read('assets') %>% 
         bind_rows(self$read('pension'))
+    
       
       df2 <- self$read('assets_daily') %>% 
         bind_rows(self$read('pension_daily')) %>% 
@@ -1743,6 +1794,7 @@ MyAssets <- R6Class(
     
     ## 12.(메서드) 장부잔액 자료 산출====
     run_book = function(){
+      
       self$assets <- self$read('assets')
       self$pension <- self$read('pension')
       self$ex_usd <- get_exchange_rate('달러')
@@ -1759,7 +1811,9 @@ MyAssets <- R6Class(
     
     ## 13.(메서드) 주가 업데이트====
     update_new_price = function(){
-      self$ks <- KrxStocks$new()
+      suppressWarnings({
+        self$ks <- KrxStocks$new()
+      })
     }
     
   )

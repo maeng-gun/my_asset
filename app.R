@@ -6,6 +6,7 @@ library(shinyWidgets)
 library(lubridate)
 import::from(shinyjs, useShinyjs, extendShinyjs, js)
 
+
 # <User Interface> ====
 
 # 1. 대쉬보드 헤더####
@@ -20,12 +21,13 @@ header <- dashboardHeader(
 sidebar <- dashboardSidebar(
   sidebarMenu(
     id = 'menu_tabs',
-    airDatepickerInput(
-      inputId = 'base_date',
-      label = "기준일",
-      addon = "none",
-      value = Sys.Date()
-    ),
+    # airDatepickerInput(
+    #   inputId = 'base_date',
+    #   label = "기준일",
+    #   addon = "none",
+    #   value = Sys.Date()
+    # ),
+    actionButton('reval', '평가금액 재계산'),
     actionButton('kis','주가 업데이트'),
     br(),
     sidebarHeader("포트폴리오 관리"),
@@ -798,32 +800,57 @@ server <- function(input, output, session) {
   source("functions.R", echo=F)
   # ec <- Ecos$new()
   
-  sk <- reactiveVal(T)
-  sk2 <- reactiveVal(T)
+  
+  # 0) 반응성 값 초기화====
+  
+  sk_b <- reactiveVal(T)
+  sk_v <- reactiveVal(T)
+  sk_c <- reactiveVal(T)
   
   maa <- MyAssets$new()
   
-  observeEvent(input$base_date,{
-    maa$initialize(input$base_date)
-  })
   
-  ma <- reactive({
-    input$base_date
-    input$kis
-    sk()
+  # observeEvent(input$base_date,{
+  #   maa$initialize(input$base_date)
+  # })
+  
+  
+  ma_b <- reactive({
+    sk_b()
     maa$run_book()
-    maa$run_valuation()
     maa
   })
 
+  observeEvent(input$reval,{
+    w1$show()
+    
+    sk_v(!sk_v())
+    w1$hide()
+  })  
+  
+  observeEvent(input$kis,{
+    w1$show()
+    
+    maa$update_new_price()
+    sk_v(!sk_v())
+    
+    w1$hide()
+  })  
+  
+  ma_v <- reactive({
+    sk_v()
+    maa$run_valuation()
+    maa
+  })
   
   ctg <- reactive({
-    sk2()
+    sk_c()
     readRDS("categories.rds")
   })
-
-    
-  # 0) 반응성 값 초기화====
+  
+  
+  
+  
   rv <-  reactiveValues(
     name_in='전체',
     code='전체', df=NULL, df2=NULL, 
@@ -860,7 +887,7 @@ server <- function(input, output, session) {
     input$ass_trade_new
     input$ass_trade_mod
     input$ass_trade_del
-    ma()$get_trading_record(input$type2, 
+    ma_b()$get_trading_record(input$type2, 
                           input$ass_account2,
                           input$ass_cur2)
   })
@@ -873,7 +900,7 @@ server <- function(input, output, session) {
     
     updateSelectInput(
       session, 'ass_name2', 
-      choices = (maa$read(rv$type2) |> 
+      choices = (ma_b()$read(rv$type2) |> 
                    filter(계좌==input$ass_account2,
                           통화==input$ass_cur2))$종목명)
   })
@@ -889,7 +916,7 @@ server <- function(input, output, session) {
       mode <- 'pen_account'
     }
     updateSelectInput(session, 'ass_account2',
-                      choices = unique(maa$read(rv$type2)$계좌))
+                      choices = unique(ma_b()$read(rv$type2)$계좌))
     rv$trade <- reset_trade()
     update_new_trade()
   })
@@ -898,7 +925,7 @@ server <- function(input, output, session) {
 
     updateSelectInput(
       session, 'ass_cur2',
-      choices = unique((maa$read(rv$type2) |> 
+      choices = unique((ma_b()$read(rv$type2) |> 
                           filter(계좌==input$ass_account2))$통화)
     )
     rv$trade <- reset_trade()
@@ -974,7 +1001,7 @@ server <- function(input, output, session) {
       rv$trade_new$행번호 <- tail(maa$read('pension_daily')$행번호, 1)+1
       dbxInsert(maa$con, 'pension_daily', rv$trade_new)
     }
-    sk(!sk())
+    sk_b(!sk_b())
     # renew_bs()
     rv$trade <- reset_trade()
     update_new_trade()
@@ -991,7 +1018,7 @@ server <- function(input, output, session) {
       dbxUpdate(maa$con, 'pension_daily', rv$trade_new, 
                 where_cols = c("행번호"))
     }
-    sk(!sk())
+    sk_b(!sk_b())
     # renew_bs()
     rv$trade <- reset_trade()
     update_new_trade()
@@ -1004,7 +1031,7 @@ server <- function(input, output, session) {
     } else {
       dbxDelete(maa$con, 'pension_daily', rv$trade_new)
     }
-    sk(!sk())
+    sk_b(!sk_b())
     # renew_bs()
     rv$trade <- reset_trade()
     update_new_trade()
@@ -1116,10 +1143,10 @@ server <- function(input, output, session) {
     input$ticker_mod
     input$ticker_del
     if(input$type1 == "투자자산"){
-      maa$read('assets') |> 
+      ma_b()$read('assets') |> 
         filter(계좌==input$ass_account)
     } else {
-      maa$read('pension') |> 
+      ma_b()$read('pension') |> 
         filter(계좌==input$ass_account)}
   })
   
@@ -1239,7 +1266,7 @@ server <- function(input, output, session) {
       dbxInsert(maa$con, 'pension', rv$ticker_new)
     }
 
-    sk(!sk())
+    sk_b(!sk_b())
     # renew_bs()
     rv$tickers <- reset_ticker()
     update_manage_ticker()
@@ -1254,7 +1281,7 @@ server <- function(input, output, session) {
     } else {
       dbxUpdate(maa$con, 'pension', rv$ticker_new, where_cols = c("행번호"))
     }
-    sk(!sk())
+    sk_b(!sk_b())
     # renew_bs()
     rv$tickers <- reset_ticker()
     update_manage_ticker()
@@ -1268,7 +1295,7 @@ server <- function(input, output, session) {
     } else {
       dbxDelete(maa$con, 'pension', rv$ticker_new)
     }
-    sk(!sk())
+    sk_b(!sk_b())
     # renew_bs()
     rv$tickers <- reset_ticker()
     update_manage_ticker()
@@ -1315,7 +1342,7 @@ server <- function(input, output, session) {
       x <- ctg()
       x[[i]] <- c(x[[i]], input[[glue("add_{i}")]])
       saveRDS(x, 'categories.rds')
-      sk2(!sk2())
+      sk3(!sk3())
       update_categories()
     })
     
@@ -1324,7 +1351,7 @@ server <- function(input, output, session) {
       x[[i]] <- x[[i]][ x[[i]]!=input[[glue("select_{i}")]] ]
       
       saveRDS(x, 'categories.rds')
-      sk2(!sk2())
+      sk3(!sk3())
       update_categories()
     })
   })
@@ -1340,7 +1367,7 @@ server <- function(input, output, session) {
   ##d. 종합거래내역====
   
   total_table <- reactive({
-    ma()$total_trading(input$total_trade_date)
+    ma_b()$total_trading(input$total_trade_date)
   })
   
   
@@ -1383,14 +1410,14 @@ server <- function(input, output, session) {
   ## a. 통합손익현황====
   
   output$total_profit <- renderPlot({
-    ma()$plot_total_profit(
+    ma_v()$plot_total_profit(
       input$total_s_date,input$total_e_date)
   })
   
   ## b. 손익시계열====
   
   output$t_profit1 <- renderUI({
-    ma()$compute_t_profit() %>% 
+    ma_v()$compute_t_profit() %>% 
       group_by(연도=year(거래일자)) %>% 
       summarise(across(-거래일자, last)) %>% 
       transmute(
@@ -1437,7 +1464,7 @@ server <- function(input, output, session) {
   })
   
   output$t_profit2 <- renderUI({
-    ma()$compute_t_profit() %>% 
+    ma_v()$compute_t_profit() %>% 
       filter(year(거래일자)==year(input$t_profit_date),
              month(거래일자)==month(input$t_profit_date)) %>% 
       flextable() |>
@@ -1450,7 +1477,7 @@ server <- function(input, output, session) {
   ## c. 통합자산군별====
   
   output$t_asset_class <- renderUI({
-    ma()$t_class |>
+    ma_v()$t_class |>
       flextable() |>
       theme_vanilla() |>
       set_table_properties(layout='autofit') |>
@@ -1462,7 +1489,7 @@ server <- function(input, output, session) {
   
   ## c. 통합상품별====
   output$t_commodity <- renderUI({
-    ma()$t_comm |>
+    ma_v()$t_comm |>
       flextable() |>
       theme_vanilla() |>
       set_table_properties(layout='autofit') |>
@@ -1473,7 +1500,7 @@ server <- function(input, output, session) {
   
   ## c. 통합상품별2====
   output$t_commodity2 <- renderUI({
-    ma()$t_comm2 |>
+    ma_v()$t_comm2 |>
       flextable() |>
       theme_vanilla() |>
       set_table_properties(layout='autofit') |>
@@ -1483,20 +1510,10 @@ server <- function(input, output, session) {
   
   # 3) 계좌별 자산운용 현황====
   
-
-  observeEvent(input$kis,{
-    w1$show()
-
-    ma()$update_new_price()
-    ma()$run_valuation()
-
-    w1$hide()
-  })  
-    
  ## a. 투자자산현황====
 
   output$total_accounts1 <- renderUI({
-    ma()$t_comm3 %>% 
+    ma_v()$t_comm3 %>% 
       flextable() |>
       theme_vanilla() |>
       merge_v(j=1) |>
@@ -1508,7 +1525,7 @@ server <- function(input, output, session) {
   })
   
   output$total_accounts2 <- renderUI({
-    ma()$t_comm4 %>% 
+    ma_v()$t_comm4 %>% 
       flextable() |>
       theme_vanilla() |>
       merge_v(j=1) |>
@@ -1535,7 +1552,7 @@ server <- function(input, output, session) {
 
   
   output$class_ret_a <- renderUI({
-    ma()$ret_a |>
+    ma_v()$ret_a |>
       select(1:3,평가금액,실현손익, 평가손익,
              실현수익률:평가수익률) |>
       flextable() |>
@@ -1548,7 +1565,7 @@ server <- function(input, output, session) {
   })
   
   output$class_ret_a2 <- renderUI({
-    ma()$ret_a2 |>
+    ma_v()$ret_a2 |>
       select(1:2,평가금액,실현손익, 평가손익,
              실현수익률:평가수익률) |>
       flextable() |>
@@ -1561,7 +1578,7 @@ server <- function(input, output, session) {
   })
 
   output$bs_pl_mkt_a <-renderUI({
-    ma()$bs_pl_mkt_a |>
+    ma_v()$bs_pl_mkt_a |>
       select(통화, 자산군, 세부자산군, 종목명,
              보유수량,장부금액, 평가금액, 실현손익,평가손익,
              실현수익률, 평가수익률) |>
@@ -1586,7 +1603,7 @@ server <- function(input, output, session) {
   ## d. 연금손익현황====
   
   output$class_ret_p <- renderUI({
-    ma()$ret_p |>
+    ma_v()$ret_p |>
       select(1:3,평가금액,실현손익, 평가손익,
              실현수익률:평가수익률) |>
       flextable() |>
@@ -1599,7 +1616,7 @@ server <- function(input, output, session) {
   })
   
   output$class_ret_p2 <- renderUI({
-    ma()$ret_p2 |>
+    ma_v()$ret_p2 |>
       select(1:2,평가금액,실현손익, 평가손익,
              실현수익률:평가수익률) |>
       flextable() |>
@@ -1612,7 +1629,7 @@ server <- function(input, output, session) {
   })
   
   output$bs_pl_mkt_p <-renderUI({
-    ma()$bs_pl_mkt_p |>
+    ma_v()$bs_pl_mkt_p |>
       select(계좌, 자산군, 세부자산군, 종목명,
              보유수량, 장부금액, 평가금액, 실현손익, 평가손익,
              실현수익률,평가수익률) |>
@@ -1684,8 +1701,8 @@ server <- function(input, output, session) {
   ### * 테이블 설정====
   
   reset_inflow <- reactive({
-    maa$read('inflow') %>%
-      filter(거래일자 >= ma()$today)
+    ma_b()$read('inflow') %>%
+      filter(거래일자 >= maa$today)
   })
   # 
   
@@ -1711,18 +1728,18 @@ server <- function(input, output, session) {
   
   
   output$maturity_table <- renderUI({
-    ma()$bs_pl_mkt_a %>% 
-      bind_rows(ma()$bs_pl_mkt_p) %>% 
+    ma_v()$bs_pl_mkt_a %>% 
+      bind_rows(ma_v()$bs_pl_mkt_p) %>% 
       filter(자산군=='채권', 세부자산군 %in% c('만기무위험','만기회사채'), 
              통화=='원화', 평가금액>0) %>% 
       select(계좌, 종목명, 종목코드, 평가금액) %>% 
       left_join(
-        ma()$assets %>% 
-          bind_rows(ma()$pension) %>% 
+        ma_b()$assets %>% 
+          bind_rows(ma_b()$pension) %>% 
           select(종목코드, 만기일),
         by='종목코드'
       ) %>% 
-      filter(만기일>ma()$today) %>% 
+      filter(만기일>maa$today) %>% 
       select(계좌, 종목명, 평가금액, 만기일) %>% 
       arrange(만기일) %>% 
       flextable() |>
@@ -1733,7 +1750,7 @@ server <- function(input, output, session) {
   
   
   output$inflow_table2 <- renderUI({
-    ma()$get_funds() %>% 
+    ma_v()$get_funds() %>% 
       flextable() |>
       theme_vanilla() |>
       set_table_properties(layout='autofit') |>
@@ -1742,7 +1759,7 @@ server <- function(input, output, session) {
 
 
   output$liq1 <- renderValueBox({
-    liq$a <- ma()$bs_pl_mkt_a %>% 
+    liq$a <- ma_v()$bs_pl_mkt_a %>% 
       filter(자산군=='현금성', 
              통화=='원화', 
              평가금액>0) %>%
@@ -1761,7 +1778,7 @@ server <- function(input, output, session) {
   
   output$liq2 <- renderValueBox({
     
-    liq$b <- ma()$bs_pl_mkt_p %>% 
+    liq$b <- ma_v()$bs_pl_mkt_p %>% 
       filter(자산군=='현금성', 
              통화=='원화', 
              평가금액>0) %>%
@@ -1824,7 +1841,7 @@ server <- function(input, output, session) {
     dbxInsert(maa$con, 'inflow', liq$d)
     liq$c <- reset_inflow()
     update_manage_inflow()
-    sk(!sk())
+    sk_b(!sk_b())
   })
 
   observeEvent(input$inflow_mod,{
@@ -1832,14 +1849,14 @@ server <- function(input, output, session) {
     dbxUpdate(maa$con, 'inflow', liq$d, where_cols = c("행번호"))
     liq$c <- reset_inflow()
     update_manage_inflow()
-    sk(!sk())
+    sk_b(!sk_b())
   })
 
   observeEvent(input$inflow_del,{
     dbxDelete(maa$con, 'inflow', tibble::tibble_row(행번호=input$new3))
     liq$c <- reset_inflow()
     update_manage_inflow()
-    sk(!sk())
+    sk_b(!sk_b())
   })
   
   ### * 그래프 설정====
@@ -1860,7 +1877,7 @@ server <- function(input, output, session) {
   update_new_allo <- reactive({
     
     input$allo_renew
-    df <- maa$read('allocation')
+    df <- ma_b()$read('allocation')
     
     updateNumericInput(inputId = 'ass_bond', 
                        value = df$목표1[[7]])
@@ -1916,9 +1933,9 @@ server <- function(input, output, session) {
   output$allocation_table <- renderUI({
     input$allo_renew
     
-    df <- ma()$t_class %>% select(1:7) %>% 
+    df <- ma_v()$t_class %>% select(1:7) %>% 
       left_join(
-        ma()$read('allocation') %>% 
+        ma_b()$read('allocation') %>% 
           add_row(자산군='현금성', 세부자산군="", 
                   목표1 = 100-sum(.$목표1, na.rm = T)) %>% 
           mutate(세부자산군2 = '', .after=2),
