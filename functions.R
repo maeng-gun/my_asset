@@ -9,9 +9,9 @@ library(rvest)
 library(RSQLite)
 library(dbx)
 library(tidyquant)
-library(googlesheets4)
+# library(googlesheets4)
 
-gs4_auth(path = "secrets/myassets-477503-1825275f1d2e.json")
+# gs4_auth(path = "secrets/myassets-477503-1825275f1d2e.json")
 
 get_config <- function(){
   yaml::read_yaml(file = 'secrets/config.yaml', 
