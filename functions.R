@@ -1,7 +1,6 @@
 library(tidyverse)
 library(timetk)
 library(R6)
-library(ecos)
 library(glue)
 library(httr)
 library(jsonlite)
@@ -9,9 +8,6 @@ library(rvest)
 library(RSQLite)
 library(dbx)
 library(tidyquant)
-# library(googlesheets4)
-
-# gs4_auth(path = "secrets/myassets-477503-1825275f1d2e.json")
 
 get_config <- function(){
   yaml::read_yaml(file = 'secrets/config.yaml', 
@@ -32,67 +28,6 @@ get_exchange_rate <- function(cur='달러'){
 
 
 
-
-#[클래스] Ecos====
-Ecos <- R6Class(
-  "Ecos",
-  
-  public = list(
-    table_list = NULL,
-    
-    #속성 초기화
-    initialize = function() {
-      #인증키 설정
-      get_config()$ecos %>% ecos.setKey()
-      #(속성) 통계표 목록
-      self$table_list <- statTableList() %>% tibble()
-    },
-    
-    #(메서드)통계표 검색
-    find_stat = function(name=''){
-      
-      if(is.null(name)||name == '') {
-        self$table_list
-      }
-      else{
-        self$table_list %>% 
-          filter(str_detect(stat_name, name), 
-                 srch_yn=='Y')
-      }
-    },
-    
-    #(메서드)아이템 검색
-    find_items = function(code='전체'){
-      
-      if(is.null(code)||code == '전체') {
-        tibble(item_name='',stat_code='',item_code='',cycle='')
-      }
-      else {
-        statItemList(code) %>% 
-          tibble() %>% 
-          select(stat_name, item_name, stat_code, item_code, cycle:data_cnt) %>% 
-          mutate(stat_name = stringr::str_extract(stat_name,"(?<=\\.\\s).*"))
-      }
-    },
-    
-    #(메서드)저장된 아이템 읽기
-    read_items = function(){
-      readRDS('ecos_items.rds')
-    },
-    
-    #(메서드)아이템 저장
-    save_items = function(df, name){
-      
-      df2 <- df %>% mutate(new_name = name, .before=1)
-      
-      self$read_items() %>% 
-        bind_rows(df2) %>% 
-        distinct() %>% 
-        arrange(stat_code,item_code) %>% 
-        saveRDS('ecos_items.rds')
-    }
-  )
-)
 
 #[클래스] MyData ====
 MyData <- R6Class(
@@ -138,51 +73,6 @@ MyData <- R6Class(
     }
   )
 )
-
-#[클래스] MyData2 ====
-MyData2 <- R6Class(
-  
-  classname = 'MyData2',
-  public=list(
-    
-    con=NULL,
-    
-    ##1. 속성 초기화 ====
-    initialize = function(sheet_id){
-      
-      self$ss_id <- sheet_id
-      
-    },
-    
-    ##2.(메서드) 테이블 추가 ====
-    write = function(name, table){
-      write_sheet(ss = self$ss_id, sheet = name, data = table)
-    },
-    
-    ##3.(메서드) 테이블 읽기 ====
-    
-    read = function(name){
-      read_sheet(ss = self$ss_id, sheet = name) %>% tibble()
-    },
-    
-    ##4.(메서드) 테이블 읽기(dbplyr 객체) ====
-    # read_obj = function(name){
-    #   tbl(self$con, name)
-    # },
-    
-    ##5.(메서드) 테이블 목록 ====
-    table_list = function(){
-      sheet_names(ss = self$ss_id)
-    },
-    
-    ##6.(메서드) 추가/갱신하기 ====
-    upsert = function(df, name, cols){
-      dbxUpsert(conn = self$con, table = name, records = df,
-                where_cols = cols)
-    }
-  )
-)
-
 
 
 #[클래스] KrxStocks ====
