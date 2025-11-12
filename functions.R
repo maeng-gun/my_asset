@@ -5,7 +5,8 @@ library(glue)
 library(httr)
 library(jsonlite)
 library(rvest)
-library(RSQLite)
+# library(RSQLite)
+library(RPostgres)
 library(dbx)
 library(tidyquant)
 
@@ -38,10 +39,19 @@ MyData <- R6Class(
     con=NULL,
     
     ##1. 속성 초기화 ====
-    initialize = function(file){
+    initialize = function(){
       
-      self$con <- dbConnect(SQLite(), file, bigint = 'numeric',
-                            extended_types=T)
+      # self$con <- dbConnect(SQLite(), file, bigint = 'numeric',
+      #                       extended_types=T)
+      cfg <- get_config()
+      self$con <- dbConnect(
+        RPostgres::Postgres(),
+        host = cfg$db_host,
+        port = 5432,
+        dbname = "postgres",
+        user = cfg$db_user,
+        password = cfg$db_pass
+      )
       
     },
     
@@ -461,9 +471,9 @@ MyAssets <- R6Class(
     ## 1. 속성 초기화====
     initialize = function() {
       
-      self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
-                            extended_types=T)
-      
+      # self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
+      #                       extended_types=T)
+      super$initialize()
       self$today <- today()
       self$year <- year(self$today)
       self$days <- seq(make_date(2024,1,1), 
