@@ -221,6 +221,7 @@ KrxStocks <- R6Class(
 AutoInvest <- R6Class(
   
   classname = 'AutoInvest',
+  inherit = MyData,
   public=list(
     
     ## 속성 선언 ====
@@ -230,12 +231,14 @@ AutoInvest <- R6Class(
     
     ## 속성 초기화 ====
     initialize = function(account="my"){
+      super$initialize()
       cfg <- get_config()
-      self$token_tmp <- paste0("secrets/KIS", account)
-      
-      if (!file.exists(self$token_tmp)) {
-        file.create(self$token_tmp)
-      }
+      # self$token_tmp <- paste0("secrets/KIS", account)
+      self$token_tmp <- paste0("KIS", account)
+      # 
+      # if (!file.exists(self$token_tmp)) {
+      #   file.create(self$token_tmp)
+      # }
       
       self$APP_KEY <- cfg[[paste0(account, '_app')]]
       self$APP_SECRET <- cfg[[paste0(account, '_sec')]]
@@ -261,20 +264,27 @@ AutoInvest <- R6Class(
     save_token = function(my_token, my_expired) {
       valid_date <- 
         as.POSIXct(my_expired, format='%Y-%m-%d %H:%M:%S', tz='UTC')
-      writeLines(c(paste('token:', my_token),
-                   paste('valid-date:', 
-                         format(valid_date, '%Y-%m-%d %H:%M:%S'))),
-                 self$token_tmp)
+      
+      self$add_table(self$token_tmp,
+                     tibble(token = my_token,
+                            valid_date = format(valid_date, '%Y-%m-%d %H:%M:%S')))
+      
+      # writeLines(c(paste('token:', my_token),
+      #              paste('valid-date:', 
+      #                    format(valid_date, '%Y-%m-%d %H:%M:%S'))),
+      #            self$token_tmp)
     },
     
     ##메서드(2) - 토큰 불러오기 ====
     read_token = function() {
       tryCatch({
         # 토큰이 저장된 파일 읽기
-        tkg_tmp <- yaml::read_yaml(self$token_tmp, fileEncoding = 'UTF-8')
+        # tkg_tmp <- yaml::read_yaml(self$token_tmp, fileEncoding = 'UTF-8')
+        
+        tkg_tmp <- self$read(self$token_tmp)
         
         # 토큰 만료 일,시간
-        exp_dt <- as.POSIXct(tkg_tmp$`valid-date`)
+        exp_dt <- as.POSIXct(tkg_tmp$valid_date)
         # 현재일자,시간
         now_dt <- Sys.time()
         
@@ -282,7 +292,7 @@ AutoInvest <- R6Class(
         if (exp_dt > now_dt) {
           return(tkg_tmp$token)
         } else {
-          cat('Need new token: ', tkg_tmp$`valid-date`, '\n')
+          cat('Need new token: ', tkg_tmp$valid_date, '\n')
           return(NULL)
         }
       }, error = function(e) {

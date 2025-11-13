@@ -845,7 +845,8 @@ server <- function(input, output, session) {
   
   ctg <- reactive({
     sk_c()
-    readRDS("categories.rds")
+    df <- maa$read('categories')
+    split(df$value, df$key)
   })
   
   
@@ -1339,19 +1340,36 @@ server <- function(input, output, session) {
     })
 
     observeEvent(input[[glue("add_{i}_btn")]],{
-      x <- ctg()
-      x[[i]] <- c(x[[i]], input[[glue("add_{i}")]])
-      saveRDS(x, 'categories.rds')
-      sk3(!sk3())
+      
+      new_category_item <- tibble(
+        key = i,
+        value = input[[glue("add_{i}")]]
+      )
+      
+      maa$upsert(df = new_category_item,
+                name = 'categories', 
+                cols = c('key', 'value'))
+      
+      # x <- ctg()
+      # x[[i]] <- c(x[[i]], input[[glue("add_{i}")]])
+      # saveRDS(x, 'categories.rds')
+      sk_c(!sk_c())
       update_categories()
     })
     
     observeEvent(input[[glue("del_{i}_btn")]],{
-      x <- ctg()
-      x[[i]] <- x[[i]][ x[[i]]!=input[[glue("select_{i}")]] ]
       
-      saveRDS(x, 'categories.rds')
-      sk3(!sk3())
+      item_to_delete <- tibble(
+        key = i,
+        value = input[[glue("select_{i}")]]
+      )
+      
+      dbxDelete(maa$con, 'categories', item_to_delete)
+      
+      # x <- ctg()
+      # x[[i]] <- x[[i]][ x[[i]]!=input[[glue("select_{i}")]] ]
+      # saveRDS(x, 'categories.rds')
+      sk_c(!sk_c())
       update_categories()
     })
   })
