@@ -39,7 +39,7 @@ MyData <- R6Class(
     con=NULL, config=NULL,
     
     ##1. 속성 초기화 ====
-    initialize = function(){
+    initialize = function(pw){
       
       # self$con <- dbConnect(SQLite(), file, bigint = 'numeric',
       #                       extended_types=T)
@@ -53,7 +53,7 @@ MyData <- R6Class(
         port = 5432,
         dbname = "postgres",
         user = cfg$a,
-        password = cfg$b
+        password = pw
       )
       
       self$config <- self$read('config')
@@ -103,7 +103,7 @@ KrxStocks <- R6Class(
     ##1. 속성 초기화 ====
     initialize = function(date=NULL){
       if(is.null(date)){
-        if(now()>=update(now(), hour=9, minute=21, second=0)){date <- today()}
+        if(now(tzone = "Asia/Seoul")>=update(now(tzone = "Asia/Seoul"), hour=9, minute=21, second=0)){date <- today()}
         else {date <- today() - 1}
       }
       self$user.agent <- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36 '
@@ -235,8 +235,8 @@ AutoInvest <- R6Class(
     token_headers=NULL,
     
     ## 속성 초기화 ====
-    initialize = function(account="my"){
-      super$initialize()
+    initialize = function(pw, account="my"){
+      super$initialize(pw)
       cfg <- split(self$config$value, self$config$token)
       
       # self$token_tmp <- paste0("secrets/KIS", account)
@@ -484,14 +484,15 @@ MyAssets <- R6Class(
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
     allo9 = NULL, inflow_table = NULL, inflow_plot= NULL,
     inflow_bal=NULL, t_class=NULL, t_comm=NULL, t_comm2=NULL,
-    t_comm3=NULL, t_comm4=NULL,
+    t_comm3=NULL, t_comm4=NULL, pw=NULL,
     
     ## 1. 속성 초기화====
-    initialize = function() {
+    initialize = function(pw) {
       
+      self$pw <- pw
       # self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
       #                       extended_types=T)
-      super$initialize()
+      super$initialize(self$pw)
       self$today <- today()
       self$year <- year(self$today)
       self$days <- seq(make_date(2024,1,1), 
@@ -699,7 +700,7 @@ MyAssets <- R6Class(
       
       # if (is.null(self$bl) && is.null(self$my)) {
       if (is.null(self$bl)) {
-        self$bl <- AutoInvest$new('boolio')
+        self$bl <- AutoInvest$new(self$pw, 'boolio')
         # self$my <- AutoInvest$new('my')
       }
       
