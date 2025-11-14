@@ -78,7 +78,7 @@ body <- dashboardBody(
     domain = "https://hailey-family.shinyapps.io/my_asset/",
     title = "가족자산관리",
     output = "www",
-    icon = "3890929_chart_growth_invest_market_stock_icon.png"
+    icon = "www/3890929_chart_growth_invest_market_stock_icon.png"
   ),
   useShinyjs(),
   extendShinyjs(
