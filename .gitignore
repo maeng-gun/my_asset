@@ -7,3 +7,6 @@ shinyShortcut.vbs
 .idea/
 secrets/
 archive/
+rsconnect/
+__pycache__/
+ccc.yaml

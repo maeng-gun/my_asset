@@ -36,22 +36,27 @@ MyData <- R6Class(
   classname = 'MyData',
   public=list(
     
-    con=NULL,
+    con=NULL, config=NULL,
     
     ##1. 속성 초기화 ====
     initialize = function(){
       
       # self$con <- dbConnect(SQLite(), file, bigint = 'numeric',
       #                       extended_types=T)
-      cfg <- get_config()
+      cfg <- yaml::read_yaml(file = 'ccc.yaml',
+                readLines.warn = F)
+      
+      
       self$con <- dbConnect(
         RPostgres::Postgres(),
-        host = cfg$db_host,
+        host = cfg$c,
         port = 5432,
         dbname = "postgres",
-        user = cfg$db_user,
-        password = cfg$db_pass
+        user = cfg$a,
+        password = cfg$b
       )
+      
+      self$config <- self$read('config')
       
     },
     
@@ -232,7 +237,8 @@ AutoInvest <- R6Class(
     ## 속성 초기화 ====
     initialize = function(account="my"){
       super$initialize()
-      cfg <- get_config()
+      cfg <- split(self$config$value, self$config$token)
+      
       # self$token_tmp <- paste0("secrets/KIS", account)
       self$token_tmp <- paste0("KIS", account)
       # 
@@ -265,9 +271,11 @@ AutoInvest <- R6Class(
       valid_date <- 
         as.POSIXct(my_expired, format='%Y-%m-%d %H:%M:%S', tz='UTC')
       
-      self$add_table(self$token_tmp,
+      
+      dbWriteTable(self$con, self$token_tmp, 
                      tibble(token = my_token,
-                            valid_date = format(valid_date, '%Y-%m-%d %H:%M:%S')))
+                            valid_date = format(valid_date, '%Y-%m-%d %H:%M:%S')),
+                   overwrite = TRUE)
       
       # writeLines(c(paste('token:', my_token),
       #              paste('valid-date:', 
