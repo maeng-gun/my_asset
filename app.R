@@ -875,7 +875,6 @@ server <- function(input, output, session) {
       
       w_modal$hide()
       removeModal() # 모달 창 닫기
-      show_delay("앱 구동중...", "info") # 앱 초기화 시작 알림
       
     }, error = function(e) {
       # 3. 연결 실패 시
@@ -949,13 +948,14 @@ server <- function(input, output, session) {
       tickers=NULL, ticker_new=NULL,
       trade=NULL, trade_new_=NULL,
       type2=NULL,
+      initial_load_done = FALSE,
       inflow=NULL, inflow_new=NULL
       # ctg=readRDS("categories.rds")
     )
     
     
     # w1$hide()
-    show_delay("완료!", "success")
+
     
     # 1) 자산운용 내역 기록====
     ## a. 투자자산 거래내역====
@@ -1518,8 +1518,19 @@ server <- function(input, output, session) {
     ## a. 통합손익현황====
     
     output$total_profit <- renderPlot({
-      ma_v()$plot_total_profit(
+      plot_obj <- ma_v()$plot_total_profit(
         input$total_s_date,input$total_e_date)
+      
+      if (rv_app$initial_load_done == FALSE) {
+        
+        # 3. "완료!" 메시지를 띄움
+        show_delay("완료!", "success")
+        
+        # 4. 플래그를 TRUE로 변경하여 다시는 메시지가 뜨지 않도록 함
+        rv_app$initial_load_done <- TRUE
+      }
+      
+      plot_obj
     })
     
     ## b. 손익시계열====
