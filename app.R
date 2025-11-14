@@ -4,6 +4,7 @@ library(waiter)
 library(flextable)
 library(shinyWidgets)
 library(lubridate)
+library(shiny.pwa)
 import::from(shinyjs, useShinyjs, extendShinyjs, js)
 
 
@@ -73,6 +74,12 @@ sidebar <- dashboardSidebar(
 
 # 3. 대쉬보드 본문####
 body <- dashboardBody(
+  pwa(
+    domain = "https://hailey-family.shinyapps.io/my_asset/",
+    title = "가족자산관리",
+    output = "www",
+    icon = "3890929_chart_growth_invest_market_stock_icon.png"
+  ),
   useShinyjs(),
   extendShinyjs(
     text = "
