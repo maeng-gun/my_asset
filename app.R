@@ -1086,10 +1086,10 @@ server <- function(input, output, session) {
   
     observeEvent(input$ass_trade_new,{
       if(input$type2 == "투자자산"){
-        rv_app$trade_new$행번호 <- tail(maa$read('assets_daily')$행번호, 1)+1
+        rv_app$trade_new$행번호 <- tail(sort(maa$read('assets_daily')$행번호), 1)+1
         dbxInsert(maa$con, 'assets_daily', rv_app$trade_new)
       } else {
-        rv_app$trade_new$행번호 <- tail(maa$read('pension_daily')$행번호, 1)+1
+        rv_app$trade_new$행번호 <- tail(sort(maa$read('pension_daily')$행번호), 1)+1
         dbxInsert(maa$con, 'pension_daily', rv_app$trade_new)
       }
       sk_b(!sk_b())
@@ -1350,10 +1350,10 @@ server <- function(input, output, session) {
     observeEvent(input$ticker_new,{
       
       if(input$type1 == "투자자산"){
-        rv_app$ticker_new$행번호 <- tail(maa$read('assets')$행번호, 1)+1
+        rv_app$ticker_new$행번호 <- tail(sort(maa$read('assets')$행번호), 1)+1
         dbxInsert(maa$con, 'assets', rv_app$ticker_new)
       } else {
-        rv_app$ticker_new$행번호 <- tail(maa$read('pension')$행번호, 1)+1
+        rv_app$ticker_new$행번호 <- tail(sort(maa$read('pension')$행번호), 1)+1
         dbxInsert(maa$con, 'pension', rv_app$ticker_new)
       }
   
@@ -1956,7 +1956,7 @@ server <- function(input, output, session) {
   
     observeEvent(input$inflow_new,{
   
-      liq$d$행번호 <- tail(maa$read('inflow')$행번호, 1)+1
+      liq$d$행번호 <- tail(sort(maa$read('inflow')$행번호), 1)+1
       dbxInsert(maa$con, 'inflow', liq$d)
       liq$c <- reset_inflow()
       update_manage_inflow()
