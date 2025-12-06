@@ -269,7 +269,7 @@ AutoInvest <- R6Class(
     
     save_token = function(my_token, my_expired) {
       valid_date <- 
-        as.POSIXct(my_expired, format='%Y-%m-%d %H:%M:%S', tz='UTC')
+        as.POSIXct(my_expired, format='%Y-%m-%d %H:%M:%S', tz='Asia/Seoul')
       
       
       dbWriteTable(self$con, self$token_tmp, 
@@ -292,9 +292,9 @@ AutoInvest <- R6Class(
         tkg_tmp <- self$read(self$token_tmp)
         
         # 토큰 만료 일,시간
-        exp_dt <- as.POSIXct(tkg_tmp$valid_date)
+        exp_dt <- as.POSIXct(tkg_tmp$valid_date, format='%Y-%m-%d %H:%M:%S', tz='Asia/Seoul')
         # 현재일자,시간
-        now_dt <- Sys.time()
+        now_dt <- lubridate::now(tzone = "Asia/Seoul")
         
         # 저장된 토큰 만료일자 체크 (만료일시 > 현재일시 인경우 보관 토큰 리턴)
         if (exp_dt > now_dt) {
