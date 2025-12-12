@@ -633,7 +633,7 @@ MyAssets <- R6Class(
           summarise(현금 = sum(현금수입 + 입출금 - 현금지출),
                     .groups = 'keep') %>%
           pivot_wider(names_from = 계좌, values_from = 현금) %>% 
-          ungroup()ssel
+          ungroup()
         
         cash_w_b <- cash_w %>%
           mutate(across(-거래일자, cumsum))
