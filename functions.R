@@ -190,6 +190,10 @@ KrxStocks <- R6Class(
                       mktId = "ALL",
                       trdDd = yyyymmdd)
       
+      params3 <- list(bld = "dbms/MDC/STAT/standard/MDCSTAT14901",
+                      mktId = "ALL",
+                      trdDd = yyyymmdd)
+      
       suppressWarnings({
         self$post_krx('data', params1) %>% 
           bind_rows(
@@ -198,8 +202,13 @@ KrxStocks <- R6Class(
           ) %>% 
           select(종목코드=ISU_SRT_CD, 종목명=ISU_ABBRV, 
                  종가=TDD_CLSPRC, 시장구분=MKT_ID) %>% 
+          bind_rows(
+            self$post_krx('data', params3) %>% 
+              select(종목코드=ISU_SRT_CD, 종목명=ISU_ABBRV, 
+                     종가=TDD_CLSPRC, 시장구분=MKT_ID)
+          ) %>% 
           mutate(시장구분=case_match(시장구분, 'STK'~'코스피', 'KSQ'~'코스닥', 
-                                 'KNX'~'코넥스'),
+                                 'KNX'~'코넥스', 'CMD'~'금현물'),
                  종가 = readr::parse_number(종가)) %>% 
           filter(str_ends(종목코드,'0'))
       })
@@ -624,7 +633,7 @@ MyAssets <- R6Class(
           summarise(현금 = sum(현금수입 + 입출금 - 현금지출),
                     .groups = 'keep') %>%
           pivot_wider(names_from = 계좌, values_from = 현금) %>% 
-          ungroup()
+          ungroup()ssel
         
         cash_w_b <- cash_w %>%
           mutate(across(-거래일자, cumsum))
@@ -675,9 +684,12 @@ MyAssets <- R6Class(
                                cash_w_b$한투),
             장부금액 = replace(장부금액, 종목명=='한투ISA예수금',
                                cash_w_b$한투ISA),
+            장부금액 = replace(장부금액, 종목명=='금현물계좌현금',
+                           cash_w_b$금현물),
             평잔 = replace(평잔, 종목명=='엔투ISA예수금', cash_w_e$엔투ISA),
             평잔 = replace(평잔, 종목명=='한투예수금', cash_w_e$한투),
             평잔 = replace(평잔, 종목명=='한투ISA예수금', cash_w_e$한투ISA),
+            평잔 = replace(평잔, 종목명=='금현물계좌현금', cash_w_e$금현물),
             장부금액 = replace(장부금액, 종목명=='불리오달러', 
                                cash_d_b$불리오),
             장부금액 = replace(장부금액, 종목명=='직접운용달러', 
