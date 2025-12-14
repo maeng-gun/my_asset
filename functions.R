@@ -9,6 +9,7 @@ library(rvest)
 library(RPostgres)
 library(dbx)
 library(tidyquant)
+library(pool)
 
 get_config <- function(){
   yaml::read_yaml(file = 'secrets/config.yaml', 
@@ -47,8 +48,8 @@ MyData <- R6Class(
                 readLines.warn = F)
       
       
-      self$con <- dbConnect(
-        RPostgres::Postgres(),
+      self$con <- dbPool(
+        drv = RPostgres::Postgres(),
         host = cfg$c,
         port = 5432,
         dbname = "postgres",
@@ -85,6 +86,13 @@ MyData <- R6Class(
     upsert = function(df, name, cols){
       dbxUpsert(conn = self$con, table = name, records = df,
                 where_cols = cols)
+    },
+    ## 7. (메서드) 소멸자: 객체가 삭제될 때 DB 연결 종료 ====
+    finalize = function() {
+      if (!is.null(self$con)) {
+        # poolClose로 안전하게 연결 해제
+        pool::poolClose(self$con)
+      }
     }
   )
 )
@@ -503,6 +511,17 @@ MyAssets <- R6Class(
       #                       extended_types=T)
       super$initialize(self$pw)
       self$today <- today()
+      
+      tryCatch({
+        if(dbExistsTable(self$con, 'inflow')){
+          dbExecute(self$con, glue("DELETE FROM inflow WHERE \"거래일자\" < '{self$today}'"))
+        }
+      }, error = function(e) {
+        # 테이블이 없거나 권한 문제 등 에러 발생 시 무시하고 진행
+      })
+      
+      
+      
       self$year <- year(self$today)
       self$days <- seq(make_date(2024,1,1), 
                        make_date(self$year,12,31),by='day')
@@ -1145,10 +1164,10 @@ MyAssets <- R6Class(
                세후수익률 = 실현손익/평잔*100,
                평가수익률 = 평가손익/장부금액*100) %>%
         mutate(계좌 = factor(계좌, 
-                           levels = c("한투ISA","한투","불리오",
-                                      "엔투하영", "엔투저축연금",
-                                      "한투연금저축", "미래DC", 
-                                      "농협IRP","엔투IRP","합계")),
+                           levels = c("한투","불리오","엔투하영","금현물",
+                                      "한투ISA","엔투ISA",
+                                      "엔투저축연금","한투연금저축", 
+                                      "미래DC", "농협IRP","엔투IRP","합계")),
                자산군 = factor(자산군, 
                             levels = c("","주식","대체자산",
                                        "채권","현금성", 
@@ -1225,10 +1244,10 @@ MyAssets <- R6Class(
         
         ( bind_rows(df2, df3) %>%
         mutate(계좌 = factor(계좌, 
-                           levels = c("한투ISA","한투","불리오",
-                                      "엔투하영", "엔투저축연금",
-                                      "한투연금저축", "미래DC", 
-                                      "농협IRP","엔투IRP","합계")),
+                           levels = c("한투","불리오","엔투하영","금현물",
+                                      "한투ISA","엔투ISA",
+                                      "엔투저축연금","한투연금저축", 
+                                      "미래DC", "농협IRP","엔투IRP","합계")),
                자산군 = factor(자산군, 
                             levels = c("","주식","대체자산",
                                        "채권","현금성", 
@@ -1746,6 +1765,142 @@ MyAssets <- R6Class(
       suppressWarnings({
         self$ks <- KrxStocks$new()
       })
+    },
+    
+    ## 14. (메서드) 유동성 관리 분석 테이블 생성 ====
+    get_liquidity_analysis = function() {
+      
+      # [Step 1] inflow_table2: 현재 시점 계좌별 총자산/현금성자산 현황
+      # ma_v()가 실행된 상태여야 t_comm4 사용 가능
+      
+      # 1-1. 계좌별 총자산 (자산군='', 통화='원화')
+      df_total <- self$t_comm4 %>% 
+        filter(자산군 == '' | is.na(자산군), 통화 == '원화') %>% 
+        select(계좌, 평가금액) %>% 
+        rename(총자산 = 평가금액)
+      
+      # 1-2. 계좌별 현금성자산 (자산군='현금성', 통화='원화')
+      df_cash <- self$t_comm4 %>% 
+        filter(자산군 == '현금성', 통화 == '원화') %>% 
+        select(계좌, 평가금액) %>% 
+        rename(현금성자산 = 평가금액)
+      
+      # 1-3. 모든 계좌 리스트 확보 (전체 기준)
+      # 전체 계좌 목록을 확보하여 추후 테이블 생성 시 누락 방지
+      all_accts <- factor(
+        unique(c(df_total$계좌, df_cash$계좌)),
+        levels = c("한투","불리오","엔투하영","금현물",
+        "한투ISA","엔투ISA",
+        "엔투저축연금","한투연금저축", 
+        "미래DC", "농협IRP","엔투IRP"))
+      
+      current_status <- tibble(계좌 = all_accts) %>% 
+        left_join(df_total, by='계좌') %>% 
+        left_join(df_cash, by='계좌') %>% 
+        replace(is.na(.), 0) %>% 
+        pivot_longer(cols = -계좌, names_to = "구분", values_to = "금액") %>% 
+        pivot_wider(names_from = 계좌, values_from = 금액) %>% 
+        # 합계 열 추가
+        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE)) %>% 
+        arrange(구분)
+      
+      
+      # [Step 2] 공통 데이터 준비 (월별 피벗)
+      
+      # 2-1. 자금유출입 (inflow_table1) 월별 집계
+      inflow_monthly <- self$read('inflow') %>% 
+        mutate(거래월 = format(as.Date(거래일자), "%Y-%m")) %>% 
+        filter(as.Date(거래일자) >= floor_date(self$today, "month")) %>% 
+        group_by(거래월, 계좌) %>% 
+        summarise(금액 = sum(자금유출입, na.rm = TRUE), .groups = 'drop')
+      
+      # 2-2. 만기 자산 (maturity_table) 월별 집계
+      maturity_data <- self$bs_pl_mkt_a %>% 
+        bind_rows(self$bs_pl_mkt_p) %>% 
+        filter(자산군=='채권', 세부자산군 %in% c('만기무위험','만기회사채'), 
+               통화=='원화', 평가금액>0) %>% 
+        left_join(
+          self$assets %>% bind_rows(self$pension) %>% select(종목코드, 만기일),
+          by = "종목코드"
+        ) %>% 
+        filter(as.Date(만기일) > self$today) %>% 
+        mutate(거래월 = format(as.Date(만기일), "%Y-%m")) %>% 
+        group_by(거래월, 계좌) %>% 
+        summarise(금액 = sum(평가금액, na.rm = TRUE), .groups = 'drop')
+      
+      # 2-3. 미래 월 리스트 생성
+      future_months <- sort(unique(c(inflow_monthly$거래월, maturity_data$거래월)))
+      current_month <- format(self$today, "%Y-%m")
+      
+      # 현재월이 없으면 추가, 데이터가 아예 없으면 현재월만
+      if(length(future_months) == 0) {
+        future_months <- current_month
+      } else if(!(current_month %in% future_months)){
+        future_months <- sort(c(current_month, future_months))
+      }
+      
+      base_proj <- tibble(거래월 = future_months)
+      
+      
+      # [Step 3] inflow_table3: 향후 총자산 추이 (누적 O)
+      # 로직: 현재 총자산 + 누적 자금유출입
+      
+      # 초기값 (현재 총자산)
+      init_total <- df_total %>% 
+        pivot_wider(names_from = 계좌, values_from = 총자산) %>% 
+        mutate(거래월 = current_month)
+      
+      # 유출입 피벗
+      flow_pivot <- inflow_monthly %>% 
+        pivot_wider(names_from = 계좌, values_from = 금액, values_fill = 0)
+      
+      # 결합 및 누적
+      total_projection <- bind_rows(init_total, flow_pivot) %>% 
+        right_join(base_proj, by = "거래월") %>% # 모든 월 표시
+        group_by(거래월) %>% 
+        # all_accts에 있는 모든 계좌에 대해 합산 (유출입 없는 계좌도 0으로 처리되어 포함됨)
+        summarise(across(any_of(all_accts), \(x) sum(x, na.rm=T))) %>% 
+        arrange(거래월) %>% 
+        # 결측치 0으로 채우고 누적합 계산
+        mutate(across(any_of(all_accts), ~cumsum(tidyr::replace_na(., 0)))) %>% 
+        # 합계 열 추가
+        mutate(합계 = rowSums(select(., -거래월), na.rm = TRUE))
+      
+      
+      # [Step 4] inflow_table4: 향후 가용자금 추이 (누적 X, 매달 Flow)
+      # 로직: 첫달 = 현재 현금성자산 + 이달의 Flow, 이후 = 해당 월의 Flow
+      
+      # 초기값 (현재 현금성자산)
+      init_cash <- df_cash %>% 
+        pivot_wider(names_from = 계좌, values_from = 현금성자산) %>% 
+        mutate(거래월 = current_month)
+      
+      # 유출입 + 만기 합산
+      total_inflow <- bind_rows(inflow_monthly, maturity_data) %>% 
+        group_by(거래월, 계좌) %>% 
+        summarise(금액 = sum(금액, na.rm = TRUE), .groups = 'drop') %>% 
+        pivot_wider(names_from = 계좌, values_from = 금액, values_fill = 0)
+      
+      # 현금 흐름과 관련된 모든 계좌 식별
+      cash_related_accts <- unique(c(names(init_cash), names(total_inflow)))
+      cash_related_accts <- setdiff(cash_related_accts, "거래월")
+      
+      # 결합 (누적하지 않음)
+      cash_projection <- bind_rows(init_cash, total_inflow) %>% 
+        right_join(base_proj, by = "거래월") %>% 
+        group_by(거래월) %>% 
+        summarise(across(any_of(cash_related_accts), \(x) sum(x, na.rm=T))) %>% 
+        arrange(거래월) %>% 
+        mutate(across(any_of(cash_related_accts), ~tidyr::replace_na(., 0))) %>% 
+        # 합계 열 추가
+        mutate(합계 = rowSums(select(., -거래월), na.rm = TRUE))
+      
+      
+      return(list(
+        current_status = current_status,
+        total_projection = total_projection,
+        cash_projection = cash_projection
+      ))
     }
     
   )

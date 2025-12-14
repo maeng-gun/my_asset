@@ -9,3 +9,4 @@ secrets/
 archive/
 rsconnect/
 __pycache__/
+mydata.sqlite

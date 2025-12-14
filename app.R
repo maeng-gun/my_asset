@@ -620,37 +620,99 @@ body <- dashboardBody(
     ##4) 유동성 관리====
     tabItem(
       tabName = "pf_liquid",
-      box(
-        id='list_box',
+      tabBox(
+        id = 'liquid_tabs',
         width = 12,
-        status = 'info',
-        solidHeader = T,
-        title = "유동성 관리",
-        collapsible = F,
-        fluidRow(
-          column(width=4,
-                 valueBoxOutput("liq1", width=NULL)),
-          column(width=4,
-                 valueBoxOutput("liq2", width=NULL)),
-          column(width=4,
-                 valueBoxOutput("liq3", width=NULL)),
+        status = 'primary',
+        type = 'tabs',
+        
+        ### a. 자금유출입 탭 ====
+        tabPanel(
+          title = "자금유출입",
+          fluidRow(
+            column(
+              width = 3,
+              box(
+                width = 12,
+                title = "입력사항",
+                status = "info",
+                solidHeader = TRUE,
+                collapsible = F,
+                uiOutput('manage_inflow')
+              )
+            ),
+            column(
+              width = 5,
+              box(
+                width = 12,
+                title = "유출입 내역",
+                status = "info",
+                solidHeader = TRUE,
+                collapsible = F,
+                uiOutput('inflow_table1')
+              )
+            ),
+            column(
+              width = 4,
+              box(
+                width = 12,
+                title = "만기도래내역",
+                status = "info",
+                solidHeader = TRUE,
+                collapsible = F,
+                uiOutput('maturity_table')
+              )
+            )
+          )
         ),
-        fluidRow(
-          column(
-            width = 1,
-            uiOutput('manage_inflow'),
+        
+        ### b. 총자산추이 탭 ====
+        tabPanel(
+          title = "총자산추이",
+          fluidRow(
+            box(
+              width = 12,
+              title = "총자산현황",
+              status = "info",
+              solidHeader = TRUE,
+              collapsible = F,
+              uiOutput('current_total_asset_table')
+            )
           ),
-          column(
-            width = 3,
-            uiOutput('inflow_table1')
+          fluidRow(
+            box(
+              width = 12,
+              title = "총자산추이",
+              status = "info",
+              solidHeader = TRUE,
+              collapsible = F,
+              uiOutput('inflow_table3')
+            )
+          )
+        ),
+        
+        ### c. 가용자금추이 탭 ====
+        tabPanel(
+          title = "가용자금추이",
+          fluidRow(
+            box(
+              width = 12,
+              title = "현금성자산현황",
+              status = "info",
+              solidHeader = TRUE,
+              collapsible = F,
+              uiOutput('current_cash_asset_table')
+            )
           ),
-          column(
-            width = 4,
-            uiOutput('maturity_table')
-          ),
-          column(
-            width = 4,
-            uiOutput('inflow_table2')
+          fluidRow(
+            box(
+              width = 12,
+              title = "가용자금추이",
+              status = "info",
+              solidHeader = TRUE,
+              collapsible = F,
+              uiOutput('inflow_table4')
+            )
           )
         )
       )
@@ -1767,6 +1829,9 @@ server <- function(input, output, session) {
     
     ### * 메뉴 설정====
     output$manage_inflow <- renderUI({
+      
+      acct_list <- unique(c(ma_b()$assets$계좌, ma_b()$pension$계좌))
+      
       fluidRow(
         selectInput(
           inputId = 'new3',
@@ -1781,17 +1846,17 @@ server <- function(input, output, session) {
             value = Sys.Date(),
             width='100%'
         ),
-        autonumericInput(
-          inputId = 'payment',
-          label = "투자유출입",
-          value = 0,
-          width='100%'
+        selectInput(
+          inputId = 'inflow_acct', # 계좌 선택 추가
+          label = "계좌",
+          choices = acct_list,
+          width = '100%'
         ),
         autonumericInput(
-          inputId = 'payment2',
-          label = "연금유출입",
+          inputId = 'payment', # 단일 입력창으로 변경
+          label = "자금유출입",
           value = 0,
-          width='100%'
+          width = '100%'
         ),
         br(),
         actionButton(
@@ -1821,21 +1886,26 @@ server <- function(input, output, session) {
     
     reset_inflow <- reactive({
       ma_b()$read('inflow') %>%
-        filter(거래일자 >= maa$today)
+        filter(거래일자 >= maa$today) %>% 
+        select(행번호,거래일자,계좌,자금유출입) %>% 
+        arrange(거래일자)
     })
     # 
     
     liq <- reactiveValues(
-      a = NULL, b= NULL, c=NULL, d=NULL
+      c=NULL, d=NULL
     )
     
     output$inflow_table1 <- renderUI({
       
       liq$c <- reset_inflow()
+      
       liq$c %>% 
         flextable() |>
-        theme_vanilla() |>
-        set_table_properties(layout='autofit') |>
+        theme_vanilla() %>% 
+        set_header_labels(자금유출입 = "금액") %>% 
+        colformat_double(j = "자금유출입", digits = 0) %>% 
+        set_table_properties(layout = 'autofit') %>% 
         htmltools_value(ft.align = 'center')
     })
     
@@ -1867,128 +1937,100 @@ server <- function(input, output, session) {
         htmltools_value(ft.align = 'center')
     })
     
-    
-    output$inflow_table2 <- renderUI({
-      ma_v()$get_funds() %>% 
-        flextable() |>
-        theme_vanilla() |>
-        set_table_properties(layout='autofit') |>
-        htmltools_value(ft.align = 'center')
-    })
-  
-  
-    output$liq1 <- renderValueBox({
-      liq$a <- ma_v()$bs_pl_mkt_a %>% 
-        filter(자산군=='현금성', 
-               통화=='원화', 
-               평가금액>0) %>%
-        pull(평가금액) %>% sum()
-      
-      valueBox(
-        value = liq$a %>% 
-          format(big.mark = ",", scientific = FALSE) %>% 
-          p(style = "font-size: 300%;"),
-        width = NULL,
-        subtitle = p("투자계정 유동성",
-                     style = "font-size: 150%;"),
-        color = "primary"
-      )
+    liquidity_data <- reactive({
+      ma_v()$get_liquidity_analysis()
     })
     
-    output$liq2 <- renderValueBox({
-      
-      liq$b <- ma_v()$bs_pl_mkt_p %>% 
-        filter(자산군=='현금성', 
-               통화=='원화', 
-               평가금액>0) %>%
-        pull(평가금액) %>% sum()
-      
-      valueBox(
-        value = liq$b %>% 
-          format(big.mark = ",", scientific = FALSE) %>% 
-          p(style = "font-size: 300%;")
-        ,
-        width = NULL,
-        subtitle = p("연금계정 유동성",
-                     style = "font-size: 150%;"),
-        color = "primary"
-      )
+    # 4-5-1. 현재 계좌별 총자산 (총자산추이 탭 상단)
+    output$current_total_asset_table <- renderUI({
+      liquidity_data()$current_status %>% 
+        filter(구분 == '총자산') %>% 
+        flextable() %>% 
+        theme_box() %>% 
+        colformat_double(digits=0) %>% 
+        set_table_properties(layout='autofit', width=1) %>% 
+        htmltools_value()
     })
     
-    output$liq3 <- renderValueBox({
-      valueBox(
-        value = (liq$a + liq$b) %>% 
-          format(big.mark = ",", scientific = FALSE) %>% 
-          p(style = "font-size: 300%;")
-        ,
-        width = NULL,
-        subtitle = p("총 유동성",
-                     style = "font-size: 150%;"),
-        color = "primary"
-      )
+    # 4-5-2. 현재 계좌별 현금성자산 (가용자금추이 탭 상단)
+    output$current_cash_asset_table <- renderUI({
+      liquidity_data()$current_status %>% 
+        filter(구분 == '현금성자산') %>% 
+        flextable() %>% 
+        theme_box() %>% 
+        colformat_double(digits=0) %>% 
+        set_table_properties(layout='autofit', width=1) %>% 
+        htmltools_value()
     })
     
+    # 4-5-3. 향후 총자산 추이
+    output$inflow_table3 <- renderUI({
+      liquidity_data()$total_projection %>% 
+        flextable() %>% 
+        theme_vanilla() %>% 
+        colformat_double(digits=0) %>% 
+        set_table_properties(layout='autofit') %>% 
+        htmltools_value()
+    })
+    
+    # 4-5-4. 향후 가용자금 추이
+    output$inflow_table4 <- renderUI({
+      liquidity_data()$cash_projection %>% 
+        flextable() %>% 
+        theme_vanilla() %>% 
+        colformat_double(digits=0) %>% 
+        set_table_properties(layout='autofit') %>% 
+        htmltools_value()
+    })
     
     ### * 신규/구분 설정====
-    observeEvent(input$new3,{
+    observeEvent(input$new3, {
       if(input$new3 != "신규"){
         t_rows <- filter(liq$c, 행번호 == input$new3)
         updateAirDateInput(session, 'trading_date2', value = t_rows$거래일자)
-        updateAutonumericInput(session, 'payment', value = t_rows$투자유출입)
-        updateAutonumericInput(session, 'payment2', value = t_rows$연금유출입)
-  
+        updateSelectInput(session, 'inflow_acct', selected = t_rows$계좌)
+        updateAutonumericInput(session, 'payment', value = t_rows$자금유출입)
       } else {
         update_manage_inflow()
         updateAirDateInput(session, 'trading_date2', value = Sys.Date())
+        updateSelectInput(session, 'inflow_acct', selected = NULL)
         updateAutonumericInput(session, 'payment', value = 0)
-        updateAutonumericInput(session, 'payment2', value = 0)
       }
     })
   
     ### * 추가/수정/삭제 선택시====
     observe({
       liq$d <- tibble::tibble_row(
-        행번호=0, 거래일자 = input$trading_date2,
-        투자유출입=input$payment,
-        연금유출입=input$payment2
+        행번호 = 0, 
+        거래일자 = input$trading_date2,
+        계좌 = input$inflow_acct,
+        자금유출입 = input$payment
       )
     })
   
-    observeEvent(input$inflow_new,{
-  
-      liq$d$행번호 <- tail(sort(maa$read('inflow')$행번호), 1)+1
+    observeEvent(input$inflow_new, {
+      # DB에 '계좌', '자금유출입' 컬럼이 있어야 함
+      liq$d$행번호 <- tail(sort(maa$read('inflow')$행번호), 1) + 1
       dbxInsert(maa$con, 'inflow', liq$d)
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
     })
   
-    observeEvent(input$inflow_mod,{
+    observeEvent(input$inflow_mod, {
       liq$d$행번호 <- input$new3
       dbxUpdate(maa$con, 'inflow', liq$d, where_cols = c("행번호"))
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
     })
-  
-    observeEvent(input$inflow_del,{
-      dbxDelete(maa$con, 'inflow', tibble::tibble_row(행번호=input$new3))
+    
+    observeEvent(input$inflow_del, {
+      dbxDelete(maa$con, 'inflow', tibble::tibble_row(행번호 = input$new3))
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
     })
-    
-    ### * 그래프 설정====
-    # output$inflow_plot <- renderPlot({
-    #   sk()
-    #   ma()$inflow_plot +
-    #     theme(
-    #       text = element_text(size = 20),
-    #       legend.position = "none",
-    #       axis.title = element_blank()
-    #     )+
-    #     scale_x_date(date_labels = '%m', date_breaks = '1 months')
-    # })
     
     
     # 5) 자산배분 현황====
