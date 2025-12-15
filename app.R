@@ -720,138 +720,67 @@ body <- dashboardBody(
       ##5) 자산배분 현황====
     tabItem(
       tabName = "asset_allo",
-      box(
-        id='list_box',
+      tabBox(
+        id = 'allo_tabs',
         width = 12,
-        status = 'info',
-        solidHeader = T,
-        title = "유동성 관리",
-        collapsible = F,
-        fluidRow(
-          column(
-            width = 2,
-            div("자산군", align = 'center'),
-            numericInput(
-              inputId = 'ass_bond',
-              label = "채권",
-              value = 0
-            ),
-            numericInput(
-              inputId = 'ass_stock',
-              label = "주식",
-              value = 0
-            ),
-            numericInput(
-              inputId = 'ass_alter',
-              label = "대체투자",
-              value = 0
-            ),
-            br(),
-            div("세부자산군", align = 'center'),
-            numericInput(
-              inputId = 'ass_bond_sol',
-              label = "채권_국채",
-              value = 0
-            ),
-            numericInput(
-              inputId = 'ass_bond_nr',
-              label = "채권_만기무위험",
-              value = 0
-            ),
-            numericInput(
-              inputId = 'ass_bond_cor',
-              label = "채권_만기회사채",
-              value = 0
-            ),
-            numericInput(
-              inputId = 'ass_bond_ig',
-              label = "채권_투자등급",
-              value = 0
-            ),
-            numericInput(
-              inputId = 'ass_stock_dev',
-              label = "주식_신흥국",
-              value = 0
-            ),
-            numericInput(
-              inputId = 'ass_alter_com',
-              label = "대체투자_상품",
-              value = 0
-            ),
-            br(),
-            actionButton(
-              inputId = "allo_renew",
-              label = "수정",
+        status = 'primary',
+        type = 'tabs',
+        
+        ### 1번탭: 총 자산배분 (기존 화면) ====
+        tabPanel(
+          title = "총 자산배분",
+          fluidRow(
+            column(
+              width = 2,
+              box(
+                width = 12,
+                title = "목표 비중 설정",
+                status = "info",
+                solidHeader = TRUE,
+                collapsible = FALSE,
+                div("자산군", align = 'center'),
+                numericInput(inputId = 'ass_bond', label = "채권", value = 0),
+                numericInput(inputId = 'ass_stock', label = "주식", value = 0),
+                numericInput(inputId = 'ass_alter', label = "대체투자", value = 0),
+                br(),
+                div("세부자산군", align = 'center'),
+                numericInput(inputId = 'ass_bond_sol', label = "채권_국채", value = 0),
+                numericInput(inputId = 'ass_bond_nr', label = "채권_만기무위험", value = 0),
+                numericInput(inputId = 'ass_bond_cor', label = "채권_만기회사채", value = 0),
+                numericInput(inputId = 'ass_bond_ig', label = "채권_투자등급", value = 0),
+                numericInput(inputId = 'ass_stock_dev', label = "주식_신흥국", value = 0),
+                numericInput(inputId = 'ass_alter_com', label = "대체투자_상품", value = 0),
+                br(),
+                actionButton(
+                  inputId = "allo_renew",
+                  label = "수정",
+                  status = "info",
+                  width = '100%'
+                )
+              ) # box 닫기 (쉼표 없음)
+            ), # column 닫기 (쉼표 있음)
+            column(
+              width = 10,
+              uiOutput('allocation_table')
+            ) # column 닫기 (쉼표 없음)
+          ) # fluidRow 닫기
+        ), # tabPanel 닫기
+        
+        ### 2번탭: 계좌별 배분현황 (신규) ====
+        tabPanel(
+          title = "계좌별 배분현황",
+          fluidRow(
+            box(
+              width = 12,
               status = "info",
-              width='100%'
+              solidHeader = FALSE,
+              uiOutput('account_allocation_table')
             )
-          ),
-          column(
-            width = 10,
-            uiOutput('allocation_table')
           )
         )
-      )
+      ) # tabBox 닫기
     )
-      
-    
-    
-    
-    
-    # tabItem(
-    #   tabName = "ecos_stat",
-    #   tabBox(
-    #     width=12,
-    #     status='primary',
-    #     type='tabs',
-    
-    #     ###a. 선정 아이템===
-    #     tabPanel(
-    #       title = "선정 아이템",
-    #       icon=icon('square-check'),
-    #       tableOutput('selected_item')
-        ),
-        ###b. 통계표 조회===
-        # tabPanel(
-        #   title = "통계표 조회",
-        #   icon=icon('table-list'),
-        #   fluidRow(
-        #     column(3,textInput('name','검색어')),
-        #     column(9,tableOutput('ecos_stat_tables'))
-        #   )
-        # ),
-        ###c. 아이템 추가===
-    #     tabPanel(
-    #       title = "아이템 추가",
-    #       icon=icon('square-plus'),
-    #       fluidRow(
-    #         column(
-    #           width=3,
-    #           selectizeInput('name_in','통계표이름','전체'),
-    #           selectizeInput('code_in','통계표코드','전체'),
-    #           selectizeInput('item_in','아이템이름','전체'),
-    #           selectizeInput('cyl_in','데이터주기','전체'),
-    #           br(),
-    #           textInput('ecos_name',"아이템명 설정", 
-    #                     width='100%'),
-    #           actionButton('add_item','아이템 추가',
-    #                        icon=icon('square-plus'),
-    #                        width='100%',
-    #                        status='primary')
-    #         ),
-    #         column(9, tableOutput('ecos_item_tables'))
-    #       )
-    #     )
-    #   )
-    # ),
-    ##5) 경제지표 시계열===
-    # tabItem(
-    #   tabName = "econ_series",
-    #   fluidRow(
-    #     uiOutput('econ_series2')
-    #   )
-    # )
-  # )
+  )
 )
 
 #바닥글
@@ -2123,7 +2052,52 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
-    
+    output$account_allocation_table <- renderUI({
+      req(ma_v())
+      
+      # 1. 원본 데이터 및 계좌 순서 추출
+      # t_comm4에 존재하는 계좌들의 순서(Factor Level 순)를 그대로 가져옵니다.
+      df_src <- ma_v()$t_comm4
+      target_accts <- levels(df_src$계좌)[levels(df_src$계좌) %in% unique(df_src$계좌)]
+      
+      # 2. 데이터 필터링 및 전처리
+      df <- df_src %>%
+        filter(통화 == '원화') %>%
+        select(계좌, 자산군, 평가금액) %>%
+        # 자산군이 비어있거나 NA인 경우 '합계'로 변경 (계좌별 총자산 행)
+        mutate(자산군 = if_else(자산군 == "" | is.na(자산군), "합계", as.character(자산군)))
+      
+      # 3. 피벗 (행: 자산군, 열: 계좌)
+      df_wide <- df %>%
+        pivot_wider(names_from = 계좌, values_from = 평가금액, values_fill = 0)
+      
+      # 4. 열(계좌) 순서 및 행(자산군) 순서 정렬
+      # 4-1. 열 순서: target_accts에 있는 계좌만, 그 순서대로 선택 (데이터에 없는 계좌는 0으로 추가)
+      # for(acct in target_accts) {
+      #   if(!acct %in% names(df_wide)) {
+      #     df_wide[[acct]] <- 0
+      #   }
+      # }
+      # 
+      # 4-2. 행 순서: 주식 -> 대체자산 -> 채권 -> 현금성 -> 합계 순으로 정렬
+      row_levels <- c("주식", "외화자산", "대체자산", "채권", "현금성", "합계")
+      
+      df_final <- df_wide %>%
+        # select(자산군, all_of(target_accts)) %>%  # 열 순서 적용
+        mutate(자산군 = factor(자산군, levels = row_levels)) %>%
+        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE)) %>% # 행 순서 적용을 위한 Factor 변환
+        arrange(자산군)
+      
+      # 5. Flextable 렌더링
+      df_final %>%
+        flextable() %>%
+        theme_vanilla() %>%
+        colformat_double(digits = 0) %>%
+        set_table_properties(layout = 'autofit') %>%
+        align(align = "center", part = "all") %>%
+        bg(i = ~ 자산군 == "합계", bg = "#f0f0f0") %>% # 합계 행 강조
+        htmltools_value()
+    })
     
     
     # 4) 한국은행 지표선정===
