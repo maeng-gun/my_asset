@@ -545,25 +545,25 @@ body <- dashboardBody(
         ###b. 투자손익현황====
         tabPanel(
           title="투자손익현황",
-          h5("1. 자산군별 손익현황"),
-          br(),
-          fluidRow(
-            column(
-              width = 6,
-              uiOutput("class_ret_a")
-            ),
-            column(
-              width = 6,
-              uiOutput("class_ret_a2")
-            )
-          ),
-          br(),
-          h5("2. 개별자산 손익현황"),
-          br(),
+          # h5("1. 자산군별 손익현황"),
+          # br(),
+          # fluidRow(
+          #   column(
+          #     width = 6,
+          #     uiOutput("class_ret_a")
+          #   ),
+          #   column(
+          #     width = 6,
+          #     uiOutput("class_ret_a2")
+          #   )
+          # ),
+          # br(),
+          # h5("2. 개별자산 손익현황"),
+          # br(),
           fluidRow(
             uiOutput("bs_pl_mkt_a")
           )
-        ),
+        )
         ###c. 연금현황====
         # tabPanel(
         #   title="연금현황",
@@ -593,27 +593,27 @@ body <- dashboardBody(
         #   )
         # ),
         ###d. 연금손익현황====
-        tabPanel(
-          title="연금손익현황",
-          h5("1. 자산군별 손익현황"),
-          br(),
-          fluidRow(
-            column(
-              width = 6,
-              uiOutput("class_ret_p")
-            ),
-            column(
-              width = 6,
-              uiOutput("class_ret_p2")
-            )
-          ),
-          br(),
-          h5("2. 개별자산 손익현황"),
-          br(),
-          fluidRow(
-            uiOutput("bs_pl_mkt_p")
-          )
-        )
+        # tabPanel(
+        #   title="연금손익현황",
+        #   h5("1. 자산군별 손익현황"),
+        #   br(),
+        #   fluidRow(
+        #     column(
+        #       width = 6,
+        #       uiOutput("class_ret_p")
+        #     ),
+        #     column(
+        #       width = 6,
+        #       uiOutput("class_ret_p2")
+        #     )
+        #   ),
+        #   br(),
+        #   h5("2. 개별자산 손익현황"),
+        #   br(),
+        #   fluidRow(
+        #     uiOutput("bs_pl_mkt_p")
+        #   )
+        # )
       )
     ),
     
@@ -1334,7 +1334,8 @@ server <- function(input, output, session) {
         상품명=input$comm_name, 통화=input$ass_cur, 
         자산군=input$ass_class, 
         세부자산군=input$ass_class1, 세부자산군2=input$ass_class2,
-        만기일=input$maturity_date
+        만기일=input$maturity_date,
+        기초평가금액=NULL
       )
     })
     
@@ -1661,45 +1662,61 @@ server <- function(input, output, session) {
     ## b. 투자손익현황====
   
     
-    output$class_ret_a <- renderUI({
-      ma_v()$ret_a |>
-        select(1:3,평가금액,실현손익, 평가손익,
-               실현수익률:평가수익률) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1:2) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=4:6, digits = 0) |>
-        colformat_double(j=7:8, digits = 2) |>
-        htmltools_value()
-    })
-    
-    output$class_ret_a2 <- renderUI({
-      ma_v()$ret_a2 |>
-        select(1:2,평가금액,실현손익, 평가손익,
-               실현수익률:평가수익률) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=3:5, digits = 0) |>
-        colformat_double(j=6:7, digits = 2) |>
-        htmltools_value()
-    })
+    # output$class_ret_a <- renderUI({
+    #   ma_v()$ret_a |>
+    #     select(1:3,평가금액,실현손익, 평가손익,
+    #            실현수익률:평가수익률) |>
+    #     flextable() |>
+    #     theme_vanilla() |>
+    #     merge_v(j=1:2) |>
+    #     set_table_properties(layout='autofit') |>
+    #     colformat_double(j=4:6, digits = 0) |>
+    #     colformat_double(j=7:8, digits = 2) |>
+    #     htmltools_value()
+    # })
+    # 
+    # output$class_ret_a2 <- renderUI({
+    #   ma_v()$ret_a2 |>
+    #     select(1:2,평가금액,실현손익, 평가손익,
+    #            실현수익률:평가수익률) |>
+    #     flextable() |>
+    #     theme_vanilla() |>
+    #     merge_v(j=1) |>
+    #     set_table_properties(layout='autofit') |>
+    #     colformat_double(j=3:5, digits = 0) |>
+    #     colformat_double(j=6:7, digits = 2) |>
+    #     htmltools_value()
+    # })
   
     output$bs_pl_mkt_a <-renderUI({
-      ma_v()$bs_pl_mkt_a |>
-        select(통화, 자산군, 세부자산군, 종목명,
-               보유수량,장부금액, 평가금액, 실현손익,평가손익,
-               실현수익률, 평가수익률) |>
-        arrange(통화,자산군,세부자산군) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1:3) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=5:9, digits = 0) |>
-        colformat_double(j=10:11, digits = 2) |>
-        htmltools_value()
+      
+      df_a <- ma_v()$bs_pl_mkt_a
+      df_p <- ma_v()$bs_pl_mkt_p
+      
+      acct_order <- c("한투","불리오","엔투하영","금현물", "한투ISA","엔투ISA", 
+                      "엔투저축연금","한투연금저축", "미래DC", "농협IRP","엔투IRP")
+      cur_order <- c("원화", "달러", "엔화")
+      class_order <- c("주식", "대체자산", "채권", "현금성", "외화자산")
+      
+      combined_df <- bind_rows(df_a, df_p) %>%
+        mutate(
+          계좌 = factor(계좌, levels = acct_order),
+          통화 = factor(통화, levels = cur_order),
+          자산군 = factor(자산군, levels = class_order)
+        ) %>%
+        arrange(계좌, 통화, 자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
+        select(계좌, 통화, 자산군, 세부자산군, 세부자산군2, 종목명, 보유수량, 
+               장부금액, 평잔, 평가금액, 평가손익, 실현손익, 평가손익증감, 
+               세전수익률, 세후수익률, 운용수익률, 총수익률, 평가수익률)
+        
+      combined_df %>%
+        flextable() %>%
+        theme_vanilla() %>%
+        merge_v(j = 1:5) %>% # 상위 분류 병합
+        colformat_double(j = 7:13, digits = 0) %>% # 금액형은 소수점 제거
+        colformat_double(j = 14:18, digits = 2) %>% # 수익률은 소수점 2자리
+        set_table_properties(layout = 'autofit', width = 1) %>%
+        htmltools_value(ft.align = 'center')
     })
   
   
@@ -1710,48 +1727,48 @@ server <- function(input, output, session) {
     # output$allo8 <- renderUI({render_allo(ma()$allo8)})
     # output$allo9 <- renderUI({render_allo(ma()$allo9)})
     
-    ## d. 연금손익현황====
+    ## d. 연금손익현황
     
-    output$class_ret_p <- renderUI({
-      ma_v()$ret_p |>
-        select(1:3,평가금액,실현손익, 평가손익,
-               실현수익률:평가수익률) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1:2) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=4:6, digits = 0) |>
-        colformat_double(j=7:8, digits = 2) |>
-        htmltools_value()
-    })
-    
-    output$class_ret_p2 <- renderUI({
-      ma_v()$ret_p2 |>
-        select(1:2,평가금액,실현손익, 평가손익,
-               실현수익률:평가수익률) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=3:5, digits = 0) |>
-        colformat_double(j=6:7, digits = 2) |>
-        htmltools_value()
-    })
-    
-    output$bs_pl_mkt_p <-renderUI({
-      ma_v()$bs_pl_mkt_p |>
-        select(계좌, 자산군, 세부자산군, 종목명,
-               보유수량, 장부금액, 평가금액, 실현손익, 평가손익,
-               실현수익률,평가수익률) |>
-        arrange(계좌,자산군,세부자산군) |>
-        flextable() |>
-        theme_vanilla() |>
-        merge_v(j=1:3) |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=5:9, digits = 0) |>
-        colformat_double(j=10:11, digits = 2) |>
-        htmltools_value()
-    })
+    # output$class_ret_p <- renderUI({
+    #   ma_v()$ret_p |>
+    #     select(1:3,평가금액,실현손익, 평가손익,
+    #            실현수익률:평가수익률) |>
+    #     flextable() |>
+    #     theme_vanilla() |>
+    #     merge_v(j=1:2) |>
+    #     set_table_properties(layout='autofit') |>
+    #     colformat_double(j=4:6, digits = 0) |>
+    #     colformat_double(j=7:8, digits = 2) |>
+    #     htmltools_value()
+    # })
+    # 
+    # output$class_ret_p2 <- renderUI({
+    #   ma_v()$ret_p2 |>
+    #     select(1:2,평가금액,실현손익, 평가손익,
+    #            실현수익률:평가수익률) |>
+    #     flextable() |>
+    #     theme_vanilla() |>
+    #     merge_v(j=1) |>
+    #     set_table_properties(layout='autofit') |>
+    #     colformat_double(j=3:5, digits = 0) |>
+    #     colformat_double(j=6:7, digits = 2) |>
+    #     htmltools_value()
+    # })
+    # 
+    # output$bs_pl_mkt_p <-renderUI({
+    #   ma_v()$bs_pl_mkt_p |>
+    #     select(계좌, 자산군, 세부자산군, 종목명,
+    #            보유수량, 장부금액, 평가금액, 실현손익, 평가손익,
+    #            실현수익률,평가수익률) |>
+    #     arrange(계좌,자산군,세부자산군) |>
+    #     flextable() |>
+    #     theme_vanilla() |>
+    #     merge_v(j=1:3) |>
+    #     set_table_properties(layout='autofit') |>
+    #     colformat_double(j=5:9, digits = 0) |>
+    #     colformat_double(j=10:11, digits = 2) |>
+    #     htmltools_value()
+    # })
     
     
     # 4) 유동성 관리====
