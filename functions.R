@@ -501,7 +501,7 @@ MyAssets <- R6Class(
     allo6 = NULL, allo7 = NULL, allo8 = NULL, 
     allo9 = NULL, inflow_table = NULL, inflow_plot= NULL,
     inflow_bal=NULL, t_class=NULL, t_comm=NULL, t_comm2=NULL,
-    t_comm3=NULL, t_comm4=NULL, pw=NULL,
+    t_comm3=NULL, t_comm4=NULL, pw=NULL, comm_profit=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(pw) {
@@ -525,13 +525,20 @@ MyAssets <- R6Class(
       self$year <- year(self$today)
       self$days <- seq(make_date(2024,1,1), 
                        make_date(self$year,12,31),by='day')
-      self$run_book()
       self$update_new_price()
+      # self$run_book()
       # self$run_valuation()
       # self$get_inflow()
     },
     
-    ## 2.(메서드) 거래내역 기록 테이블====
+    ## 2.(메서드) 주가 업데이트====
+    update_new_price = function(){
+      suppressWarnings({
+        self$ks <- KrxStocks$new()
+      })
+    },
+    
+    ## 3.(메서드) 거래내역 기록 테이블====
     #   - '거래내역' 화면에 들어갈 테이블 산출(회계/계좌/통화별)
     get_trading_record = function(table, acct, cur){
       
@@ -560,7 +567,7 @@ MyAssets <- R6Class(
                순수익, 입출금, 잔액)
     },
     
-    ## 3.(메서드) 계좌거래 내역 전처리 ====
+    ## 4.(메서드) 계좌거래 내역 전처리 ====
     #   - 회계/계좌/통화별로 각각 기록된 거래내역들을 통합하여
     #   - 모든 일자에 대한 통합된 거래기록을 산출
     #   - 잔액/손익 테이블(bs_pl)을 만들기 위한 전단계
@@ -585,7 +592,7 @@ MyAssets <- R6Class(
     },
     
     
-    ## 4.(메서드)운용자산 잔액-손익 테이블 생성====
+    ## 5.(메서드)운용자산 잔액-손익 테이블 생성====
     #   - 거래내역에 기초해 모든 시점의 장부금액/평잔/손익을 산출
     get_bs_pl = function(mode = 'assets') {
       
@@ -727,7 +734,25 @@ MyAssets <- R6Class(
       
     },
     
-    ## 5.(메서드)투자자산 평가반영 잔액-손익 테이블 생성====
+    ## 6.(메서드) 장부금액 자료 산출====
+    run_book = function(){
+      
+      self$assets <- self$read('assets')
+      self$pension <- self$read('pension')
+      self$ex_usd <- get_exchange_rate('달러')
+      self$ex_jpy <- get_exchange_rate('엔')/100
+      self$assets_daily <- self$get_daily_trading(
+        self$assets, self$read('assets_daily')
+      )
+      self$pension_daily <- self$get_daily_trading(
+        self$pension, self$read('pension_daily')
+      )
+      self$bs_pl_book_a <- self$get_bs_pl('assets')
+      self$bs_pl_book_p <- self$get_bs_pl('pension')
+    },
+    
+    
+    ## 7.(메서드)투자자산 평가반영 잔액-손익 테이블 생성====
     evaluate_bs_pl_assets = function() {
       
       # if (is.null(self$bl) && is.null(self$my)) {
@@ -766,7 +791,7 @@ MyAssets <- R6Class(
           by='종목코드'
         ) %>% 
         left_join(
-          (self$assets %>% select(계좌, 종목코드, 기초평가금액)),
+          (self$assets %>% select(계좌, 종목코드, 기초평가손익)),
           by=c("계좌","종목코드")) %>%
         filter(평잔>0.02) %>% 
         mutate(
@@ -775,7 +800,7 @@ MyAssets <- R6Class(
             !is.na(평가금액) ~ 평가금액,
             !is.na(종가) ~ 종가*보유수량,
             TRUE ~ 장부금액),
-          기초평가금액=coalesce(기초평가금액, 장부금액)) %>% 
+          기초평가손익=coalesce(기초평가손익, 0)) %>% 
         select(-종가) 
         
       
@@ -787,22 +812,19 @@ MyAssets <- R6Class(
         (sum(filter(bs_pl, 통화 == '엔화')$평가금액) * self$ex_jpy) %>% 
         round()
       
-      bs_pl %>% 
+      self$bs_pl_mkt_a <- 
+        bs_pl %>% 
         mutate(
           평가금액 = replace(평가금액, 종목명 == '달러자산', dollar),
           평가금액 = replace(평가금액, 종목명 == '엔화자산', yen),
           평가손익 = 평가금액 - 장부금액, 
-          평가손익증감 = 평가금액 - 기초평가금액,
-          세전수익률 = if_else(평잔 != 0, 수익 / 평잔 * 100, 0),
-          세후수익률 = if_else(평잔 != 0, 실현손익 / 평잔 * 100, 0),
-          운용수익률 = if_else(평잔 != 0, 평가손익증감 / 평잔 * 100, 0),
-          총수익률 = 세후수익률 + 운용수익률,
-          평가수익률 = if_else(장부금액 != 0, (평가금액 - 장부금액) / 장부금액 * 100, 0)
+          평가손익증감 = 평가손익 - 기초평가손익,
+          총손익 = 실현손익 + 평가손익증감
         ) %>% 
         arrange(desc(통화), desc(평가금액))
     },
     
-    ## 6.(메서드)연금 평가반영 잔액-손익 테이블 생성========
+    ## 8.(메서드)연금 평가반영 잔액-손익 테이블 생성========
     evaluate_bs_pl_pension = function(){
 
       price <- self$pension %>%
@@ -832,14 +854,15 @@ MyAssets <- R6Class(
           by='종목코드'
         ) %>% 
         left_join(
-          self$pension %>% select(계좌, 종목코드, 기초평가금액),
+          self$pension %>% select(계좌, 종목코드, 기초평가손익),
           by=c("계좌", "종목코드")
         ) %>%
         filter(평잔>0.02) %>% 
         mutate(
           장부금액 = if_else(장부금액<1, 0, 장부금액))
       
-      bs_pl %>% 
+      self$bs_pl_mkt_p <- 
+        bs_pl %>% 
         left_join(
           bs_pl %>% 
             filter(str_sub(종목코드,1,2)=='K5') %>% 
@@ -855,14 +878,10 @@ MyAssets <- R6Class(
             !is.na(종가) ~ 종가*보유수량,
             !is.na(기준가) ~ 기준가*보유수량/1000,
             TRUE ~ 장부금액),
-          기초평가금액 = coalesce(기초평가금액, 장부금액),
+          기초평가손익 = coalesce(기초평가손익, 0),
           평가손익 = 평가금액 - 장부금액,
-          평가손익증감 = 평가금액 - 기초평가금액,
-          세전수익률 = if_else(평잔 != 0, 수익 / 평잔 * 100, 0),
-          세후수익률 = if_else(평잔 != 0, 실현손익 / 평잔 * 100, 0),
-          운용수익률 = if_else(평잔 != 0, 평가손익증감 / 평잔 * 100, 0),
-          총수익률 = 세후수익률 + 운용수익률,
-          평가수익률 = if_else(장부금액 != 0, (평가금액 - 장부금액) / 장부금액 * 100, 0)
+          평가손익증감 = 평가손익 - 기초평가손익,
+          총손익 = 실현손익 + 평가손익증감
         ) %>% 
         select(-종가) %>% 
         arrange(desc(통화), desc(평가금액))
@@ -1141,169 +1160,7 @@ MyAssets <- R6Class(
     #     mutate(자산별비중 = round(평가금액 / sum(평가금액) * 100,2))
     # },
     
-    compute_total2 = function(){
-      
-      df <- self$bs_pl_mkt_a
-      
-      usd_bs <- round(filter(df, 통화=='달러')$장부금액 * self$ex_usd,0)
-      jpy_bs <- round(filter(df, 통화=='엔화')$장부금액 * self$ex_jpy,0)
-      usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
-      jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
-      usd_eqbal <- round(filter(df, 통화=='달러')$평잔 * self$ex_usd,0)
-      jpy_eqbal <- round(filter(df, 통화=='엔화')$평잔 * self$ex_jpy,0)
-      usd_rev <- round(filter(df, 통화=='달러')$수익 * self$ex_usd,0)
-      jpy_rev <- round(filter(df, 통화=='엔화')$수익 * self$ex_jpy,0)
-      usd_prof <- round(filter(df, 통화=='달러')$실현손익 * self$ex_usd,0)
-      jpy_prof <- round(filter(df, 통화=='엔화')$실현손익 * self$ex_jpy,0)
-      
-      df2 <- df %>%
-        mutate(
-          장부금액 = replace(장부금액, 통화 == '달러', usd_bs),
-          장부금액 = replace(장부금액, 통화 == '엔화', jpy_bs),
-          평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
-          평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval),
-          평잔 = replace(평잔, 통화 == '달러', usd_eqbal),
-          평잔 = replace(평잔, 통화 == '엔화', jpy_eqbal),
-          수익 = replace(수익, 통화 == '달러', usd_rev),
-          수익 = replace(수익, 통화 == '엔화', jpy_rev),
-          실현손익 = replace(실현손익, 통화 == '달러', usd_prof),
-          실현손익 = replace(실현손익, 통화 == '엔화', jpy_prof)) %>%  
-        bind_rows(self$bs_pl_mkt_p) %>% 
-        group_by(계좌, 자산군, 통화) %>% 
-        summarise(across(c(장부금액, 평가금액, 평잔, 
-                  수익, 실현손익), sum ), .groups = 'drop') %>% 
-        mutate(평가손익 = 평가금액-장부금액,
-               세전수익률 = 수익/평잔*100,
-               세후수익률 = 실현손익/평잔*100,
-               평가수익률 = 평가손익/장부금액*100) %>%
-        mutate(계좌 = factor(계좌, 
-                           levels = c("한투","불리오","엔투하영","금현물",
-                                      "한투ISA","엔투ISA",
-                                      "엔투저축연금","한투연금저축", 
-                                      "미래DC", "농협IRP","엔투IRP","합계")),
-               자산군 = factor(자산군, 
-                            levels = c("","주식","대체자산",
-                                       "채권","현금성", 
-                                       "외화자산"))) %>% 
-        ungroup()
-    
-    #   f <- df2[df2$자산군=='외화자산', ]
-    #   
-    #   b <- df2 %>% 
-    #     filter(계좌=='불리오') %>% 
-    #     mutate(손익=실현손익+평가손익) %>% 
-    #     summarise(across(c(장부금액,평가금액,평잔,수익,실현손익,평가손익,손익),sum))
-    #   
-    # 　df2[df2$자산군=='외화자산', ] <- 
-    #     list(계좌="한투",자산군="외화자산", 
-    #          장부금액=f$장부금액,
-    #          평가금액=f$평가금액,
-    #          평잔=f$평잔, 
-    #          수익=f$수익,
-    #          실현손익=f$실현손익,
-    #          평가손익=f$평가손익-b$손익,
-    #          세전수익률=(f$수익/(f$평잔-b$평잔))*100,
-    #          세후수익률=(f$실현손익/(f$평잔-b$평잔))*100,
-    #          평가수익률=((f$평가손익-b$손익)/f$장부금액)*100)
-      
-      df3 <- df2 %>% 
-        mutate(자산군="") %>% 
-        group_by(계좌, 자산군, 통화) %>% 
-        summarise(across(c(장부금액, 평가금액, 평잔, 
-                           수익, 실현손익), sum ), .groups = 'drop') %>% 
-        ungroup() %>% 
-        mutate(평가손익 = 평가금액-장부금액,
-               세전수익률 = 수익/평잔*100,
-               세후수익률 = 실현손익/평잔*100,
-               평가수익률 = 평가손익/장부금액*100)
-
-      df4 <- df3 %>% filter(통화=='원화') %>% 
-        summarise(계좌='합계',자산군='',통화='',
-                  across(장부금액:실현손익,sum)) %>% 
-        mutate(평가손익 = 평가금액-장부금액,
-               세전수익률 = 수익/평잔*100,
-               세후수익률 = 실현손익/평잔*100,
-               평가수익률 = 평가손익/장부금액*100)
-      
-      df5 <- df2 %>% 
-        filter(통화=="원화") %>% 
-        mutate(계좌="전체") %>% 
-        group_by(계좌, 자산군, 통화) %>% 
-        summarise(across(c(장부금액, 평가금액, 평잔, 
-                           수익, 실현손익), sum ),
-                  .groups = 'drop') %>% 
-        ungroup() %>% 
-        bind_rows(
-          df2 %>% 
-            filter(통화!='원화') %>% mutate(계좌='전체') %>% 
-            group_by(계좌, 자산군, 통화) %>% 
-            summarise(across(c(장부금액, 평가금액, 평잔, 
-                               수익, 실현손익), sum ), .groups = 'drop') %>% 
-            ungroup()
-        ) %>% 
-        mutate(계좌='전체',
-               평가손익 = 평가금액-장부금액,
-               세전수익률 = 수익/평잔*100,
-               세후수익률 = 실현손익/평잔*100,
-               평가수익률 = 평가손익/장부금액*100) %>% 
-        mutate(자산군 = factor(자산군, 
-                            levels = c("","주식","대체자산",
-                                       "채권","현금성", 
-                                       "외화자산"))) %>% 
-        arrange(자산군, desc(계좌))
-        
-        
-      df6 <- bind_rows(df5, df4,
-        
-        ( bind_rows(df2, df3) %>%
-        mutate(계좌 = factor(계좌, 
-                           levels = c("한투","불리오","엔투하영","금현물",
-                                      "한투ISA","엔투ISA",
-                                      "엔투저축연금","한투연금저축", 
-                                      "미래DC", "농협IRP","엔투IRP","합계")),
-               자산군 = factor(자산군, 
-                            levels = c("","주식","대체자산",
-                                       "채권","현금성", 
-                                       "외화자산"))) %>% 
-        arrange(계좌, 자산군))) %>% 
-        select(-장부금액,-수익)
-      
-
-      df7 <- df3 %>% group_by(계좌) %>% summarise(총평가=sum(평가금액)) %>% 
-        mutate(총평가 = if_else(계좌=='한투', 
-                             총평가-filter(df2,자산군=='외화자산')$평가금액, 총평가))
-      
-      df8 <- df6 %>% 
-        left_join(df7, by='계좌') %>% 
-        mutate(총평가=if_else(계좌=='전체'|계좌=='합계',
-                           df4$평가금액,총평가),
-               총평가=if_else(자산군=='외화자산',0,총평가),
-               비중 = 평가금액/총평가*100, .after=3) %>% 
-        select(-총평가) %>% 
-        mutate(비중=if_else(자산군=='외화자산',0,비중),
-               비중=if_else((계좌=='한투'&자산군==''),0,비중))
-      
-      
-      df9 <- self$read_obj('return') %>% 
-        filter(year(기준일)==year(self$today)-1) %>% 
-        filter(기준일==max(기준일, na.rm=T), 
-               세부자산군=='', 세부자산군2=='') %>% 
-        collect() %>% transmute(자산군=c('','대체자산','주식',
-                                      '채권','현금성','외화자산'), 
-                                통화=c('','원화','원화','원화','원화','원화'), 
-                                전년평가손익=평가손익)
-      
-      self$t_comm3 <- df8 %>% filter(계좌 %in% c("전체","합계")) %>% 
-        left_join(df9, by=c('자산군','통화')) %>% 
-        mutate(평가손익증감=평가손익-전년평가손익, 
-               총손익 = 실현손익+평가손익증감, .after='평가손익') %>% 
-        select(-평가수익률, -평가손익, -전년평가손익) %>% 
-        mutate(총수익률=총손익/평잔*100)
-      
-      self$t_comm4 <- df8 %>% filter(!(계좌 %in% c("전체","합계")))
-        
-    },
-    
+    ##9.(메서드) 자산군별/상품별 보유현황 생성====
     compute_total = function(){
       df <- self$bs_pl_mkt_a
       usd_bs <- round(filter(df, 통화=='달러')$장부금액 * self$ex_usd,0)
@@ -1482,6 +1339,215 @@ MyAssets <- R6Class(
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가수익률))
     },
     
+    ##10.(메서드) 자산군별/계좌별 손익현황 생성 ====
+    compute_total2 = function(){
+      
+      df <- self$bs_pl_mkt_a
+      
+      usd_bs <- round(filter(df, 통화=='달러')$장부금액 * self$ex_usd,0)
+      jpy_bs <- round(filter(df, 통화=='엔화')$장부금액 * self$ex_jpy,0)
+      usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
+      jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
+      usd_eqbal <- round(filter(df, 통화=='달러')$평잔 * self$ex_usd,0)
+      jpy_eqbal <- round(filter(df, 통화=='엔화')$평잔 * self$ex_jpy,0)
+      usd_rev <- round(filter(df, 통화=='달러')$수익 * self$ex_usd,0)
+      jpy_rev <- round(filter(df, 통화=='엔화')$수익 * self$ex_jpy,0)
+      usd_prof <- round(filter(df, 통화=='달러')$실현손익 * self$ex_usd,0)
+      jpy_prof <- round(filter(df, 통화=='엔화')$실현손익 * self$ex_jpy,0)
+      
+      df2 <- df %>%
+        mutate(
+          장부금액 = replace(장부금액, 통화 == '달러', usd_bs),
+          장부금액 = replace(장부금액, 통화 == '엔화', jpy_bs),
+          평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
+          평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval),
+          평잔 = replace(평잔, 통화 == '달러', usd_eqbal),
+          평잔 = replace(평잔, 통화 == '엔화', jpy_eqbal),
+          수익 = replace(수익, 통화 == '달러', usd_rev),
+          수익 = replace(수익, 통화 == '엔화', jpy_rev),
+          실현손익 = replace(실현손익, 통화 == '달러', usd_prof),
+          실현손익 = replace(실현손익, 통화 == '엔화', jpy_prof)) %>%  
+        bind_rows(self$bs_pl_mkt_p) %>% 
+        group_by(계좌, 자산군, 통화) %>% 
+        summarise(across(c(장부금액, 평가금액, 평잔, 
+                           수익, 실현손익), sum ), .groups = 'drop') %>% 
+        mutate(평가손익 = 평가금액-장부금액,
+               세전수익률 = 수익/평잔*100,
+               세후수익률 = 실현손익/평잔*100,
+               평가수익률 = 평가손익/장부금액*100) %>%
+        mutate(계좌 = factor(계좌, 
+                           levels = c("한투","불리오","엔투하영","금현물",
+                                      "한투ISA","엔투ISA",
+                                      "엔투저축연금","한투연금저축", 
+                                      "미래DC", "농협IRP","엔투IRP","합계")),
+               자산군 = factor(자산군, 
+                            levels = c("","주식","대체자산",
+                                       "채권","현금성", 
+                                       "외화자산"))) %>% 
+        ungroup()
+      
+      #   f <- df2[df2$자산군=='외화자산', ]
+      #   
+      #   b <- df2 %>% 
+      #     filter(계좌=='불리오') %>% 
+      #     mutate(손익=실현손익+평가손익) %>% 
+      #     summarise(across(c(장부금액,평가금액,평잔,수익,실현손익,평가손익,손익),sum))
+      #   
+      # 　df2[df2$자산군=='외화자산', ] <- 
+      #     list(계좌="한투",자산군="외화자산", 
+      #          장부금액=f$장부금액,
+      #          평가금액=f$평가금액,
+      #          평잔=f$평잔, 
+      #          수익=f$수익,
+      #          실현손익=f$실현손익,
+      #          평가손익=f$평가손익-b$손익,
+      #          세전수익률=(f$수익/(f$평잔-b$평잔))*100,
+      #          세후수익률=(f$실현손익/(f$평잔-b$평잔))*100,
+      #          평가수익률=((f$평가손익-b$손익)/f$장부금액)*100)
+      
+      df3 <- df2 %>% 
+        mutate(자산군="") %>% 
+        group_by(계좌, 자산군, 통화) %>% 
+        summarise(across(c(장부금액, 평가금액, 평잔, 
+                           수익, 실현손익), sum ), .groups = 'drop') %>% 
+        ungroup() %>% 
+        mutate(평가손익 = 평가금액-장부금액,
+               세전수익률 = 수익/평잔*100,
+               세후수익률 = 실현손익/평잔*100,
+               평가수익률 = 평가손익/장부금액*100)
+      
+      df4 <- df3 %>% filter(통화=='원화') %>% 
+        summarise(계좌='합계',자산군='',통화='',
+                  across(장부금액:실현손익,sum)) %>% 
+        mutate(평가손익 = 평가금액-장부금액,
+               세전수익률 = 수익/평잔*100,
+               세후수익률 = 실현손익/평잔*100,
+               평가수익률 = 평가손익/장부금액*100)
+      
+      df5 <- df2 %>% 
+        filter(통화=="원화") %>% 
+        mutate(계좌="전체") %>% 
+        group_by(계좌, 자산군, 통화) %>% 
+        summarise(across(c(장부금액, 평가금액, 평잔, 
+                           수익, 실현손익), sum ),
+                  .groups = 'drop') %>% 
+        ungroup() %>% 
+        bind_rows(
+          df2 %>% 
+            filter(통화!='원화') %>% mutate(계좌='전체') %>% 
+            group_by(계좌, 자산군, 통화) %>% 
+            summarise(across(c(장부금액, 평가금액, 평잔, 
+                               수익, 실현손익), sum ), .groups = 'drop') %>% 
+            ungroup()
+        ) %>% 
+        mutate(계좌='전체',
+               평가손익 = 평가금액-장부금액,
+               세전수익률 = 수익/평잔*100,
+               세후수익률 = 실현손익/평잔*100,
+               평가수익률 = 평가손익/장부금액*100) %>% 
+        mutate(자산군 = factor(자산군, 
+                            levels = c("","주식","대체자산",
+                                       "채권","현금성", 
+                                       "외화자산"))) %>% 
+        arrange(자산군, desc(계좌))
+      
+      
+      df6 <- bind_rows(df5, df4,
+                       
+                       ( bind_rows(df2, df3) %>%
+                           mutate(계좌 = factor(계좌, 
+                                              levels = c("한투","불리오","엔투하영","금현물",
+                                                         "한투ISA","엔투ISA",
+                                                         "엔투저축연금","한투연금저축", 
+                                                         "미래DC", "농협IRP","엔투IRP","합계")),
+                                  자산군 = factor(자산군, 
+                                               levels = c("","주식","대체자산",
+                                                          "채권","현금성", 
+                                                          "외화자산"))) %>% 
+                           arrange(계좌, 자산군))) %>% 
+        select(-장부금액,-수익)
+      
+      
+      df7 <- df3 %>% group_by(계좌) %>% summarise(총평가=sum(평가금액)) %>% 
+        mutate(총평가 = if_else(계좌=='한투', 
+                             총평가-filter(df2,자산군=='외화자산')$평가금액, 총평가))
+      
+      df8 <- df6 %>% 
+        left_join(df7, by='계좌') %>% 
+        mutate(총평가=if_else(계좌=='전체'|계좌=='합계',
+                           df4$평가금액,총평가),
+               총평가=if_else(자산군=='외화자산',0,총평가),
+               비중 = 평가금액/총평가*100, .after=3) %>% 
+        select(-총평가) %>% 
+        mutate(비중=if_else(자산군=='외화자산',0,비중),
+               비중=if_else((계좌=='한투'&자산군==''),0,비중))
+      
+      
+      df9 <- self$read_obj('return') %>% 
+        filter(year(기준일)==year(self$today)-1) %>% 
+        filter(기준일==max(기준일, na.rm=T), 
+               세부자산군=='', 세부자산군2=='') %>% 
+        collect() %>% transmute(자산군=c('','대체자산','주식',
+                                      '채권','현금성','외화자산'), 
+                                통화=c('','원화','원화','원화','원화','원화'), 
+                                전년평가손익=평가손익)
+      
+      self$t_comm3 <- df8 %>% filter(계좌 %in% c("전체","합계")) %>% 
+        left_join(df9, by=c('자산군','통화')) %>% 
+        mutate(평가손익증감=평가손익-전년평가손익, 
+               총손익 = 실현손익+평가손익증감, .after='평가손익') %>% 
+        select(-평가수익률, -평가손익, -전년평가손익) %>% 
+        mutate(총수익률=총손익/평잔*100)
+      
+      self$t_comm4 <- df8 %>% filter(!(계좌 %in% c("전체","합계")))
+      
+    },
+    
+    ##11.(메서드) 평가금액 계산====
+    compute_comm_profit = function(){
+      
+      df_a <- self$bs_pl_mkt_a
+      df_p <- self$bs_pl_mkt_p
+      
+      acct_order <- c("한투","불리오","엔투하영","금현물", "한투ISA","엔투ISA", 
+                      "엔투저축연금","한투연금저축", "미래DC", "농협IRP","엔투IRP")
+      cur_order <- c("원화", "달러", "엔화")
+      class_order <- c("주식", "대체자산", "채권", "현금성", "외화자산")
+      
+      self$comm_profit <- bind_rows(df_a, df_p) %>%
+        mutate(
+          계좌 = factor(계좌, levels = acct_order),
+          통화 = factor(통화, levels = cur_order),
+          자산군 = factor(자산군, levels = class_order),
+          세전수익률 = if_else(평잔 != 0, 수익 / 평잔 * 100, 0),
+          세후수익률 = if_else(평잔 != 0, 실현손익 / 평잔 * 100, 0),
+          운용수익률 = if_else(평잔 != 0, 평가손익증감 / 평잔 * 100, 0),
+          총수익률 = 세후수익률 + 운용수익률,
+          평가수익률 = if_else(장부금액 != 0, (평가금액 - 장부금액) / 장부금액 * 100, 0)
+        ) %>%
+        arrange(계좌, 통화, 자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
+        select(계좌, 통화, 자산군, 세부자산군, 세부자산군2, 종목명, 보유수량, 
+               장부금액, 평잔, 평가금액, 평가손익, 실현손익, 평가손익증감, 총손익,
+               세전수익률, 세후수익률, 운용수익률, 총수익률, 평가수익률)
+    },
+    
+    
+    ##11.(메서드) 평가금액 계산====
+    run_valuation = function(){
+      self$evaluate_bs_pl_assets()
+      self$evaluate_bs_pl_pension()
+      # self$ret_a <- self$get_class_returns('assets')
+      # self$ret_a2 <- self$get_class_returns('assets', depth = 1)
+      # self$ret_p <- self$get_class_returns('pension')
+      # self$ret_p2 <- self$get_class_returns('pension', depth = 1)
+      # self$compute_allocation_a()
+      # self$compute_allocation_p()
+      self$compute_total()
+      self$compute_total2()
+      self$compute_comm_profit()
+    },
+    
+    ##12.(메서드) 종합 거래내역 생성====
     total_trading = function(dates){
       
       if(length(dates)==1){
@@ -1517,6 +1583,7 @@ MyAssets <- R6Class(
       df3 %>% bind_rows(df4)
     },
     
+    ##13.(메서드) 종합손익 그래프 생성====
     plot_total_profit = function(start, end){
       df <- self$read_obj('return') %>% 
         filter(자산군=='<합계>') %>% 
@@ -1575,7 +1642,7 @@ MyAssets <- R6Class(
       
       gridExtra::grid.arrange(fig1,fig2,nrow=2)
     },
-    
+    ##14.(메서드) 종합손익 테이블 생성====
     compute_t_profit = function(){
       tibble(거래일자=as.Date('2023-12-31'),
              투자평잔 = 63019405,
@@ -1611,100 +1678,86 @@ MyAssets <- R6Class(
         filter(거래일자<=self$today)
     },
     
-    ## 10.(메서드) 평가금액 포함 자료 산출====
-    run_valuation = function(){
-      self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
-      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
-      # self$ret_a <- self$get_class_returns('assets')
-      # self$ret_a2 <- self$get_class_returns('assets', depth = 1)
-      # self$ret_p <- self$get_class_returns('pension')
-      # self$ret_p2 <- self$get_class_returns('pension', depth = 1)
-      # self$compute_allocation_a()
-      # self$compute_allocation_p()
-      self$compute_total()
-      self$compute_total2()
-    },
-    
-    ## 11.(메서드) 장부금액 및 현금성자산 추이 산출====
-    get_funds = function(){
-      
-      df1 <- self$bs_pl_mkt_a %>% 
-        mutate(계정='투자만기') %>% 
-        bind_rows(
-          self$bs_pl_mkt_p %>% mutate(계정='연금만기')
-        )
-      
-      df2 <- df1 %>% 
-        filter(자산군=='채권', 세부자산군 %in% c('만기무위험','만기회사채'), 
-               통화=='원화', 평가금액>0) %>% 
-        select(계정, 종목코드, 평가금액) %>% 
-        left_join(
-          self$assets %>% 
-            bind_rows(self$pension) %>% 
-            select(종목코드, 만기일),
-          by='종목코드'
-        ) %>% 
-        filter(만기일>self$today)
-      
-      
-      last_y <- df2 %>% arrange(만기일) %>% 
-        pull() %>% last() %>% year()
-      
-      
-      df <- tibble(
-        거래일자 = seq(self$today, make_date(last_y,12,31), by=1)) %>% 
-        left_join(
-          df1 %>% 
-            filter(자산군=='현금성', 통화=='원화', 평가금액>0) %>% 
-            select(거래일자, 계정, 평가금액) %>% 
-            group_by(거래일자, 계정) %>% summarise(만기상환=sum(평가금액)) %>% 
-            bind_rows(
-              df2 %>% select(거래일자=만기일, 계정, 만기상환=평가금액)
-            )%>% 
-            group_by(거래일자,계정) %>% 
-            summarise(만기상환=sum(만기상환)) %>% 
-            ungroup() %>% 
-            spread(계정,만기상환,fill = 0),
-          by='거래일자'
-        ) %>% 
-        left_join(
-          self$read('inflow') %>% select(-행번호),
-          by='거래일자'
-        ) %>% 
-        mutate(across(-거래일자, ~replace_na(.,0))) %>% 
-        group_by(거래연월=tsibble::yearmonth(거래일자)) %>% 
-        summarise(across(-거래일자,sum)) %>% 
-        transmute(거래월= tsibble::yearmonth(거래연월) %>% 
-                    format(format = '%Y-%m') %>% 
-                    as.character(), 
-                  투자가용자금=투자만기+투자유출입, 
-                  연금가용자금=연금만기+연금유출입,
-                  총가용자금=투자가용자금+연금가용자금)
-      
-      df3 <- df1 %>% 
-        filter(통화=='원화', 자산군!='현금성') %>%
-        group_by(계정) %>% 
-        summarise(평가금액=sum(평가금액)) %>% 
-        spread(계정, 평가금액)
-      
-      df4 <- df2 %>% 
-        group_by(계정) %>% 
-        summarise(만기상환=sum(평가금액)) %>% 
-        ungroup() %>% 
-        spread(계정,만기상환,fill = 0)
-      
-      s1 <- sum(df$투자가용자금)
-      s2 <- sum(df$연금가용자금)
-      s3 <- df3$투자만기 - sum(df4$투자만기)
-      s4 <- df3$연금만기 - sum(df4$연금만기)
-      
-      
-      df %>% 
-        add_row(거래월 = c('자금누계', '보유자산', '총자산누계'),
-                투자가용자금 = c(s1, s3, s1+s3),
-                연금가용자금 = c(s2, s4, s2+s4),
-                총가용자금= c(s1+s2, s3+s4, s1+s2+s3+s4))
-    },
+    ## 13.(메서드) 장부금액 및 현금성자산 추이 산출
+    # get_funds = function(){
+    #   
+    #   df1 <- self$bs_pl_mkt_a %>% 
+    #     mutate(계정='투자만기') %>% 
+    #     bind_rows(
+    #       self$bs_pl_mkt_p %>% mutate(계정='연금만기')
+    #     )
+    #   
+    #   df2 <- df1 %>% 
+    #     filter(자산군=='채권', 세부자산군 %in% c('만기무위험','만기회사채'), 
+    #            통화=='원화', 평가금액>0) %>% 
+    #     select(계정, 종목코드, 평가금액) %>% 
+    #     left_join(
+    #       self$assets %>% 
+    #         bind_rows(self$pension) %>% 
+    #         select(종목코드, 만기일),
+    #       by='종목코드'
+    #     ) %>% 
+    #     filter(만기일>self$today)
+    #   
+    #   
+    #   last_y <- df2 %>% arrange(만기일) %>% 
+    #     pull() %>% last() %>% year()
+    #   
+    #   
+    #   df <- tibble(
+    #     거래일자 = seq(self$today, make_date(last_y,12,31), by=1)) %>% 
+    #     left_join(
+    #       df1 %>% 
+    #         filter(자산군=='현금성', 통화=='원화', 평가금액>0) %>% 
+    #         select(거래일자, 계정, 평가금액) %>% 
+    #         group_by(거래일자, 계정) %>% summarise(만기상환=sum(평가금액)) %>% 
+    #         bind_rows(
+    #           df2 %>% select(거래일자=만기일, 계정, 만기상환=평가금액)
+    #         )%>% 
+    #         group_by(거래일자,계정) %>% 
+    #         summarise(만기상환=sum(만기상환)) %>% 
+    #         ungroup() %>% 
+    #         spread(계정,만기상환,fill = 0),
+    #       by='거래일자'
+    #     ) %>% 
+    #     left_join(
+    #       self$read('inflow') %>% select(-행번호),
+    #       by='거래일자'
+    #     ) %>% 
+    #     mutate(across(-거래일자, ~replace_na(.,0))) %>% 
+    #     group_by(거래연월=tsibble::yearmonth(거래일자)) %>% 
+    #     summarise(across(-거래일자,sum)) %>% 
+    #     transmute(거래월= tsibble::yearmonth(거래연월) %>% 
+    #                 format(format = '%Y-%m') %>% 
+    #                 as.character(), 
+    #               투자가용자금=투자만기+투자유출입, 
+    #               연금가용자금=연금만기+연금유출입,
+    #               총가용자금=투자가용자금+연금가용자금)
+    #   
+    #   df3 <- df1 %>% 
+    #     filter(통화=='원화', 자산군!='현금성') %>%
+    #     group_by(계정) %>% 
+    #     summarise(평가금액=sum(평가금액)) %>% 
+    #     spread(계정, 평가금액)
+    #   
+    #   df4 <- df2 %>% 
+    #     group_by(계정) %>% 
+    #     summarise(만기상환=sum(평가금액)) %>% 
+    #     ungroup() %>% 
+    #     spread(계정,만기상환,fill = 0)
+    #   
+    #   s1 <- sum(df$투자가용자금)
+    #   s2 <- sum(df$연금가용자금)
+    #   s3 <- df3$투자만기 - sum(df4$투자만기)
+    #   s4 <- df3$연금만기 - sum(df4$연금만기)
+    #   
+    #   
+    #   df %>% 
+    #     add_row(거래월 = c('자금누계', '보유자산', '총자산누계'),
+    #             투자가용자금 = c(s1, s3, s1+s3),
+    #             연금가용자금 = c(s2, s4, s2+s4),
+    #             총가용자금= c(s1+s2, s3+s4, s1+s2+s3+s4))
+    # },
     
     # get_inflow = function(){
     #   
@@ -1756,31 +1809,8 @@ MyAssets <- R6Class(
     #     facet_grid(rows='구분', scales = 'free_y')
     # },
     
-    ## 12.(메서드) 장부잔액 자료 산출====
-    run_book = function(){
-      
-      self$assets <- self$read('assets')
-      self$pension <- self$read('pension')
-      self$ex_usd <- get_exchange_rate('달러')
-      self$ex_jpy <- get_exchange_rate('엔')/100
-      self$assets_daily <- self$get_daily_trading(
-        self$assets, self$read('assets_daily')
-      )
-      self$pension_daily <- self$get_daily_trading(
-        self$pension, self$read('pension_daily')
-      )
-      self$bs_pl_book_a <- self$get_bs_pl('assets')
-      self$bs_pl_book_p <- self$get_bs_pl('pension')
-    },
     
-    ## 13.(메서드) 주가 업데이트====
-    update_new_price = function(){
-      suppressWarnings({
-        self$ks <- KrxStocks$new()
-      })
-    },
-    
-    ## 14. (메서드) 유동성 관리 분석 테이블 생성 ====
+    ## 15. (메서드) 유동성 관리 분석 테이블 생성 ====
     get_liquidity_analysis = function() {
       
       # [Step 1] inflow_table2: 현재 시점 계좌별 총자산/현금성자산 현황
