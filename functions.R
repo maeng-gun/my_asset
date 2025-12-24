@@ -724,12 +724,10 @@ MyAssets <- R6Class(
             평잔 = replace(평잔, 종목명=='직접운용달러', cash_d_e$한투), 
             장부금액 = replace(장부금액, 종목명=='직접운용엔', 
                                cash_y_b$한투),
-            평잔 = replace(평잔, 종목명=='직접운용엔', cash_y_e$한투),
-            실현수익률 = 실현손익 / 평잔 * 100)
+            평잔 = replace(평잔, 종목명=='직접운용엔', cash_y_e$한투))
         
       } else {
-        bs_pl %>% 
-          mutate(실현수익률 = if_else(is.na(실현손익 / 평잔 * 100), 0, 실현손익 / 평잔 * 100))
+        return(bs_pl)
       }
       
     },
@@ -1174,11 +1172,18 @@ MyAssets <- R6Class(
           장부금액 = replace(장부금액, 통화 == '달러', usd_bs),
           장부금액 = replace(장부금액, 통화 == '엔화', jpy_bs),
           평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
-          평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval))%>%
+          평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval)) %>%
         bind_rows(self$bs_pl_mkt_p) %>%
         filter(장부금액!=0) %>%
         group_by(계좌, 종목코드)
-
+      
+      # df000 <- df %>%
+      #   filter(통화=='원화') %>% bind_rows(self$bs_pl_mkt_p) %>%
+      #   filter(장부금액!=0) %>%
+      #   group_by(계좌, 종목코드)  
+        
+        
+      #계좌까지
       df00 <- self$assets %>%
         bind_rows(self$pension) %>%
         distinct(통화, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
@@ -1190,6 +1195,8 @@ MyAssets <- R6Class(
               평가금액=sum(평가금액),.groups = 'drop'),
           by=c('계좌','종목코드'))
 
+      
+      #상품까지
       df01 <- self$assets %>%
         bind_rows(self$pension) %>%
         distinct(통화, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
@@ -1215,11 +1222,13 @@ MyAssets <- R6Class(
                   .groups = 'drop') %>%
         select(-종목코드)
 
+      #세부자산군2까지
       df02 <- df01 %>% group_by(통화, 자산군, 세부자산군, 세부자산군2) %>%
              summarise(평잔 = sum(평잔), 실현손익 = sum(실현손익), 보유수량=0,
                        장부금액=sum(장부금액), 평가금액=sum(평가금액),
                        .groups = 'drop') %>% mutate(장부금액 = if_else(통화=="달러", 0, 장부금액))
 
+      #상품까지
       df0 <- df00 %>%
         group_by(종목코드) %>%
         summarise(통화=last(통화),
@@ -1233,6 +1242,7 @@ MyAssets <- R6Class(
                   .groups = 'drop') %>%
         select(-종목코드)
 
+      #합계만
       df2 <- df0 %>%
         filter(통화=='원화') %>%
         select(-통화) %>%
@@ -1241,10 +1251,12 @@ MyAssets <- R6Class(
                   장부금액=sum(장부금액),
                   평가금액=sum(평가금액), .groups = 'drop')
 
+      #상품까지(외화빼고)
       df1 <- df0 %>%
         select(-통화) %>%
         filter(자산군!="외화자산")
 
+      #자산군만
       df3 <- df1 %>%
         group_by(자산군) %>%
         summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 보유수량=0,
@@ -1252,6 +1264,7 @@ MyAssets <- R6Class(
                   평가금액=sum(평가금액)) %>%
         mutate(비중1 = round(평가금액/df2$평가금액*100, 1))
 
+      #세부자산군까지만
       df4 <- df1 %>%
         group_by(자산군, 세부자산군) %>%
         summarise(세부자산군2 = '', 상품명 = '', 보유수량=0,
@@ -1259,12 +1272,14 @@ MyAssets <- R6Class(
                   평가금액=sum(평가금액), .groups = 'drop') %>%
         mutate(비중2 = round(평가금액/df2$평가금액*100, 1))
 
+      #세부자산군2까지만
       df5 <- df1 %>%
         group_by(자산군, 세부자산군, 세부자산군2) %>%
         summarise(상품명 = "", 보유수량=0, 장부금액=sum(장부금액), 평가금액=sum(평가금액),
                   .groups = 'drop') %>%
         mutate(비중3 = round(평가금액/df2$평가금액*100, 1))
 
+      #환차손익 계산
       df6 <- tibble_row(
         자산군='환차손익', 세부자산군='', 세부자산군2 = '',
         보유수량=0,
@@ -1273,8 +1288,10 @@ MyAssets <- R6Class(
         평가수익률 = round(평가손익/df2$장부금액*100,2)
       )
 
-       df7 <- bind_rows(df2,df3,df4,df5) %>%
-         select(-보유수량) %>%
+      
+      #합치기기(df2,3,4,5,6)
+      df7 <- bind_rows(df2,df3,df4,df5) %>%
+        select(-보유수량) %>%
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
         mutate(
           평가손익 = round(평가금액 - 장부금액,0),
@@ -1284,11 +1301,13 @@ MyAssets <- R6Class(
         bind_rows(df6 %>%
                     select(-보유수량))
 
+      #DB 업로드
       df7 %>%
         select(!c(비중1, 비중2, 비중3)) %>%
         mutate(기준일=self$today, .before=1) %>%
         self$upsert('return', c('기준일','자산군','세부자산군','세부자산군2'))
 
+      
       dates <- self$read_obj('return') %>%
         distinct(기준일) %>%
         arrange(desc(기준일)) %>%
@@ -1297,6 +1316,7 @@ MyAssets <- R6Class(
       start <- dates[1]
       end <- dates[2]
 
+      #전일대비손익
       df8 <- self$read_obj('return') %>%
         filter(기준일 %in% c(end, start)) %>%
         collect() %>%
@@ -1306,6 +1326,7 @@ MyAssets <- R6Class(
         mutate(`전일대비(손익)` = .[[5]] - .[[4]]) %>%
         select(!전일:당일)
 
+      #전일대비수익률
       df9 <- self$read_obj('return') %>%
         filter(기준일 %in% c(end, start)) %>%
         collect() %>%
@@ -1314,6 +1335,7 @@ MyAssets <- R6Class(
         rename_with(~c("전일","당일"), .cols=4:5) %>%
         transmute(`전일대비(수익률)` = .[[5]] - .[[4]])
 
+      #전일대비테이블 최종
       self$t_class <-
         df7 %>%
         left_join(
@@ -1321,6 +1343,7 @@ MyAssets <- R6Class(
           by=c('자산군','세부자산군','세부자산군2')
         )
 
+      #상품별 보유현황테이블1 최종
       self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>%
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
         mutate(
@@ -1330,6 +1353,7 @@ MyAssets <- R6Class(
         select(!c(비중1, 비중2, 비중3, 장부금액)) %>%
         bind_rows(df6)
 
+      #상품별/계좌별 보유현황테이블2 최종
       self$t_comm2 <- df00 %>%
         mutate(
           평가손익 = round(평가금액 - 장부금액,0),
