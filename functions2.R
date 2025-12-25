@@ -978,7 +978,7 @@ MyAssets <- R6Class(
       bs_pl[, `:=`(총손익 = 실현손익+평가손익증감)]
       
       
-       <- bs_pl[order(-통화, -평가금액)]
+      bs_pl[order(-통화, -평가금액)]
       return(as_tibble(bs_pl))
     },
     
