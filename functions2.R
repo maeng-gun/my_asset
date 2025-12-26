@@ -86,7 +86,10 @@ MyData <- R6Class(
     upsert = function(df, name, cols){
       dbxUpsert(conn = self$con, table = name, records = df,
                 where_cols = cols)
-    },
+    }
+  ),
+  
+  private= list(
     ## 7. (메서드) 소멸자: 객체가 삭제될 때 DB 연결 종료 ====
     finalize = function() {
       if (!is.null(self$con)) {
