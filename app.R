@@ -950,7 +950,6 @@ server <- function(input, output, session) {
     output$trade_table <- renderUI({
       if(!is.null(rv_app$trade)){
           rv_app$trade |> 
-            arrange(desc(행번호)) |> 
             flextable()|>
             theme_vanilla() |>
             set_table_properties(layout='autofit') |>
@@ -971,12 +970,12 @@ server <- function(input, output, session) {
     update_new_trade <- reactive({
       
       updateSelectInput(session, 'new2',
-                        choices = c('신규', rev(rv_app$trade$행번호)),
+                        choices = c('신규', rv_app$trade$행번호),
                         selected = '신규')
       
       updateSelectInput(
         session, 'ass_name2', 
-        choices = (ma_b()$read(rv_app$type2) |> 
+        choices = (ma_b()[[rv_app$type2]] |> 
                      filter(계좌==input$ass_account2,
                             통화==input$ass_cur2))$종목명)
     })
@@ -992,7 +991,7 @@ server <- function(input, output, session) {
         mode <- 'pen_account'
       }
       updateSelectInput(session, 'ass_account2',
-                        choices = unique(ma_b()$read(rv_app$type2)$계좌))
+                        choices = unique(ma_b()[[rv_app$type2]]$계좌))
       rv_app$trade <- reset_trade()
       update_new_trade()
     })
@@ -1001,7 +1000,7 @@ server <- function(input, output, session) {
   
       updateSelectInput(
         session, 'ass_cur2',
-        choices = unique((ma_b()$read(rv_app$type2) |> 
+        choices = unique((ma_b()[[rv_app$type2]] |> 
                             filter(계좌==input$ass_account2))$통화)
       )
       rv_app$trade <- reset_trade()
@@ -1046,7 +1045,7 @@ server <- function(input, output, session) {
     observe({
       if(!is.null(input$ass_name2)){
         trade_ticker <- 
-          bind_rows(ma$read('assets'), ma$read('pension')) |> 
+          bind_rows(ma_b()[['assets']], ma_b()[['pension']]) |> 
           filter(계좌 == input$ass_account2,
                  통화 == input$ass_cur2,
                  종목명 == input$ass_name2) |> 
@@ -1071,10 +1070,10 @@ server <- function(input, output, session) {
   
     observeEvent(input$ass_trade_new,{
       if(input$type2 == "투자자산"){
-        rv_app$trade_new$행번호 <- tail(sort(ma$read('assets_daily')$행번호), 1)+1
+        rv_app$trade_new$행번호 <- ma$assets_daily_last_num+1
         dbxInsert(ma$con, 'assets_daily', rv_app$trade_new)
       } else {
-        rv_app$trade_new$행번호 <- tail(sort(ma$read('pension_daily')$행번호), 1)+1
+        rv_app$trade_new$행번호 <- ma$pension_daily_last_num+1
         dbxInsert(ma$con, 'pension_daily', rv_app$trade_new)
       }
       sk_b(!sk_b())
@@ -1219,10 +1218,10 @@ server <- function(input, output, session) {
       input$ticker_mod
       input$ticker_del
       if(input$type1 == "투자자산"){
-        ma_b()$read('assets') |> 
+        ma_b()[['assets']] |> 
           filter(계좌==input$ass_account)
       } else {
-        ma_b()$read('pension') |> 
+        ma_b()[['pension']] |> 
           filter(계좌==input$ass_account)}
     })
     
@@ -1336,10 +1335,10 @@ server <- function(input, output, session) {
     observeEvent(input$ticker_new,{
       
       if(input$type1 == "투자자산"){
-        rv_app$ticker_new$행번호 <- tail(sort(ma$read('assets')$행번호), 1)+1
+        rv_app$ticker_new$행번호 <- ma$assets_last_num + 1
         dbxInsert(ma$con, 'assets', rv_app$ticker_new)
       } else {
-        rv_app$ticker_new$행번호 <- tail(sort(ma$read('pension')$행번호), 1)+1
+        rv_app$ticker_new$행번호 <- ma$pension_last_num + 1
         dbxInsert(ma$con, 'pension', rv_app$ticker_new)
       }
   
@@ -1803,7 +1802,7 @@ server <- function(input, output, session) {
     ### * 테이블 설정====
     
     reset_inflow <- reactive({
-      ma_b()$read('inflow') %>%
+      ma_b()[['inflow']] %>%
         filter(거래일자 >= ma$today) %>% 
         select(행번호,거래일자,계좌,자금유출입) %>% 
         arrange(거래일자)
@@ -1928,7 +1927,7 @@ server <- function(input, output, session) {
   
     observeEvent(input$inflow_new, {
       # DB에 '계좌', '자금유출입' 컬럼이 있어야 함
-      liq$d$행번호 <- tail(sort(ma$read('inflow')$행번호), 1) + 1
+      liq$d$행번호 <- ma$inflow_last_num + 1
       dbxInsert(ma$con, 'inflow', liq$d)
       liq$c <- reset_inflow()
       update_manage_inflow()
