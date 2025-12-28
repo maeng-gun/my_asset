@@ -22,12 +22,6 @@ header <- dashboardHeader(
 sidebar <- dashboardSidebar(
   sidebarMenu(
     id = 'menu_tabs',
-    # airDatepickerInput(
-    #   inputId = 'base_date',
-    #   label = "기준일",
-    #   addon = "none",
-    #   value = Sys.Date()
-    # ),
     actionButton('reval', '평가금액 재계산'),
     actionButton('kis','주가 업데이트'),
     br(),
@@ -38,31 +32,20 @@ sidebar <- dashboardSidebar(
       tabName = 'trading_record'
     ),
     menuItem(
-      text = "통합 자산운용 현황",
+      text = "자산배분 및 보유상품",
       icon = icon("sack-dollar"),
-      tabName = "pf_total",
-      selected = T
+      tabName = "pf_total"
     ),
     menuItem(
-      text = "계좌별 자산운용 현황",
+      text = "손익현황",
       icon = icon("sack-dollar"),
-      tabName = "pf_bs_pl"
+      tabName = "pf_bs_pl",
+      selected = T
     ),
     menuItem(
       text = "유동성 관리",
       icon = icon("chart-line"),
       tabName = "pf_liquid"
-    ),
-    # sidebarHeader("경제지표"),
-    # menuItem(
-    #   text = "한국은행 지표선정",
-    #   icon = icon("hand-pointer"),
-    #   tabName = "ecos_stat"
-    # ),
-    menuItem(
-      text = "자산배분 현황",
-      icon = icon("chart-pie"),
-      tabName = "asset_allo"
     )
   ),
   br(),
@@ -100,10 +83,12 @@ body <- dashboardBody(
   useSweetAlert(),
   useWaiter(),
   tabItems(
+    
     ##1) 자산운용 내역 기록====
     tabItem(
       tabName = 'trading_record',
       tabBox(
+        id='trading_box',
         width=12,
         status='primary',
         type='tabs',
@@ -218,6 +203,15 @@ body <- dashboardBody(
                     inputId = 'in_out_c',
                     label = "입출금",
                     value = 0
+                  ),
+                  searchInput(
+                    inputId = "trade_limit", 
+                    label = "조회건수", 
+                    placeholder = "20", 
+                    value = 20, # 초기값
+                    btnSearch = icon("search"), 
+                    btnReset = NULL, 
+                    width = "100%"
                   )
                 )
               ),
@@ -407,12 +401,90 @@ body <- dashboardBody(
         )
       )
     ),
-    ##2) 통합 자산운용 현황====
+    ##2) 자산배분 및 보유상품====
     tabItem(
       tabName = 'pf_total',
       br(),
       tabBox(
         id='pf_box2',
+        width=12,
+        status='primary',
+        type='tabs',
+        ### a. 총 자산배분====
+        tabPanel(
+          title = "총 자산배분",
+          fluidRow(
+            column(
+              width = 2,
+              box(
+                width = 12,
+                title = "목표 비중 설정",
+                status = "info",
+                solidHeader = TRUE,
+                collapsible = FALSE,
+                div("자산군", align = 'center'),
+                numericInput(inputId = 'ass_bond', label = "채권", value = 0),
+                numericInput(inputId = 'ass_stock', label = "주식", value = 0),
+                numericInput(inputId = 'ass_alter', label = "대체투자", value = 0),
+                br(),
+                div("세부자산군", align = 'center'),
+                numericInput(inputId = 'ass_bond_sol', label = "채권_국채", value = 0),
+                numericInput(inputId = 'ass_bond_nr', label = "채권_만기무위험", value = 0),
+                numericInput(inputId = 'ass_bond_cor', label = "채권_만기회사채", value = 0),
+                numericInput(inputId = 'ass_bond_ig', label = "채권_투자등급", value = 0),
+                numericInput(inputId = 'ass_stock_dev', label = "주식_신흥국", value = 0),
+                numericInput(inputId = 'ass_alter_com', label = "대체투자_상품", value = 0),
+                br(),
+                actionButton(
+                  inputId = "allo_renew",
+                  label = "수정",
+                  status = "info",
+                  width = '100%'
+                )
+              ) # box 닫기 (쉼표 없음)
+            ), # column 닫기 (쉼표 있음)
+            column(
+              width = 10,
+              uiOutput('allocation_table')
+            ) # column 닫기 (쉼표 없음)
+          ) # fluidRow 닫기
+        ), # tabPanel 닫기
+        
+        ### b. 계좌별 배분현황 ====
+        tabPanel(
+          title = "계좌별 배분현황",
+          fluidRow(
+            box(
+              width = 12,
+              status = "info",
+              solidHeader = FALSE,
+              uiOutput('account_allocation_table')
+            )
+          )
+        ),
+
+        ### c. 상품별 보유현황1====
+        tabPanel(
+          title="상품별 보유현황1",
+          fluidRow(
+            uiOutput("t_commodity")
+          )
+        ),
+        
+        ### d. 상품별 보유현황2====
+        tabPanel(
+          title="상품별 보유현황2",
+          fluidRow(
+            uiOutput("t_commodity2")
+          )
+        )
+      )
+    ),
+    ##3) 손익  현황====
+    tabItem(
+      tabName = 'pf_bs_pl',
+      tabBox(
+        id='pf_box1',
         width=12,
         status='primary',
         type='tabs',
@@ -463,157 +535,29 @@ body <- dashboardBody(
           )
         ),
         
-        ###c. 자산군별 보유현황====
+        ###c. 자산군별 손익현황====
         tabPanel(
-          title="자산군별 보유현황",
-          fluidRow(
-            uiOutput("t_asset_class")
-          )
-        ),
-        ###d. 상품별 보유현황1====
-        tabPanel(
-          title="상품별 보유현황1",
-          fluidRow(
-            uiOutput("t_commodity")
-          )
-        ),
-        ###e. 상품별 보유현황2====
-        tabPanel(
-          title="상품별 보유현황2",
-          fluidRow(
-            uiOutput("t_commodity2")
-          )
-        )
-      )
-    ),
-    ##3) 계좌별 자산운용 현황====
-    tabItem(
-      tabName = 'pf_bs_pl',
-      tabBox(
-        id='pf_box1',
-        width=12,
-        status='primary',
-        type='tabs',
-        
-        ###a. 투자자산현황====
-        tabPanel(
-          title="투자현황",
+          title="자산군별",
           fluidRow(
             uiOutput("total_accounts1")
-          ),
-          br(),
+          )
+        ),
+        
+        ###d. 계좌별 손익현황====
+        tabPanel(
+          title="계좌별",
           fluidRow(
             uiOutput("total_accounts2")
           )
-          # h5("1. 자산군별 배분현황"),
-          # br(),
-          # fluidRow(
-          #   column(
-          #     width = 4,
-          #     uiOutput("allo0")
-          #   ),
-          #   column(
-          #     width = 8,
-          #     uiOutput("allo1")
-          #   )
-          # ),
-          # h5("2. 통화별 배분현황"),
-          # br(),
-          # fluidRow(
-          #   column(
-          #     width = 4,
-          #     uiOutput("allo2")
-          #   ),
-          #   column(
-          #     width = 8,
-          #     uiOutput("allo3")
-          #   )
-          # ),
-          # h5("3. 불리오 배분현황"),
-          # br(),
-          # fluidRow(
-          #   column(
-          #     width = 4,
-          #     uiOutput("allo5")
-          #   ),
-          #   column(
-          #     width = 8,
-          #     uiOutput("allo4")
-          #   )
-          # )
         ),
-        ###b. 투자손익현황====
+        
+        ###e. 상품별 손익현황====
         tabPanel(
-          title="투자손익현황",
-          # h5("1. 자산군별 손익현황"),
-          # br(),
-          # fluidRow(
-          #   column(
-          #     width = 6,
-          #     uiOutput("class_ret_a")
-          #   ),
-          #   column(
-          #     width = 6,
-          #     uiOutput("class_ret_a2")
-          #   )
-          # ),
-          # br(),
-          # h5("2. 개별자산 손익현황"),
-          # br(),
+          title="상품별",
           fluidRow(
             uiOutput("bs_pl_mkt_a")
           )
         )
-        ###c. 연금현황====
-        # tabPanel(
-        #   title="연금현황",
-        #   h5("1. 자산군별 배분현황"),
-        #   br(),
-        #   fluidRow(
-        #     column(
-        #       width = 4,
-        #       uiOutput("allo6")
-        #     ),
-        #     column(
-        #       width = 8,
-        #       uiOutput("allo7")
-        #     )
-        #   ),
-        #   h5("2. 계좌별 배분현황"),
-        #   br(),
-        #   fluidRow(
-        #     column(
-        #       width = 4,
-        #       uiOutput("allo8")
-        #     ),
-        #     column(
-        #       width = 8,
-        #       uiOutput("allo9")
-        #     )
-        #   )
-        # ),
-        ###d. 연금손익현황====
-        # tabPanel(
-        #   title="연금손익현황",
-        #   h5("1. 자산군별 손익현황"),
-        #   br(),
-        #   fluidRow(
-        #     column(
-        #       width = 6,
-        #       uiOutput("class_ret_p")
-        #     ),
-        #     column(
-        #       width = 6,
-        #       uiOutput("class_ret_p2")
-        #     )
-        #   ),
-        #   br(),
-        #   h5("2. 개별자산 손익현황"),
-        #   br(),
-        #   fluidRow(
-        #     uiOutput("bs_pl_mkt_p")
-        #   )
-        # )
       )
     ),
     
@@ -716,69 +660,6 @@ body <- dashboardBody(
           )
         )
       )
-    ),
-      ##5) 자산배분 현황====
-    tabItem(
-      tabName = "asset_allo",
-      tabBox(
-        id = 'allo_tabs',
-        width = 12,
-        status = 'primary',
-        type = 'tabs',
-        
-        ### 1번탭: 총 자산배분 (기존 화면) ====
-        tabPanel(
-          title = "총 자산배분",
-          fluidRow(
-            column(
-              width = 2,
-              box(
-                width = 12,
-                title = "목표 비중 설정",
-                status = "info",
-                solidHeader = TRUE,
-                collapsible = FALSE,
-                div("자산군", align = 'center'),
-                numericInput(inputId = 'ass_bond', label = "채권", value = 0),
-                numericInput(inputId = 'ass_stock', label = "주식", value = 0),
-                numericInput(inputId = 'ass_alter', label = "대체투자", value = 0),
-                br(),
-                div("세부자산군", align = 'center'),
-                numericInput(inputId = 'ass_bond_sol', label = "채권_국채", value = 0),
-                numericInput(inputId = 'ass_bond_nr', label = "채권_만기무위험", value = 0),
-                numericInput(inputId = 'ass_bond_cor', label = "채권_만기회사채", value = 0),
-                numericInput(inputId = 'ass_bond_ig', label = "채권_투자등급", value = 0),
-                numericInput(inputId = 'ass_stock_dev', label = "주식_신흥국", value = 0),
-                numericInput(inputId = 'ass_alter_com', label = "대체투자_상품", value = 0),
-                br(),
-                actionButton(
-                  inputId = "allo_renew",
-                  label = "수정",
-                  status = "info",
-                  width = '100%'
-                )
-              ) # box 닫기 (쉼표 없음)
-            ), # column 닫기 (쉼표 있음)
-            column(
-              width = 10,
-              uiOutput('allocation_table')
-            ) # column 닫기 (쉼표 없음)
-          ) # fluidRow 닫기
-        ), # tabPanel 닫기
-        
-        ### 2번탭: 계좌별 배분현황 (신규) ====
-        tabPanel(
-          title = "계좌별 배분현황",
-          fluidRow(
-            box(
-              width = 12,
-              status = "info",
-              solidHeader = FALSE,
-              uiOutput('account_allocation_table')
-            )
-          )
-        )
-      ) # tabBox 닫기
     )
   )
 )
@@ -962,9 +843,13 @@ server <- function(input, output, session) {
       input$ass_trade_new
       input$ass_trade_mod
       input$ass_trade_del
-      ma_b()$get_trading_record(input$type2, 
-                            input$ass_account2,
-                            input$ass_cur2)
+      
+      ma_b()$get_trading_record(
+        table = input$type2, 
+        acct = input$ass_account2,
+        cur = input$ass_cur2,
+        limit_n = as.numeric(input$trade_limit) 
+      )
     })
     
     update_new_trade <- reactive({
@@ -1008,6 +893,11 @@ server <- function(input, output, session) {
     })
     
     observeEvent(input$ass_cur2,{
+      rv_app$trade <- reset_trade()
+      update_new_trade()
+    })
+    
+    observeEvent(input$trade_limit,{
       rv_app$trade <- reset_trade()
       update_new_trade()
     })
@@ -1094,7 +984,6 @@ server <- function(input, output, session) {
                   where_cols = c("행번호"))
       }
       sk_b(!sk_b())
-      # renew_bs()
       rv_app$trade <- reset_trade()
       update_new_trade()
     })
@@ -1107,7 +996,6 @@ server <- function(input, output, session) {
         dbxDelete(ma$con, 'pension_daily', rv_app$trade_new)
       }
       sk_b(!sk_b())
-      # renew_bs()
       rv_app$trade <- reset_trade()
       update_new_trade()
     })
@@ -1127,7 +1015,7 @@ server <- function(input, output, session) {
           selectInput(
             inputId = 'ass_account',
             label = "계좌",
-            choices = NULL,
+            choices = NULL
           )
         ),
         column(
@@ -1274,9 +1162,6 @@ server <- function(input, output, session) {
       if(input$new1 != "신규"){
         t_rows <- filter(rv_app$tickers, 행번호 == input$new1)
         
-        # updateSelectInput(session, 'new1',
-        #                   choices = c('신규', rev(rv_app$tickers$행번호)),
-        #                   selected = input$new1)
         updateSelectInput(session, 'ass_account', selected = t_rows$계좌)
         
         updateTextInput(session, 'ticker', value = t_rows$종목코드)
@@ -1425,9 +1310,6 @@ server <- function(input, output, session) {
                   name = 'categories', 
                   cols = c('key', 'value'))
         
-        # x <- ctg()
-        # x[[i]] <- c(x[[i]], input[[glue("add_{i}")]])
-        # saveRDS(x, 'categories.rds')
         sk_c(!sk_c())
         update_categories()
       })
@@ -1440,10 +1322,7 @@ server <- function(input, output, session) {
         )
         
         dbxDelete(ma$con, 'categories', item_to_delete)
-        
-        # x <- ctg()
-        # x[[i]] <- x[[i]][ x[[i]]!=input[[glue("select_{i}")]] ]
-        # saveRDS(x, 'categories.rds')
+
         sk_c(!sk_c())
         update_categories()
       })
@@ -1459,16 +1338,10 @@ server <- function(input, output, session) {
     
     ##d. 종합거래내역====
     
-    total_table <- reactive({
-      ma_b()$total_trading(input$total_trade_date)
-    })
-    
-    
-    output$total_trade_table <- renderUI({
       
       if(!is.null(input$total_trade_date)){
         
-        df <- total_table()
+        df <- ma_b()$total_trading(input$total_trade_date)
         
         if(input$total_ass1!="전체"){
           df <- df %>% filter(자산군==input$total_ass1)
@@ -1496,9 +1369,168 @@ server <- function(input, output, session) {
       } else{
         
       }
+
+    
+    # 2) 자산배분 및 보유현황 ====
+    
+    
+    ## a. 총 자산배분 ====
+    
+    update_new_allo <- reactive({
+      
+      input$allo_renew
+      df <- ma_b()$read('allocation')
+      
+      updateNumericInput(inputId = 'ass_bond', 
+                         value = df$목표1[[7]])
+      updateNumericInput(inputId = 'ass_stock', 
+                         value = df$목표1[[4]])
+      updateNumericInput(inputId = 'ass_alter', 
+                         value = df$목표1[[1]])
+      updateNumericInput(inputId = 'ass_bond_sol', 
+                         value = df$목표2[[8]])
+      updateNumericInput(inputId = 'ass_bond_ig', 
+                         value = df$목표2[[9]])
+      updateNumericInput(inputId = 'ass_bond_nr', 
+                         value = df$목표2[[10]])
+      updateNumericInput(inputId = 'ass_bond_cor', 
+                         value = df$목표2[[11]])
+      updateNumericInput(inputId = 'ass_stock_dev', 
+                         value = df$목표2[[6]])
+      updateNumericInput(inputId = 'ass_alter_com', 
+                         value = df$목표2[[3]])
     })
     
-    # 2) 통합 자산운용 현황====
+    observeEvent(T,{
+      update_new_allo()
+    }, once = T)
+    
+    observeEvent(input$allo_renew,{
+      df <- ma$read('allocation') %>% 
+        mutate(목표1 = c(input$ass_alter, NA, NA,
+                       input$ass_stock, NA, NA,
+                       input$ass_bond, NA, NA, NA, NA, NA),
+               목표2 = c(NA, 
+                       input$ass_alter - input$ass_alter_com,
+                       input$ass_alter_com,
+                       NA, 
+                       input$ass_stock - input$ass_stock_dev,
+                       input$ass_stock_dev,
+                       NA, 
+                       input$ass_bond_sol,
+                       input$ass_bond_ig,
+                       input$ass_bond_nr, 
+                       input$ass_bond_cor,
+                       input$ass_bond - input$ass_bond_sol - input$ass_bond_ig - input$ass_bond_nr - input$ass_bond_cor))
+      
+      dbWriteTable(ma$con, 'allocation', df, 
+                   overwrite = TRUE, row.names = FALSE)
+      
+      update_new_allo()
+    })
+    
+    output$allocation_table <- renderUI({
+      input$allo_renew
+      
+      df <- ma_v()$t_class %>% select(1:7) %>% 
+        left_join(
+          ma_b()$read('allocation') %>% 
+            add_row(자산군='현금성', 세부자산군="", 
+                    목표1 = 100-sum(.$목표1, na.rm = T)) %>% 
+            mutate(세부자산군2 = '', .after=2),
+          by=c('자산군','세부자산군', '세부자산군2')
+        ) %>% 
+        mutate(
+          자산군=factor(자산군, 
+                     levels=c("<합계>","주식","대체자산","채권",
+                              "현금성", "환차손익"))
+        ) %>% 
+        arrange(자산군)
+      
+      
+      df %>% mutate(
+        목표금액 = na_if(df$평가금액[[1]]*(coalesce(목표1,0)+coalesce(목표2,0))/100,0), 
+        .before=목표1) %>% 
+        mutate(과부족 = 평가금액-목표금액) %>% 
+        flextable() |>
+        theme_vanilla() |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=c(4,8,11), digits = 0) |>
+        colformat_double(j=c(5:7,9:10), digits = 1) |>
+        htmltools_value()
+    })
+    
+    ## b. 계좌별 자산배분 ====
+    
+    output$account_allocation_table <- renderUI({
+      req(ma_v())
+      
+      # 1. 원본 데이터 및 계좌 순서 추출
+      # t_comm4에 존재하는 계좌들의 순서(Factor Level 순)를 그대로 가져옵니다.
+      df_src <- ma_v()$t_comm4
+      target_accts <- levels(df_src$계좌)[levels(df_src$계좌) %in% unique(df_src$계좌)]
+      
+      # 2. 데이터 필터링 및 전처리
+      df <- df_src %>%
+        filter(통화 == '원화') %>%
+        select(계좌, 자산군, 평가금액) %>%
+        # 자산군이 비어있거나 NA인 경우 '합계'로 변경 (계좌별 총자산 행)
+        mutate(자산군 = if_else(자산군 == "" | is.na(자산군), "합계", as.character(자산군)))
+      
+      # 3. 피벗 (행: 자산군, 열: 계좌)
+      df_wide <- df %>%
+        pivot_wider(names_from = 계좌, values_from = 평가금액, values_fill = 0)
+      
+      # 4. 열(계좌) 순서 및 행(자산군) 순서 정렬
+      # 4-1. 열 순서: target_accts에 있는 계좌만, 그 순서대로 선택 (데이터에 없는 계좌는 0으로 추가)
+      # for(acct in target_accts) {
+      #   if(!acct %in% names(df_wide)) {
+      #     df_wide[[acct]] <- 0
+      #   }
+      # }
+      # 
+      # 4-2. 행 순서: 주식 -> 대체자산 -> 채권 -> 현금성 -> 합계 순으로 정렬
+      row_levels <- c("주식", "외화자산", "대체자산", "채권", "현금성", "합계")
+      
+      df_final <- df_wide %>%
+        # select(자산군, all_of(target_accts)) %>%  # 열 순서 적용
+        mutate(자산군 = factor(자산군, levels = row_levels)) %>%
+        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE)) %>% # 행 순서 적용을 위한 Factor 변환
+        arrange(자산군)
+      
+      # 5. Flextable 렌더링
+      df_final %>%
+        flextable() %>%
+        theme_vanilla() %>%
+        colformat_double(digits = 0) %>%
+        set_table_properties(layout = 'autofit') %>%
+        align(align = "center", part = "all") %>%
+        bg(i = ~ 자산군 == "합계", bg = "#f0f0f0") %>% # 합계 행 강조
+        htmltools_value()
+    })
+    
+    ## c. 상품별 보유현황1====
+    output$t_commodity <- renderUI({
+      ma_v()$t_comm |>
+        flextable() |>
+        theme_vanilla() |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=5:6, digits = 0) |>
+        colformat_double(j=7, digits = 2) |>
+        htmltools_value()
+    })
+    
+    ## d. 상품별 보유현황2====
+    output$t_commodity2 <- renderUI({
+      ma_v()$t_comm2 |>
+        flextable() |>
+        theme_vanilla() |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=6, digits = 0) |>
+        htmltools_value()
+    })
+    
+    # 3) 손익현황====
     
     ## a. 종합손익(그래프)====
     
@@ -1538,7 +1570,7 @@ server <- function(input, output, session) {
           투자실현수익률 = 투자실현손익 / 투자평잔 * 100,
           연금평잔, 
           연금실현손익,
-          연금실현수익률 = 연금실현손익 / 연금평잔 * 100,
+          연금실현수익률 = 연금실현손익 / 연금평잔 * 100
         ) %>% 
         flextable() |>
         theme_box() |>
@@ -1578,173 +1610,54 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
-    ## c. 자산군별 보유현황====
     
-    output$t_asset_class <- renderUI({
-      ma_v()$t_class |>
-        flextable() |>
-        theme_vanilla() |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=c(4,8,10), digits = 0) |>
-        colformat_double(j=c(9,11), digits = 2) |>
-        colformat_double(j=5:7, digits = 1) |>
-        htmltools_value()
-    })
-    
-    ## d. 상품별 보유현황1====
-    output$t_commodity <- renderUI({
-      ma_v()$t_comm |>
-        flextable() |>
-        theme_vanilla() |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=5:6, digits = 0) |>
-        colformat_double(j=7, digits = 2) |>
-        htmltools_value()
-    })
-    
-    ## e. 상품별 보유현황2====
-    output$t_commodity2 <- renderUI({
-      ma_v()$t_comm2 |>
-        flextable() |>
-        theme_vanilla() |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=6, digits = 0) |>
-        htmltools_value()
-    })
-    
-    # 3) 자산별 손익현황====
-    
-   ## a. 계좌별 손익현황====
+   ## c. 자산군별 손익현황====
   
     output$total_accounts1 <- renderUI({
       ma_v()$t_comm3 %>% 
         flextable() |>
         theme_vanilla() |>
-        merge_v(j=1) |>
+        merge_v(j=1:3) |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=c(5:9), digits = 0) |>
-        colformat_double(j=c(4,10:12), digits = 2) |>
+        colformat_double(j=c(4:10), digits = 0) |>
+        colformat_double(j=c(11:14), digits = 2) |>
         htmltools_value()
       
     })
     
+    ## d. 계좌별 손익현황====
+    
     output$total_accounts2 <- renderUI({
-      ma_v()$t_comm4 %>% 
+      ma_v()$t_comm5 %>% 
         flextable() |>
         theme_vanilla() |>
-        merge_v(j=1) |>
+        merge_v(j=1:2) |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=c(5:8), digits = 0) |>
-        colformat_double(j=c(4,9:11), digits = 2) |>
+        colformat_double(j=c(3:9), digits = 0) |>
+        colformat_double(j=c(10:13), digits = 2) |>
         htmltools_value()
       
     })
-    # ###* 자산군별 배분현황
-    # output$allo0 <- renderUI({render_allo(ma()$allo0)})
-    # output$allo1 <- renderUI({render_allo(ma()$allo1)})
-    # twhdyd
-    # ###* 통화별 배분현황
-    # output$allo2 <- renderUI({render_allo(ma()$allo2)})
-    # output$allo3 <- renderUI({render_allo(ma()$allo3)})
-    # 
-    # ###* 불리오 배분현황
-    # output$allo5 <- renderUI({render_allo(ma()$allo5)})
-    # output$allo4 <- renderUI({render_allo(ma()$allo4)})
-   
   
-    ## b. 상품별 손익현황====
+    ## e. 상품별 손익현황====
   
     output$bs_pl_mkt_a <-renderUI({
       
       ma_v()$comm_profit %>%
         flextable() %>%
         theme_vanilla() %>%
-        merge_v(j = 1:5) %>% # 상위 분류 병합
+        merge_v(j = 1:6) %>% # 상위 분류 병합
         colformat_double(j = 7:14, digits = 0) %>% # 금액형은 소수점 제거
-        colformat_double(j = 15:19, digits = 2) %>% # 수익률은 소수점 2자리
+        colformat_double(j = 15:18, digits = 2) %>% # 수익률은 소수점 2자리
         set_table_properties(layout = 'autofit', width = 1) %>%
         htmltools_value(ft.align = 'center')
     })
-  
-    # output$class_ret_a <- renderUI({
-    #   ma_v()$ret_a |>
-    #     select(1:3,평가금액,실현손익, 평가손익,
-    #            실현수익률:평가수익률) |>
-    #     flextable() |>
-    #     theme_vanilla() |>
-    #     merge_v(j=1:2) |>
-    #     set_table_properties(layout='autofit') |>
-    #     colformat_double(j=4:6, digits = 0) |>
-    #     colformat_double(j=7:8, digits = 2) |>
-    #     htmltools_value()
-    # })
-    # 
-    # output$class_ret_a2 <- renderUI({
-    #   ma_v()$ret_a2 |>
-    #     select(1:2,평가금액,실현손익, 평가손익,
-    #            실현수익률:평가수익률) |>
-    #     flextable() |>
-    #     theme_vanilla() |>
-    #     merge_v(j=1) |>
-    #     set_table_properties(layout='autofit') |>
-    #     colformat_double(j=3:5, digits = 0) |>
-    #     colformat_double(j=6:7, digits = 2) |>
-    #     htmltools_value()
-    # })
-    
-    ## c. 연금자산현황
-    # output$allo6 <- renderUI({render_allo(ma()$allo6)})
-    # output$allo7 <- renderUI({render_allo(ma()$allo7)})
-    # output$allo8 <- renderUI({render_allo(ma()$allo8)})
-    # output$allo9 <- renderUI({render_allo(ma()$allo9)})
-    
-    ## d. 연금손익현황
-    
-    # output$class_ret_p <- renderUI({
-    #   ma_v()$ret_p |>
-    #     select(1:3,평가금액,실현손익, 평가손익,
-    #            실현수익률:평가수익률) |>
-    #     flextable() |>
-    #     theme_vanilla() |>
-    #     merge_v(j=1:2) |>
-    #     set_table_properties(layout='autofit') |>
-    #     colformat_double(j=4:6, digits = 0) |>
-    #     colformat_double(j=7:8, digits = 2) |>
-    #     htmltools_value()
-    # })
-    # 
-    # output$class_ret_p2 <- renderUI({
-    #   ma_v()$ret_p2 |>
-    #     select(1:2,평가금액,실현손익, 평가손익,
-    #            실현수익률:평가수익률) |>
-    #     flextable() |>
-    #     theme_vanilla() |>
-    #     merge_v(j=1) |>
-    #     set_table_properties(layout='autofit') |>
-    #     colformat_double(j=3:5, digits = 0) |>
-    #     colformat_double(j=6:7, digits = 2) |>
-    #     htmltools_value()
-    # })
-    # 
-    # output$bs_pl_mkt_p <-renderUI({
-    #   ma_v()$bs_pl_mkt_p |>
-    #     select(계좌, 자산군, 세부자산군, 종목명,
-    #            보유수량, 장부금액, 평가금액, 실현손익, 평가손익,
-    #            실현수익률,평가수익률) |>
-    #     arrange(계좌,자산군,세부자산군) |>
-    #     flextable() |>
-    #     theme_vanilla() |>
-    #     merge_v(j=1:3) |>
-    #     set_table_properties(layout='autofit') |>
-    #     colformat_double(j=5:9, digits = 0) |>
-    #     colformat_double(j=10:11, digits = 2) |>
-    #     htmltools_value()
-    # })
-    
     
     # 4) 유동성 관리====
     
-    ### * 메뉴 설정====
+    ### a. 자금유출입 탭 ====
+    
+    #### * 메뉴 설정====
     output$manage_inflow <- renderUI({
       
       acct_list <- unique(c(ma_b()$assets$계좌, ma_b()$pension$계좌))
@@ -1799,7 +1712,7 @@ server <- function(input, output, session) {
       ) 
     })
     
-    ### * 테이블 설정====
+    #### * 테이블 설정====
     
     reset_inflow <- reactive({
       ma_b()[['inflow']] %>%
@@ -1833,6 +1746,55 @@ server <- function(input, output, session) {
     })
     
     
+    #### * 신규/구분 설정====
+    observeEvent(input$new3, {
+      if(input$new3 != "신규"){
+        t_rows <- filter(liq$c, 행번호 == input$new3)
+        updateAirDateInput(session, 'trading_date2', value = t_rows$거래일자)
+        updateSelectInput(session, 'inflow_acct', selected = t_rows$계좌)
+        updateAutonumericInput(session, 'payment', value = t_rows$자금유출입)
+      } else {
+        update_manage_inflow()
+        updateAirDateInput(session, 'trading_date2', value = Sys.Date())
+        updateSelectInput(session, 'inflow_acct', selected = NULL)
+        updateAutonumericInput(session, 'payment', value = 0)
+      }
+    })
+    
+    #### * 추가/수정/삭제 선택시====
+    observe({
+      liq$d <- tibble::tibble_row(
+        행번호 = 0, 
+        거래일자 = input$trading_date2,
+        계좌 = input$inflow_acct,
+        자금유출입 = input$payment
+      )
+    })
+    
+    observeEvent(input$inflow_new, {
+      # DB에 '계좌', '자금유출입' 컬럼이 있어야 함
+      liq$d$행번호 <- ma$inflow_last_num + 1
+      dbxInsert(ma$con, 'inflow', liq$d)
+      liq$c <- reset_inflow()
+      update_manage_inflow()
+      sk_b(!sk_b())
+    })
+    
+    observeEvent(input$inflow_mod, {
+      liq$d$행번호 <- input$new3
+      dbxUpdate(ma$con, 'inflow', liq$d, where_cols = c("행번호"))
+      liq$c <- reset_inflow()
+      update_manage_inflow()
+      sk_b(!sk_b())
+    })
+    
+    observeEvent(input$inflow_del, {
+      dbxDelete(ma$con, 'inflow', tibble::tibble_row(행번호 = input$new3))
+      liq$c <- reset_inflow()
+      update_manage_inflow()
+      sk_b(!sk_b())
+    })
+    
     output$maturity_table <- renderUI({
       ma_v()$bs_pl_mkt_a %>% 
         bind_rows(ma_v()$bs_pl_mkt_p) %>% 
@@ -1858,7 +1820,9 @@ server <- function(input, output, session) {
       ma_v()$get_liquidity_analysis()
     })
     
-    # 4-5-1. 현재 계좌별 총자산 (총자산추이 탭 상단)
+    ### b. 총자산추이 탭 ====
+    
+    # 현재 계좌별 총자산 (총자산추이 탭 상단)
     output$current_total_asset_table <- renderUI({
       liquidity_data()$current_status %>% 
         filter(구분 == '총자산') %>% 
@@ -1869,16 +1833,6 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
-    # 4-5-2. 현재 계좌별 현금성자산 (가용자금추이 탭 상단)
-    output$current_cash_asset_table <- renderUI({
-      liquidity_data()$current_status %>% 
-        filter(구분 == '현금성자산') %>% 
-        flextable() %>% 
-        theme_box() %>% 
-        colformat_double(digits=0) %>% 
-        set_table_properties(layout='autofit', width=1) %>% 
-        htmltools_value()
-    })
     
     # 4-5-3. 향후 총자산 추이
     output$inflow_table3 <- renderUI({
@@ -1890,7 +1844,21 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
-    # 4-5-4. 향후 가용자금 추이
+
+    ### C. 가용자금추이 탭 ====
+    
+    # 현재 계좌별 현금성자산 (가용자금추이 탭 상단)
+    output$current_cash_asset_table <- renderUI({
+      liquidity_data()$current_status %>% 
+        filter(구분 == '현금성자산') %>% 
+        flextable() %>% 
+        theme_box() %>% 
+        colformat_double(digits=0) %>% 
+        set_table_properties(layout='autofit', width=1) %>% 
+        htmltools_value()
+    })
+    
+    # 향후 가용자금 추이
     output$inflow_table4 <- renderUI({
       liquidity_data()$cash_projection %>% 
         flextable() %>% 
@@ -1900,319 +1868,13 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
-    ### * 신규/구분 설정====
-    observeEvent(input$new3, {
-      if(input$new3 != "신규"){
-        t_rows <- filter(liq$c, 행번호 == input$new3)
-        updateAirDateInput(session, 'trading_date2', value = t_rows$거래일자)
-        updateSelectInput(session, 'inflow_acct', selected = t_rows$계좌)
-        updateAutonumericInput(session, 'payment', value = t_rows$자금유출입)
-      } else {
-        update_manage_inflow()
-        updateAirDateInput(session, 'trading_date2', value = Sys.Date())
-        updateSelectInput(session, 'inflow_acct', selected = NULL)
-        updateAutonumericInput(session, 'payment', value = 0)
-      }
-    })
-  
-    ### * 추가/수정/삭제 선택시====
-    observe({
-      liq$d <- tibble::tibble_row(
-        행번호 = 0, 
-        거래일자 = input$trading_date2,
-        계좌 = input$inflow_acct,
-        자금유출입 = input$payment
-      )
-    })
-  
-    observeEvent(input$inflow_new, {
-      # DB에 '계좌', '자금유출입' 컬럼이 있어야 함
-      liq$d$행번호 <- ma$inflow_last_num + 1
-      dbxInsert(ma$con, 'inflow', liq$d)
-      liq$c <- reset_inflow()
-      update_manage_inflow()
-      sk_b(!sk_b())
-    })
-  
-    observeEvent(input$inflow_mod, {
-      liq$d$행번호 <- input$new3
-      dbxUpdate(ma$con, 'inflow', liq$d, where_cols = c("행번호"))
-      liq$c <- reset_inflow()
-      update_manage_inflow()
-      sk_b(!sk_b())
-    })
-    
-    observeEvent(input$inflow_del, {
-      dbxDelete(ma$con, 'inflow', tibble::tibble_row(행번호 = input$new3))
-      liq$c <- reset_inflow()
-      update_manage_inflow()
-      sk_b(!sk_b())
-    })
-    
-    
-    # 5) 자산배분 현황====
-    
-    update_new_allo <- reactive({
-      
-      input$allo_renew
-      df <- ma_b()$read('allocation')
-      
-      updateNumericInput(inputId = 'ass_bond', 
-                         value = df$목표1[[7]])
-      updateNumericInput(inputId = 'ass_stock', 
-                         value = df$목표1[[4]])
-      updateNumericInput(inputId = 'ass_alter', 
-                         value = df$목표1[[1]])
-      updateNumericInput(inputId = 'ass_bond_sol', 
-                         value = df$목표2[[8]])
-      updateNumericInput(inputId = 'ass_bond_ig', 
-                         value = df$목표2[[9]])
-      updateNumericInput(inputId = 'ass_bond_nr', 
-                         value = df$목표2[[10]])
-      updateNumericInput(inputId = 'ass_bond_cor', 
-                         value = df$목표2[[11]])
-      updateNumericInput(inputId = 'ass_stock_dev', 
-                         value = df$목표2[[6]])
-      updateNumericInput(inputId = 'ass_alter_com', 
-                         value = df$목표2[[3]])
-    })
-    
-    observeEvent(T,{
-      update_new_allo()
-    }, once = T)
-    
-    observeEvent(input$allo_renew,{
-      df <- ma$read('allocation') %>% 
-        mutate(목표1 = c(input$ass_alter, NA, NA,
-                         input$ass_stock, NA, NA,
-                         input$ass_bond, NA, NA, NA, NA, NA),
-               목표2 = c(NA, 
-                         input$ass_alter - input$ass_alter_com,
-                         input$ass_alter_com,
-                         NA, 
-                         input$ass_stock - input$ass_stock_dev,
-                         input$ass_stock_dev,
-                         NA, 
-                         input$ass_bond_sol,
-                         input$ass_bond_ig,
-                         input$ass_bond_nr, 
-                         input$ass_bond_cor,
-                         input$ass_bond - input$ass_bond_sol - input$ass_bond_ig - input$ass_bond_nr - input$ass_bond_cor))
-      
-      dbWriteTable(ma$con, 'allocation', df, 
-                   overwrite = TRUE, row.names = FALSE)
-      
-      update_new_allo()
-    })
-    
-    
-    
-    
-    output$allocation_table <- renderUI({
-      input$allo_renew
-      
-      df <- ma_v()$t_class %>% select(1:7) %>% 
-        left_join(
-          ma_b()$read('allocation') %>% 
-            add_row(자산군='현금성', 세부자산군="", 
-                    목표1 = 100-sum(.$목표1, na.rm = T)) %>% 
-            mutate(세부자산군2 = '', .after=2),
-          by=c('자산군','세부자산군', '세부자산군2')
-        ) %>% 
-        mutate(
-          자산군=factor(자산군, 
-                     levels=c("<합계>","주식","대체자산","채권",
-                              "현금성", "환차손익"))
-        ) %>% 
-        arrange(자산군)
-        
-      
-      df %>% mutate(
-        목표금액 = na_if(df$평가금액[[1]]*(coalesce(목표1,0)+coalesce(목표2,0))/100,0), 
-        .before=목표1) %>% 
-        mutate(과부족 = 평가금액-목표금액) %>% 
-        flextable() |>
-        theme_vanilla() |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=c(4,8,11), digits = 0) |>
-        # colformat_double(j=c(9,11), digits = 2) |>
-        colformat_double(j=c(5:7,9:10), digits = 1) |>
-        htmltools_value()
-    })
-    
-    output$account_allocation_table <- renderUI({
-      req(ma_v())
-      
-      # 1. 원본 데이터 및 계좌 순서 추출
-      # t_comm4에 존재하는 계좌들의 순서(Factor Level 순)를 그대로 가져옵니다.
-      df_src <- ma_v()$t_comm4
-      target_accts <- levels(df_src$계좌)[levels(df_src$계좌) %in% unique(df_src$계좌)]
-      
-      # 2. 데이터 필터링 및 전처리
-      df <- df_src %>%
-        filter(통화 == '원화') %>%
-        select(계좌, 자산군, 평가금액) %>%
-        # 자산군이 비어있거나 NA인 경우 '합계'로 변경 (계좌별 총자산 행)
-        mutate(자산군 = if_else(자산군 == "" | is.na(자산군), "합계", as.character(자산군)))
-      
-      # 3. 피벗 (행: 자산군, 열: 계좌)
-      df_wide <- df %>%
-        pivot_wider(names_from = 계좌, values_from = 평가금액, values_fill = 0)
-      
-      # 4. 열(계좌) 순서 및 행(자산군) 순서 정렬
-      # 4-1. 열 순서: target_accts에 있는 계좌만, 그 순서대로 선택 (데이터에 없는 계좌는 0으로 추가)
-      # for(acct in target_accts) {
-      #   if(!acct %in% names(df_wide)) {
-      #     df_wide[[acct]] <- 0
-      #   }
-      # }
-      # 
-      # 4-2. 행 순서: 주식 -> 대체자산 -> 채권 -> 현금성 -> 합계 순으로 정렬
-      row_levels <- c("주식", "외화자산", "대체자산", "채권", "현금성", "합계")
-      
-      df_final <- df_wide %>%
-        # select(자산군, all_of(target_accts)) %>%  # 열 순서 적용
-        mutate(자산군 = factor(자산군, levels = row_levels)) %>%
-        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE)) %>% # 행 순서 적용을 위한 Factor 변환
-        arrange(자산군)
-      
-      # 5. Flextable 렌더링
-      df_final %>%
-        flextable() %>%
-        theme_vanilla() %>%
-        colformat_double(digits = 0) %>%
-        set_table_properties(layout = 'autofit') %>%
-        align(align = "center", part = "all") %>%
-        bg(i = ~ 자산군 == "합계", bg = "#f0f0f0") %>% # 합계 행 강조
-        htmltools_value()
-    })
-    
-    
-    # 4) 한국은행 지표선정===
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    ## b. 통계표 조회===
-    # observeEvent(input$name,{
-    #   rv_app$df <- ec$find_stat(input$name)
-    #   updateSelectizeInput(session, 'name_in', 
-    #                        choices = c('전체',rv_app$df$stat_name),
-    #                        selected = '전체')
-    #   
-    # })
-    
-    ## c. 아이템 추가===
-    
-    ### * 통계표 이름=== 
-    # observeEvent(input$name_in,{
-    #   
-    #   rv_app$name_in <- input$name_in
-    #   
-    #   updateSelectizeInput(session, 'name_in',
-    #                        choices = c('전체', rv_app$df$stat_name),
-    #                        selected = rv_app$name_in)
-    #   
-    #   if(rv_app$name_in=='전체'){
-    #     code <- '전체'
-    #     rv_app$code <- '전체'
-    #   }
-    #   else {
-    #     rv_app$df_d <- rv_app$df |> filter(stat_name==rv_app$name_in)
-    #     code <- rv_app$df_d$stat_code
-    #     
-    #     if(length(code)==1){rv_app$code <- code}
-    #     else {rv_app$code <- code[1]}
-    #     
-    #   }
-    #   updateSelectizeInput(session, 'code_in', choices = code,
-    #                        selected = rv_app$code)
-    # })
-    
-    ### * 통계표 코드===
-    # observeEvent(input$code_in,{
-    #   tryCatch({
-    #     rv_app$df2 <- ec$find_items(input$code_in)
-    #   }, error = function(e) {
-    #     rv_app$df2 <- ec$find_items('전체')
-    #   })
-    #   
-    #   rv_app$df5 <- rv_app$df2
-    #   
-    #   updateSelectizeInput(session, 'item_in',
-    #                        choices = c('전체', unique(rv_app$df2$item_name)),
-    #                        selected = '전체')
-    #   updateSelectizeInput(session, 'cyl_in',
-    #                        choices = c('전체', unique(rv_app$df2$cycle)),
-    #                        selected = '전체')
-    # })
-    
-    ### * 아이템이름===
-    # observeEvent(input$item_in,{
-    #   if(is.null(input$item_in)||input$item_in=='전체'){
-    #     rv_app$df3 <- rv_app$df2
-    #   }
-    #   else rv_app$df3 <- rv_app$df2 |> filter(item_name==input$item_in)
-    #   
-    #   rv_app$df5 <- rv_app$df3
-    #   
-    #   updateSelectizeInput(session, 'item_in',
-    #                        choices = c('전체', unique(rv_app$df2$item_name)),
-    #                        selected = input$item_in)
-    #   
-    #   updateSelectizeInput(session, 'cyl_in',
-    #                        choices = c('전체', unique(rv_app$df2$cycle)),
-    #                        selected = '전체')        
-    # })
-    
-    ### * 데이터주기===    
-    # observeEvent(input$cyl_in,{
-    #   if(is.null(input$cyl_in)||input$cyl_in=='전체'){
-    #     rv_app$df4 <- rv_app$df3
-    #   }
-    #   else rv_app$df4 <- rv_app$df3 |> filter(cycle==input$cyl_in)
-    #   
-    #   rv_app$df5 <- rv_app$df4
-    #   
-    #   updateSelectizeInput(session, 'cyl_in',
-    #                        choices = c('전체', unique(rv_app$df3$cycle)),
-    #                        selected = input$cyl_in)
-    # })
-    
-    ## * 아이템 추가===
-    # observeEvent(input$add_item,{
-    #   ec$save_items(rv_app$df5, input$ecos_name)
-    #   sendSweetAlert(title="추가하였습니다!", type='success')
-    #   rv_app$df_s <- ec$read_items()
-    # })
-    # 
-    # observe({
-    #   output$selected_item <- renderTable(rv_app$df_s)
-    #   output$ecos_stat_tables <- renderTable(rv_app$df)
-    #   output$ecos_item_tables <- renderTable(rv_app$df5)
-    # })
-    
-    
-    # 5) 한국은행 지표선정===
-    
-    
-    
+    # 5) 종료====
+
     observeEvent(input$close_win,{
       js$closeWindow()
       stopApp()
     })
+    
   }, once = TRUE, ignoreInit = TRUE)
 }
 
