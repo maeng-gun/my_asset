@@ -49,6 +49,10 @@ sidebar <- dashboardSidebar(
     )
   ),
   br(),
+  actionButton('renew_last_eval_profit',
+               label = '기초평가손익갱신',
+               width='90%',
+               status='primary'),
   actionButton('close_win',
                label = '프로그램 종료',
                width='90%',
@@ -444,26 +448,17 @@ body <- dashboardBody(
               ) # box 닫기 (쉼표 없음)
             ), # column 닫기 (쉼표 있음)
             column(
-              width = 10,
+              width = 6,
               uiOutput('allocation_table')
-            ) # column 닫기 (쉼표 없음)
-          ) # fluidRow 닫기
-        ), # tabPanel 닫기
-        
-        ### b. 계좌별 배분현황 ====
-        tabPanel(
-          title = "계좌별 배분현황",
-          fluidRow(
-            box(
-              width = 12,
-              status = "info",
-              solidHeader = FALSE,
+            ), # column 닫기 (쉼표 없음)
+            column(
+              width = 4,
               uiOutput('account_allocation_table')
             )
-          )
-        ),
+          ) # fluidRow 닫기
+        ), # tabPanel 닫기
 
-        ### c. 상품별 보유현황1====
+        ### b. 상품별 보유현황1====
         tabPanel(
           title="상품별 보유현황1",
           fluidRow(
@@ -471,7 +466,7 @@ body <- dashboardBody(
           )
         ),
         
-        ### d. 상품별 보유현황2====
+        ### c. 상품별 보유현황2====
         tabPanel(
           title="상품별 보유현황2",
           fluidRow(
@@ -489,9 +484,12 @@ body <- dashboardBody(
         status='primary',
         type='tabs',
         
-        ###a. 종합손익(그래프)====
+        ###a. 종합손익====
         tabPanel(
-          title="종합손익(그래프)",
+          title="종합손익",
+          fluidRow(
+            uiOutput("t_profit1")
+          ),
           fluidRow(
             column(
               width = 2,
@@ -506,32 +504,20 @@ body <- dashboardBody(
                 label = "종료일",
                 addon = "none",
                 value = Sys.Date()
-              )
+              ),
+              uiOutput("graph_limt")
             ),
             column(
               width = 10,
               plotOutput("total_profit", height = "800px")
             )
-            
           )
         ),
-        ###b. 종합손익(테이블)====
+        ###b. 손익변동====
         tabPanel(
-          title="종합손익(테이블)",
+          title="손익변동",
           fluidRow(
-            uiOutput("t_profit1")
-          ),
-          fluidRow(
-            airDatepickerInput(
-              inputId = 't_profit_date',
-              label = "조회연월",
-              addon = "none",
-              view = 'months',
-              value = Sys.Date()
-            )
-          ),
-          fluidRow(
-            uiOutput("t_profit2")
+            uiOutput("profit_var")
           )
         ),
         
@@ -1338,6 +1324,12 @@ server <- function(input, output, session) {
     
     ##d. 종합거래내역====
     
+    output$total_trade_table <- renderUI({
+      input$total_trade_date
+      input$total_ass1
+      input$total_ass2
+      input$total_ass3
+      input$total_curr
       
       if(!is.null(input$total_trade_date)){
         
@@ -1369,8 +1361,8 @@ server <- function(input, output, session) {
       } else{
         
       }
+    })
 
-    
     # 2) 자산배분 및 보유현황 ====
     
     
@@ -1432,111 +1424,120 @@ server <- function(input, output, session) {
     output$allocation_table <- renderUI({
       input$allo_renew
       
-      df <- ma_v()$t_class %>% select(1:7) %>% 
-        left_join(
-          ma_b()$read('allocation') %>% 
-            add_row(자산군='현금성', 세부자산군="", 
-                    목표1 = 100-sum(.$목표1, na.rm = T)) %>% 
-            mutate(세부자산군2 = '', .after=2),
-          by=c('자산군','세부자산군', '세부자산군2')
-        ) %>% 
-        mutate(
-          자산군=factor(자산군, 
-                     levels=c("<합계>","주식","대체자산","채권",
-                              "현금성", "환차손익"))
-        ) %>% 
-        arrange(자산군)
-      
-      
-      df %>% mutate(
-        목표금액 = na_if(df$평가금액[[1]]*(coalesce(목표1,0)+coalesce(목표2,0))/100,0), 
-        .before=목표1) %>% 
-        mutate(과부족 = 평가금액-목표금액) %>% 
+      ma_v()$t_allocation %>% 
         flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=c(4,8,11), digits = 0) |>
-        colformat_double(j=c(5:7,9:10), digits = 1) |>
+        colformat_double(j=c(4,6,9), digits = 0) |>
+        colformat_double(j=c(5,7,8), digits = 1) |>
         htmltools_value()
     })
-    
-    ## b. 계좌별 자산배분 ====
     
     output$account_allocation_table <- renderUI({
       req(ma_v())
       
-      # 1. 원본 데이터 및 계좌 순서 추출
-      # t_comm4에 존재하는 계좌들의 순서(Factor Level 순)를 그대로 가져옵니다.
-      df_src <- ma_v()$t_comm4
-      target_accts <- levels(df_src$계좌)[levels(df_src$계좌) %in% unique(df_src$계좌)]
-      
-      # 2. 데이터 필터링 및 전처리
-      df <- df_src %>%
-        filter(통화 == '원화') %>%
-        select(계좌, 자산군, 평가금액) %>%
-        # 자산군이 비어있거나 NA인 경우 '합계'로 변경 (계좌별 총자산 행)
-        mutate(자산군 = if_else(자산군 == "" | is.na(자산군), "합계", as.character(자산군)))
-      
-      # 3. 피벗 (행: 자산군, 열: 계좌)
-      df_wide <- df %>%
-        pivot_wider(names_from = 계좌, values_from = 평가금액, values_fill = 0)
-      
-      # 4. 열(계좌) 순서 및 행(자산군) 순서 정렬
-      # 4-1. 열 순서: target_accts에 있는 계좌만, 그 순서대로 선택 (데이터에 없는 계좌는 0으로 추가)
-      # for(acct in target_accts) {
-      #   if(!acct %in% names(df_wide)) {
-      #     df_wide[[acct]] <- 0
-      #   }
-      # }
-      # 
-      # 4-2. 행 순서: 주식 -> 대체자산 -> 채권 -> 현금성 -> 합계 순으로 정렬
-      row_levels <- c("주식", "외화자산", "대체자산", "채권", "현금성", "합계")
-      
-      df_final <- df_wide %>%
-        # select(자산군, all_of(target_accts)) %>%  # 열 순서 적용
-        mutate(자산군 = factor(자산군, levels = row_levels)) %>%
-        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE)) %>% # 행 순서 적용을 위한 Factor 변환
-        arrange(자산군)
-      
-      # 5. Flextable 렌더링
-      df_final %>%
+      ma_v()$account_allocation %>%
         flextable() %>%
         theme_vanilla() %>%
-        colformat_double(digits = 0) %>%
+        colformat_double(j=2:6, digits = 0) %>%
         set_table_properties(layout = 'autofit') %>%
         align(align = "center", part = "all") %>%
-        bg(i = ~ 자산군 == "합계", bg = "#f0f0f0") %>% # 합계 행 강조
         htmltools_value()
     })
     
-    ## c. 상품별 보유현황1====
+    ## b. 상품별 보유현황1====
     output$t_commodity <- renderUI({
       ma_v()$t_comm |>
         flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=5:6, digits = 0) |>
-        colformat_double(j=7, digits = 2) |>
+        colformat_double(j=5:7, digits = 0) |>
+        colformat_double(j=8, digits = 2) |>
         htmltools_value()
     })
     
-    ## d. 상품별 보유현황2====
+    ## c. 상품별 보유현황2====
     output$t_commodity2 <- renderUI({
       ma_v()$t_comm2 |>
         flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=6, digits = 0) |>
+        colformat_double(j=7:9, digits = 0) |>
+        colformat_double(j=10, digits = 2) |>
         htmltools_value()
     })
     
     # 3) 손익현황====
     
-    ## a. 종합손익(그래프)====
+    ## a. 종합손익====
+    
+    output$t_profit1 <- renderUI({
+      
+      big_border <- officer::fp_border(color = "black", width = 2)
+      
+      
+      ma_v()$compute_t_profit() %>% 
+        flextable() |>
+        theme_box() |>
+        set_table_properties(layout='autofit') |>
+        vline(j = 7, border = big_border, part = "all") %>% 
+        # 8번째 열의 오른쪽 세로선 (j = 8)
+        vline(j = 8, border = big_border, part = "all") %>%
+        # 8번째 열의 맨 위 가로선 (header의 top)
+        hline_top(j = 8, border = big_border, part = "header") %>%
+        # 8번째 열의 맨 아래 가로선 (body의 bottom)
+        hline_bottom(j = 8, border = big_border, part = "body") %>%
+        colformat_double(j=2:8, digits = 0) |>
+        colformat_double(j=9:11, digits = 2) |>
+        htmltools_value()
+    })
+    
+    df_graph <- reactive({
+      input$total_s_date
+      input$total_e_date
+      
+      ma_v()$plot_total_profit(
+        input$total_s_date,input$total_e_date)
+    })
+    
+    y_num <- reactive({
+      ceiling(max(abs(df_graph()$손익누계))/10)
+    })
+    
+    output$graph_limt <- renderUI({
+      searchInput(
+        inputId = "graph_limt2", 
+        label = "손익단위", 
+        value = y_num(), # 초기값
+        btnSearch = icon("search"), 
+        btnReset = NULL, 
+        width = "100%"
+      )
+    })
     
     output$total_profit <- renderPlot({
-      plot_obj <- ma_v()$plot_total_profit(
-        input$total_s_date,input$total_e_date)
+      
+      req(input$graph_limt2)
+      num <- as.numeric(input$graph_limt2)
+      
+      fig1 <- ma_v()$plot_total_eval()
+      
+      fig2 <- df_graph() %>% 
+        ggplot(aes(x=기준일)) +
+        geom_line(aes(y=손익누계))+
+        geom_bar(aes(y=일간손익), stat='identity') +
+        scale_y_continuous(
+          breaks = function(x){seq(
+            floor(x[1] / num) * num,
+            ceiling(x[2] / num) * num,
+            by = num  
+          )}, sec.axis = dup_axis(name=NULL)
+        )+
+        scale_x_date(date_breaks = "1 month", date_labels = "%Y-%m") +
+        theme(text=element_text(size=20),
+              axis.text.x = element_text(angle = 45, hjust = 1))
+      
+      plot_obj <- gridExtra::grid.arrange(fig2,fig1,nrow=2)
       
       if (rv_app$initial_load_done == FALSE) {
         
@@ -1550,68 +1551,20 @@ server <- function(input, output, session) {
       plot_obj
     })
     
-    ## b. 종합손익(테이블)====
+    ## b. 손익변동====
     
-    output$t_profit1 <- renderUI({
-      ma_v()$compute_t_profit() %>% 
-        group_by(연도=year(거래일자)) %>% 
-        summarise(across(-거래일자, last)) %>% 
-        transmute(
-          연도=as.character(연도), 
-          총평잔 = 투자평잔+연금평잔,
-          평가손익,
-          평가손익증감 = if_else(연도==2023, first(평가손익),
-                           diff_vec(평가손익,silent = T)),
-          총실현손익 = 투자실현손익+연금실현손익,
-          총기간손익 = 총실현손익+평가손익증감,
-          총기간수익률 = 총기간손익 / 총평잔 * 100,
-          투자평잔, 
-          투자실현손익, 
-          투자실현수익률 = 투자실현손익 / 투자평잔 * 100,
-          연금평잔, 
-          연금실현손익,
-          연금실현수익률 = 연금실현손익 / 연금평잔 * 100
-        ) %>% 
-        flextable() |>
-        theme_box() |>
-        set_header_labels(
-          values = list(
-            연도="연도",
-            총평잔="연평균잔액",
-            평가손익="평가손익(누계)",
-            평가손익증감="평가손익증감(A)",
-            총실현손익="실현손익(B)",
-            총기간손익 = "연간총손익(A+B)",
-            총기간수익률 = "연간총수익률",
-            투자평잔="연평균잔액",
-            투자실현손익="실현손익",
-            투자실현수익률 = "실현수익률",
-            연금평잔="연평균잔액", 
-            연금실현손익="실현손익",
-            연금실현수익률 = "실현수익률"
-          )
-        ) %>%
-        add_header_row(values = c("","총계정","투자계정","연금계정"), 
-                       colwidths = c(1,6,3,3)) %>% 
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=c(2,3,4,5,6,8,9,11,12), digits = 0) |>
-        colformat_double(j=c(7,10,13), digits = 2) |>
-        htmltools_value()
-    })
-    
-    output$t_profit2 <- renderUI({
-      ma_v()$compute_t_profit() %>% 
-        filter(year(거래일자)==year(input$t_profit_date),
-               month(거래일자)==month(input$t_profit_date)) %>% 
+    output$profit_var <- renderUI({
+      ma_v()$compute_profit_var() %>%
         flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=2:8, digits = 0) %>% 
+        colformat_double(j=c(4:6,8:11), digits = 0) %>%
+        colformat_double(j=7, digits = 2) %>%
         htmltools_value()
     })
     
     
-   ## c. 자산군별 손익현황====
+   ## b. 자산군별 손익현황====
   
     output$total_accounts1 <- renderUI({
       ma_v()$t_comm3 %>% 
@@ -1625,10 +1578,10 @@ server <- function(input, output, session) {
       
     })
     
-    ## d. 계좌별 손익현황====
+    ## c. 계좌별 손익현황====
     
     output$total_accounts2 <- renderUI({
-      ma_v()$t_comm5 %>% 
+      ma_v()$t_comm4 %>% 
         flextable() |>
         theme_vanilla() |>
         merge_v(j=1:2) |>
@@ -1639,7 +1592,7 @@ server <- function(input, output, session) {
       
     })
   
-    ## e. 상품별 손익현황====
+    ## d. 상품별 손익현황====
   
     output$bs_pl_mkt_a <-renderUI({
       
@@ -1873,6 +1826,11 @@ server <- function(input, output, session) {
     observeEvent(input$close_win,{
       js$closeWindow()
       stopApp()
+    })
+    
+    # 6) 기초평가손익 갱신====
+    observeEvent(input$renew_last_eval_profit,{
+      ma$renew_last_eval_profit()
     })
     
   }, once = TRUE, ignoreInit = TRUE)
