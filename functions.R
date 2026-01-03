@@ -11,25 +11,6 @@ library(tidyquant)
 library(pool)
 library(data.table)
 
-get_config <- function(){
-  yaml::read_yaml(file = 'secrets/config.yaml', 
-                  readLines.warn = F)
-}
-
-get_exchange_rate <- function(cur='달러'){
-  
-  num <- c('달러'= 1, '엔'= 2, '유로'=3, '위안'=4)
-  suppressWarnings({
-    (read_html("http://finance.naver.com/marketindex/") %>% 
-       html_nodes("div.head_info > span.value")
-    )[num[cur]] %>%
-      html_text() %>% 
-      readr::parse_number()
-  })
-}
-
-
-
 
 #[클래스] MyData ====
 MyData <- R6Class(
@@ -42,8 +23,6 @@ MyData <- R6Class(
     ##1. 속성 초기화 ====
     initialize = function(pw){
       
-      # self$con <- dbConnect(SQLite(), file, bigint = 'numeric',
-      #                       extended_types=T)
       cfg <- yaml::read_yaml(file = 'ccc.yaml',
                              readLines.warn = F)
       
@@ -101,307 +80,6 @@ MyData <- R6Class(
 )
 
 
-#[클래스] KrxStocks ====
-KrxStocks <- R6Class(
-  
-  classname = 'KrxStocks',
-  inherit = MyData,
-  
-  public=list(
-    
-    user.agent = NULL, referer = NULL,
-    stock_list = NULL, last_wd = NULL,
-    this_wd = NULL, pw=NULL,
-    
-    ##1. 속성 초기화 ====
-    initialize = function(pw, date=NULL){
-      
-      self$pw <- pw
-      super$initialize(self$pw)
-
-      self$user.agent <- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36'
-      self$referer <- 'http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201'
-            
-      # (1) 기준 날짜 설정
-      
-      if(is.null(date)){
-        if(now(tzone = "Asia/Seoul") >= update(now(tzone = "Asia/Seoul"), 
-                                               hour=9, minute=21, second=0)){
-          target_date <- today()
-        }
-        else {
-          target_date <- today() - 1
-        }
-      } else {
-        target_date <- as.Date(date)
-      }
-
-      target_year <- year(target_date)
-      last_year <- target_year - 1
-      
-      # (2) DB에서 휴일 정보 읽기 (workdays 테이블)
-      
-      tryCatch({
-        db_dates <- self$read('workdays') %>% arrange(기준일)
-      }, error = function(e){
-        # 테이블이 없거나 읽기 실패 시 빈 tibble 처리
-        db_dates <- tibble(기준일 = as.Date(character()))
-      })
-      
-      # (3) 시나리오별 갱신 로직
-      need_refetch_db <- FALSE
-      
-      if(nrow(db_dates) == 0){
-        # Case A: DB가 비어있음 -> 작년, 올해 데이터 모두 크롤링 및 저장
-        message("DB 비어있음: 2년치(작년+올해) 영업일 정보 초기화 중...")
-        days_prev <- self$scrape_workdays(last_year)
-        days_curr <- self$scrape_workdays(target_year)
-        
-        # DB 저장 (bind_rows 후 저장)
-        self$update_workdays_db(bind_rows(days_prev, days_curr), clear_all = TRUE)
-        need_refetch_db <- TRUE
-        
-      } else {
-        max_db_date <- max(db_dates$기준일)
-        max_db_year <- year(max_db_date)
-        
-        if(target_year > max_db_year){
-          # Case B: 해가 바뀌어 DB에 올해 정보가 없음 -> 올해 정보 크롤링 후 추가
-          message(glue("새해({target_year}) 영업일 정보 갱신 중..."))
-          days_curr <- self$scrape_workdays(target_year)
-          self$update_workdays_db(days_curr, clear_year = target_year) # 해당 연도 덮어쓰기
-          need_refetch_db <- TRUE
-        }
-      }
-      
-      # DB가 갱신되었다면 다시 읽기
-      if(need_refetch_db) {
-        db_dates <- self$read('workdays') %>% arrange(기준일)
-      }
-      
-      self$this_wd <- db_dates
-      
-      # (4) 직전 영업일 계산
-      # target_date보다 작거나 같은 날짜 중 가장 최신 날짜
-      # 만약 target_date가 1월 1일이라 올해 데이터에 없다면, 작년 데이터에서 찾아짐
-      
-      self$last_wd <- self$this_wd %>% 
-        filter(기준일 <= target_date) %>% 
-        pull(기준일) %>% last()
-      
-      # (5) 주가 정보 요청
-      self$get_stock_list2()
-      
-    },
-    ## 2. DB 업데이트 헬퍼 메서드 ====
-    update_workdays_db = function(new_data, clear_all=FALSE, clear_year=NULL){
-      # new_data: tibble(기준일 = Date)
-      
-      if(clear_all){
-        # 전체 삭제 후 삽입
-        dbExecute(self$con, "TRUNCATE TABLE workdays")
-      } else if(!is.null(clear_year)){
-        # 해당 연도만 삭제 후 삽입 (중복 방지 및 갱신)
-        dbExecute(self$con, glue("DELETE FROM workdays WHERE EXTRACT(YEAR FROM 기준일) = {clear_year}"))
-      }
-      
-      # 데이터 삽입
-      dbWriteTable(self$con, "workdays", new_data, append = TRUE, row.names = FALSE)
-    },
-    
-    ##3.(메서드) KRX POST ====
-    post_krx = function(site, params){
-      
-      url <- list(
-        data='http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd',
-        open='http://open.krx.co.kr/contents/OPN/99/OPN99000001.jspx')
-      
-      
-      tryCatch({
-        res <- POST(url=url[site],
-                    query=params, 
-                    user_agent(self$user.agent), 
-                    add_headers(referer=self$referer)) %>% 
-          content('t') %>% 
-          jsonlite::fromJSON()
-        
-        if(length(res) > 0 && !is.null(names(res))){
-          return(res[[ names(res)[1] ]] %>% as_tibble())
-        } else { 
-          return(tibble()) 
-        }
-      }, error = function(e){ return(tibble()) })
-    },
-    
-    ##4.(메서드) 영업일 얻기 ====
-    scrape_workdays = function(year){
-      
-      unix_time <- 
-        (as.numeric(Sys.time()) * 1000) %>% round() %>% as.character()
-      
-      otp_params <- list(
-        bld = 'MKD/01/0110/01100305/mkd01100305_01',
-        name = 'form',
-        '_' = unix_time)
-      
-      tryCatch({
-        otp_code <- 
-          GET(url='http://open.krx.co.kr/contents/COM/GenerateOTP.jspx',
-              query=otp_params,
-              user_agent(self$user.agent)) %>% 
-          content('t')
-        
-        view_params <- list(
-          search_bas_yy = as.character(year),
-          gridTp = 'KRX',
-          pagePath = 'contents/MKD/01/0110/01100305/MKD01100305.jsp',
-          code = otp_code)
-        
-        holidays <- 
-          self$post_krx('open',view_params)$calnd_dd %>% 
-          as.Date()
-        
-        start <- glue('{year}-01-01')
-        end <- glue('{year}-12-31')
-        
-        cal <- bizdays::create.calendar(
-          name = 'mycal',
-          holidays = holidays,
-          weekdays = c('saturday','sunday'),
-          start.date = start,
-          end.date = end)
-        
-        return(tibble(기준일=bizdays::bizseq(start, end, cal)))
-      }, error = function(e){
-        # 스크래핑 실패 시 비상용 (주말만 제외)
-        start <- as.Date(glue('{year}-01-01')); end <- as.Date(glue('{year}-12-31'))
-        days <- seq(start, end, by="day")
-        return(tibble(기준일 = days[!wday(days) %in% c(1, 7)]))
-      })
-    },
-    
-    ##5.(메서드) 주식 종목(ETF포함) 리스트 얻기====
-    get_stock_list = function(date=NULL){
-      
-      if(is.null(date)){ 
-        yyyymmdd <- strftime(self$last_wd, '%Y%m%d')
-      } else {
-        yyyymmdd <- strftime(date, '%Y%m%d')
-      }
-      
-      params1 <- list(bld = "dbms/MDC/STAT/standard/MDCSTAT01501",
-                      mktId = "ALL",
-                      trdDd = yyyymmdd)
-      
-      params2 <- list(bld = "dbms/MDC/STAT/standard/MDCSTAT04301",
-                      mktId = "ALL",
-                      trdDd = yyyymmdd)
-      
-      params3 <- list(bld = "dbms/MDC/STAT/standard/MDCSTAT14901",
-                      mktId = "ALL",
-                      trdDd = yyyymmdd)
-      
-      suppressWarnings({
-        
-        # [1단계] 주식 데이터 요청 및 검증
-        stock_df <- self$post_krx('data', params1)
-        if(nrow(stock_df) == 0 || !("ISU_SRT_CD" %in% names(stock_df))){
-          return(tibble()) 
-        } 
-        
-        # [2단계] ETF/ETN 요청
-        etf_df <- self$post_krx('data', params2)
-        
-        if(nrow(etf_df) > 0 && !("MKT_ID" %in% names(etf_df))){
-          etf_df <- etf_df %>% mutate(MKT_ID='STK')
-        } else {
-          etf_df <- tibble()
-        }
-        
-        gold_df <- self$post_krx('data', params3)
-        
-        if(nrow(gold_df) == 0) {
-          gold_df <- tibble()
-        }
-        
-        # [3단계] 병합
-        bind_rows(stock_df, etf_df, gold_df) %>% 
-          select(종목코드=ISU_SRT_CD, 종목명=ISU_ABBRV, 종가=TDD_CLSPRC, 시장구분=MKT_ID) %>% 
-          mutate(시장구분=case_match(시장구분, 
-                                 'STK'~'코스피',
-                                 'KSQ'~'코스닥',
-                                 'KNX'~'코넥스',
-                                 'CMD'~'금현물'),
-                 종가 = readr::parse_number(종가)
-          ) %>% filter(str_ends(종목코드,'0'))
-      })
-    },
-    
-    get_stock_list2 = function(){
-      
-      # 앱 구동 후 시간이 흘러 9시 21분을 넘긴 경우를 대비함
-      if(now(tzone = "Asia/Seoul") >= update(now(tzone = "Asia/Seoul"), 
-                                             hour=9, minute=21, second=0)){
-        target_date <- today()
-      } else {
-        target_date <- today() - 1
-      }
-      
-      # initialize에서 생성된 this_wd(영업일 달력)를 이용해 다시 계산
-      if(!is.null(self$this_wd) && nrow(self$this_wd) > 0){
-        self$last_wd <- self$this_wd %>% 
-          filter(기준일 <= target_date) %>% 
-          pull(기준일) %>% 
-          last()
-      }
-      
-      # 주가 정보 요청
-      stock_list <- self$get_stock_list(self$last_wd)
-      
-      # 주가 정보 오류(0건) 시 -> 임시공휴일 가능성 -> 강제 갱신
-      if(nrow(stock_list) == 0){
-        message("주가 데이터 없음(임시공휴일 등 감지) -> 영업일 정보 강제 갱신 및 재시도")
-        
-        target_year <- year(target_date)
-        
-        # 올해 영업일 다시 긁어오기
-        days_curr_retry <- self$scrape_workdays(target_year)
-        self$update_workdays_db(days_curr_retry, clear_year = target_year)
-        
-        # DB 다시 읽기
-        self$this_wd <- self$read('workdays') %>% arrange(기준일)
-        
-        # 영업일 재계산
-        self$last_wd <- self$this_wd %>% 
-          filter(기준일 <= target_date) %>% 
-          pull(기준일) %>% last()
-        
-        # 주가 재요청
-        stock_list <- self$get_stock_list(self$last_wd)
-      }
-      self$stock_list <- stock_list
-    },
-    
-    
-    ##7.(메서드) 종목코드 찾기 ====
-    find_code = function(name=NULL, mkt=NULL){
-      
-      if(is.null(self$stock_list) || nrow(self$stock_list) == 0) return(tibble())
-      
-      df <- self$get_stock_list() %>% 
-        mutate(종목코드=paste0('A',종목코드))
-      
-      if(!is.null(mkt)){df <- df %>% filter(시장구분 %in% mkt)}
-      if(!is.null(name)){
-        df <- df %>% 
-          filter(str_detect(종목명, str_c(name, collapse = '|')))
-      }
-      
-      df
-    }
-  )
-)
-
 #[클래스] AutoInvest====
 AutoInvest <- R6Class(
   
@@ -419,13 +97,8 @@ AutoInvest <- R6Class(
       super$initialize(pw)
       cfg <- split(self$config$value, self$config$token)
       
-      # self$token_tmp <- paste0("secrets/KIS", account)
       self$token_tmp <- paste0("KIS", account)
-      # 
-      # if (!file.exists(self$token_tmp)) {
-      #   file.create(self$token_tmp)
-      # }
-      
+
       self$APP_KEY <- cfg[[paste0(account, '_app')]]
       self$APP_SECRET <- cfg[[paste0(account, '_sec')]]
       self$ACCT <- cfg[[paste0(account, '_acct')]]
@@ -457,18 +130,12 @@ AutoInvest <- R6Class(
                             valid_date = format(valid_date, '%Y-%m-%d %H:%M:%S')),
                    overwrite = TRUE)
       
-      # writeLines(c(paste('token:', my_token),
-      #              paste('valid-date:', 
-      #                    format(valid_date, '%Y-%m-%d %H:%M:%S'))),
-      #            self$token_tmp)
     },
     
     ##메서드(2) - 토큰 불러오기 ====
     read_token = function() {
       tryCatch({
-        # 토큰이 저장된 파일 읽기
-        # tkg_tmp <- yaml::read_yaml(self$token_tmp, fileEncoding = 'UTF-8')
-        
+
         tkg_tmp <- self$read(self$token_tmp)
         
         # 토큰 만료 일,시간
@@ -633,13 +300,38 @@ AutoInvest <- R6Class(
     ##메서드(9) - 개별종목 현재가 ====
     get_current_price = function(sym_cd) {
       path <- "/uapi/domestic-stock/v1/quotations/inquire-price"
-      data <- list(
-        FID_COND_MRKT_DIV_CODE = "J",
-        FID_INPUT_ISCD = sym_cd
-      )
       headers <- c("tr_id" = "FHKST01010100", "custtype" = "P")
       
-      self$GET_tbl(path, data, headers)$output
+      fetch_single <- function(code){
+        data <- list(
+          FID_COND_MRKT_DIV_CODE = "J",
+          FID_INPUT_ISCD = code
+        )
+        
+        # API 호출
+        res <- self$GET_tbl(path, data, headers)
+        
+        # 정상적으로 응답이 오면 현재가(stck_prpr)를 숫자로 변환하여 반환
+        # 에러 발생 시 NA 반환
+        tryCatch({
+          if(!is.null(res$output$stck_prpr)){
+            as.numeric(res$output$stck_prpr) 
+          } else {
+            NA_real_
+          }
+        }, error = function(e) NA_real_)
+      }
+      
+      result_prices <- purrr::map_dbl(sym_cd, function(code) {
+        
+        # (중요) 연속 호출 시 API 제한(초당 건수 등)을 피하기 위해 미세한 딜레이 추가
+        # 필요에 따라 시간(0.05초)을 조절하세요.
+        Sys.sleep(0.05) 
+        
+        fetch_single(code)
+      })
+      
+      return(result_prices)
     }
   )
 )
@@ -663,24 +355,21 @@ MyAssets <- R6Class(
     inflow_last_num=NULL,cash_in_out=NULL, acct_order=NULL,
     cur_order=NULL, class_order=NULL, class2_order=NULL,
     class3_order=NULL, t_allocation=NULL, account_allocation=NULL,
-    y_num=NULL, grid=NULL, future_eval=NULL,
+    y_num=NULL, grid=NULL, future_eval=NULL, closing_prices=NULL,
     
     
     ## 1. 속성 초기화====
     initialize = function(pw) {
       
       self$pw <- pw
-      # self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
-      #                       extended_types=T)
+
       super$initialize(self$pw)
       self$today <- today()
       self$year <- year(self$today)
       
       tryCatch({
-        if(dbExistsTable(self$con, 'inflow') & dbExistsTable(self$con, 'eval_profit')){
+        if(dbExistsTable(self$con, 'inflow')){
           dbExecute(self$con, glue("DELETE FROM inflow WHERE \"거래일자\" < '{self$today}'"))
-          dbExecute(self$con, glue("DELETE FROM eval_profit WHERE \"연도\" = '{self$year}'"))
-          dbExecute(self$con, glue("DELETE FROM return WHERE \"기준일\" = '{self$today}'"))
         }
       }, error = function(e) {
         # 테이블이 없거나 권한 문제 등 에러 발생 시 무시하고 진행
@@ -689,10 +378,10 @@ MyAssets <- R6Class(
       self$days <- seq(make_date(2024,1,1), 
                        self$today,
                        by='day')
-      suppressWarnings({
-        self$ks <- KrxStocks$new(self$pw)
-        self$ks$get_stock_list2()
-      })
+      
+      if (is.null(self$bl)) {
+        self$bl <- AutoInvest$new(self$pw, 'boolio')
+      }
       
       self$acct_order <- c("한투","불리오","엔투하영","금현물", 
                            "한투ISA","엔투ISA","엔투저축연금",
@@ -710,9 +399,99 @@ MyAssets <- R6Class(
       
     },
     
-    ## 2.(공통) 주가 업데이트====
+    ## 2.(공통) 가격 업데이트====
     update_new_price = function(){
-      self$ks$get_stock_list2()
+      
+      #1) 환율
+      
+      get_exchange_rate <- function(cur='달러'){
+        
+        num <- c('달러'= 1, '엔'= 2, '유로'=3, '위안'=4)
+        suppressWarnings({
+          (read_html("http://finance.naver.com/marketindex/") %>% 
+             html_nodes("div.head_info > span.value")
+          )[num[cur]] %>%
+            html_text() %>% 
+            readr::parse_number()
+        })
+      }
+      
+      self$ex_usd <- get_exchange_rate('달러')
+      self$ex_jpy <- get_exchange_rate('엔')/100
+      
+      
+      #2) 국내주식 종목/ETF 종가
+      
+      all_codes <- tibble(self$bs_pl_a) %>% 
+        bind_rows(
+          tibble(self$bs_pl_p)
+        ) %>% 
+        filter(보유수량!=0) %>% 
+        .$종목코드
+      
+      target_codes <- unique(all_codes[str_detect(all_codes, 
+                                                  "^\\d[a-zA-Z0-9]{4}\\d$")])
+      
+      closing_prices <-  
+        tibble(종목코드 = target_codes,
+               종가 = self$bl$get_current_price(target_codes))
+      
+      #3) 금가격 종가
+      
+      url <- "https://api.stock.naver.com/marketindex/metals/M04020000"
+      
+      tryCatch({
+        # 1. API 요청 (httr 패키지 사용)
+        resp <- GET(url = url)
+        
+        # 2. JSON 파싱 (jsonlite 패키지 사용)
+        # functions.R 상단에 library(httr), library(jsonlite)가 선언되어 있어 바로 사용 가능합니다.
+        json_data <- content(resp, as = 'text', encoding = 'UTF-8') %>% 
+          jsonlite::fromJSON()
+        
+        # 3. 현재가(closePrice) 추출 및 숫자 변환
+        # get_exchange_rate 함수처럼 쉼표가 포함된 문자열을 숫자로 변환하기 위해 readr::parse_number 사용
+        price <- json_data$closePrice %>% 
+          readr::parse_number()
+        
+        gold <- tibble(종목코드='04020000', 종가=price)
+        
+      }, error = function(e){
+        # 에러 발생 시 NA 반환 (기존 get_exchange_rate 스타일은 경고 억제만 되어 있으나, 안전을 위해 예외처리)
+        message("금 시세 조회 실패")
+        gold <- tibble()
+      })
+      
+      #4) 펀드 기준가가
+      
+      
+      get_fund_price <- function(code){
+        map_dbl(code, function(x){
+          x %>% 
+            {
+              paste0('https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=',.)
+            } %>% 
+            read_html() %>%
+            html_element(xpath='/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]') %>% 
+            html_text() %>% 
+            stringr::str_remove(',') %>% 
+            as.numeric()
+        })
+      }
+      
+      fund_codes <- all_codes[(str_sub(all_codes, 1, 2) == 'K5')]
+      if(length(fund_codes) > 0) {
+        fund_prices <- tibble(종목코드 = fund_codes, 종가 = get_fund_price(fund_codes)/1000)
+      } else {
+        fund_prices <- tibble()
+      }
+      
+      
+      #5) 결합
+      
+      self$closing_prices <- 
+        bind_rows(closing_prices, gold, fund_prices)
+      
     },
     
     ## 3.(거래내역) 거래내역 기록 테이블====
@@ -969,28 +748,10 @@ MyAssets <- R6Class(
     ## 7.(평가금액)투자자산 평가반영 잔액-손익 테이블 생성====
     evaluate_bs_pl_assets = function() {
       
-      # if (is.null(self$bl) && is.null(self$my)) {
-      if (is.null(self$bl)) {
-        self$bl <- AutoInvest$new(self$pw, 'boolio')
-        # self$my <- AutoInvest$new('my')
-      }
-      
-      
-      # p_lotte <- as.integer(self$bl$get_current_price("011170")$stck_prpr)
-      # q_lotte <- filter(self$bs_pl_book_a, 
-      #                   종목명=='롯데케미칼', 
-      #                   거래일자 == self$today)$보유수량
-      
       price <- self$assets %>%
         select(계좌, 종목코드, 상품명, 평가금액) %>% 
-        # mutate(평가금액 = replace(평가금액, 
-        #                       상품명 == '우리사주 롯데케미칼', 
-        #                       p_lotte*q_lotte)) %>% 
         filter(평가금액!=0) %>% 
         bind_rows(
-          # mutate(self$my$inquire_balance(), 계좌 = '한투'),
-          # mutate(self$my$inquire_balance_ovs(), 계좌 = '한투'),
-          # mutate(self$my$inquire_balance_ovs('JPY'), 계좌 = '한투'),
           mutate(self$bl$inquire_balance_ovs(), 계좌 = '불리오')
         ) %>%
         select(계좌, 종목코드,평가금액) %>% as.data.table()
@@ -998,13 +759,12 @@ MyAssets <- R6Class(
       
       bs_pl <- self$bs_pl_a
       
-      closing_prices <- as.data.table(self$ks$stock_list)[, .(종목코드, 종가)]
       last_eval <- self$assets %>% 
         select(계좌, 종목코드, 기초평가손익) %>% 
         as.data.table()
       
       bs_pl <- merge(bs_pl, price, by=c("계좌","종목코드"), all.x=TRUE)
-      bs_pl <- merge(bs_pl, closing_prices, by='종목코드', all.x=TRUE)
+      bs_pl <- merge(bs_pl, self$closing_prices, by='종목코드', all.x=TRUE)
       bs_pl <- merge(bs_pl, last_eval, by=c("계좌","종목코드"), all.x=TRUE)
       
       bs_pl <- bs_pl[평잔 > 0.02]
@@ -1033,42 +793,23 @@ MyAssets <- R6Class(
       price <- self$pension %>%
         select(계좌, 종목코드, 평가금액) %>% 
         filter(평가금액!=0) %>% as.data.table()
-      
-      get_fund_price <- function(code){
-        map_dbl(code, function(x){
-          x %>% 
-            {
-              paste0('https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=',.)
-            } %>% 
-            read_html() %>%
-            html_element(xpath='/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]') %>% 
-            html_text() %>% 
-            stringr::str_remove(',') %>% 
-            as.numeric()
-        })
-      }
-      
+     
       bs_pl <- self$bs_pl_p
-      closing_prices <- as.data.table(self$ks$stock_list)[, .(종목코드, 종가)]
+
       last_eval <- self$pension %>% 
         select(계좌, 종목코드, 기초평가손익) %>% 
         as.data.table()
       
       bs_pl <- merge(bs_pl, price, by=c("계좌","종목코드"), all.x=TRUE)
-      bs_pl <- merge(bs_pl, closing_prices, by='종목코드', all.x=TRUE)
+      bs_pl <- merge(bs_pl, self$closing_prices, by='종목코드', all.x=TRUE)
       bs_pl <- merge(bs_pl, last_eval, by=c("계좌","종목코드"), all.x=TRUE)
       
       bs_pl <- bs_pl[평잔 > 0.02]
       bs_pl[, 장부금액 := fifelse(장부금액 < 1, 0, 장부금액)]
       
-      fund_codes <- bs_pl[(str_sub(종목코드, 1, 2) == 'K5')&(장부금액>0), 종목코드]
-      if(length(fund_codes) > 0) {
-        fund_prices <- data.table(종목코드 = fund_codes, 기준가 = get_fund_price(fund_codes))
-        bs_pl <- merge(bs_pl, fund_prices, by='종목코드', all.x=TRUE)
-      } else { bs_pl[, 기준가 := NA_real_] }
-      
       bs_pl[, 기초평가손익 := fifelse(is.na(기초평가손익), 0, 기초평가손익)]
-      bs_pl[, 평가금액 := fcase(!is.na(평가금액), 평가금액, !is.na(종가), 종가 * 보유수량, !is.na(기준가), 기준가/1000 * 보유수량, rep(TRUE, .N), 장부금액)]
+      bs_pl[, 평가금액 := fcase(!is.na(평가금액), 평가금액, 
+                            !is.na(종가), 종가 * 보유수량, rep(TRUE, .N), 장부금액)]
       
       bs_pl[, `:=`(평가손익 = 평가금액 - 장부금액)]
       bs_pl[, `:=`(평가손익증감 = 평가손익-기초평가손익)]
@@ -1120,151 +861,6 @@ MyAssets <- R6Class(
       df3 %>% bind_rows(df4)
     },
     
-    ##10.(배분현황) 자산군별/계좌별 손익현황 생성2
-    # compute_total2 = function(){
-    #   
-    #   df <- self$bs_pl_mkt_a
-    #   
-    #   usd_bs <- round(filter(df, 통화=='달러')$장부금액 * self$ex_usd,0)
-    #   jpy_bs <- round(filter(df, 통화=='엔화')$장부금액 * self$ex_jpy,0)
-    #   usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
-    #   jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
-    #   usd_eqbal <- round(filter(df, 통화=='달러')$평잔 * self$ex_usd,0)
-    #   jpy_eqbal <- round(filter(df, 통화=='엔화')$평잔 * self$ex_jpy,0)
-    #   usd_rev <- round(filter(df, 통화=='달러')$수익 * self$ex_usd,0)
-    #   jpy_rev <- round(filter(df, 통화=='엔화')$수익 * self$ex_jpy,0)
-    #   usd_prof <- round(filter(df, 통화=='달러')$실현손익 * self$ex_usd,0)
-    #   jpy_prof <- round(filter(df, 통화=='엔화')$실현손익 * self$ex_jpy,0)
-    #   
-    #   df2 <- df %>%
-    #     mutate(
-    #       장부금액 = replace(장부금액, 통화 == '달러', usd_bs),
-    #       장부금액 = replace(장부금액, 통화 == '엔화', jpy_bs),
-    #       평가금액 = replace(평가금액, 통화 == '달러', usd_eval),
-    #       평가금액 = replace(평가금액, 통화 == '엔화', jpy_eval),
-    #       평잔 = replace(평잔, 통화 == '달러', usd_eqbal),
-    #       평잔 = replace(평잔, 통화 == '엔화', jpy_eqbal),
-    #       수익 = replace(수익, 통화 == '달러', usd_rev),
-    #       수익 = replace(수익, 통화 == '엔화', jpy_rev),
-    #       실현손익 = replace(실현손익, 통화 == '달러', usd_prof),
-    #       실현손익 = replace(실현손익, 통화 == '엔화', jpy_prof)) %>%  
-    #     bind_rows(self$bs_pl_mkt_p) %>% 
-    #     group_by(계좌, 자산군, 통화) %>% 
-    #     summarise(across(c(장부금액, 평가금액, 평잔, 
-    #                        수익, 실현손익), sum ), .groups = 'drop') %>% 
-    #     mutate(평가손익 = 평가금액-장부금액,
-    #            세전수익률 = 수익/평잔*100,
-    #            세후수익률 = 실현손익/평잔*100,
-    #            평가수익률 = 평가손익/장부금액*100) %>%
-    #     mutate(계좌 = factor(계좌, 
-    #                        levels = c("한투","불리오","엔투하영","금현물",
-    #                                   "한투ISA","엔투ISA",
-    #                                   "엔투저축연금","한투연금저축", 
-    #                                   "미래DC", "농협IRP","엔투IRP","합계")),
-    #            자산군 = factor(자산군, 
-    #                         levels = c("","주식","대체자산",
-    #                                    "채권","현금성", 
-    #                                    "외화자산"))) %>% 
-    #     ungroup()
-    #   
-    #   df3 <- df2 %>% 
-    #     mutate(자산군="") %>% 
-    #     group_by(계좌, 자산군, 통화) %>% 
-    #     summarise(across(c(장부금액, 평가금액, 평잔, 
-    #                        수익, 실현손익), sum ), .groups = 'drop') %>% 
-    #     ungroup() %>% 
-    #     mutate(평가손익 = 평가금액-장부금액,
-    #            세전수익률 = 수익/평잔*100,
-    #            세후수익률 = 실현손익/평잔*100,
-    #            평가수익률 = 평가손익/장부금액*100)
-    #   
-    #   df4 <- df3 %>% filter(통화=='원화') %>% 
-    #     summarise(계좌='합계',자산군='',통화='',
-    #               across(장부금액:실현손익,sum)) %>% 
-    #     mutate(평가손익 = 평가금액-장부금액,
-    #            세전수익률 = 수익/평잔*100,
-    #            세후수익률 = 실현손익/평잔*100,
-    #            평가수익률 = 평가손익/장부금액*100)
-    #   
-    #   df5 <- df2 %>% 
-    #     filter(통화=="원화") %>% 
-    #     mutate(계좌="전체") %>% 
-    #     group_by(계좌, 자산군, 통화) %>% 
-    #     summarise(across(c(장부금액, 평가금액, 평잔, 
-    #                        수익, 실현손익), sum ),
-    #               .groups = 'drop') %>% 
-    #     ungroup() %>% 
-    #     bind_rows(
-    #       df2 %>% 
-    #         filter(통화!='원화') %>% mutate(계좌='전체') %>% 
-    #         group_by(계좌, 자산군, 통화) %>% 
-    #         summarise(across(c(장부금액, 평가금액, 평잔, 
-    #                            수익, 실현손익), sum ), .groups = 'drop') %>% 
-    #         ungroup()
-    #     ) %>% 
-    #     mutate(계좌='전체',
-    #            평가손익 = 평가금액-장부금액,
-    #            세전수익률 = 수익/평잔*100,
-    #            세후수익률 = 실현손익/평잔*100,
-    #            평가수익률 = 평가손익/장부금액*100) %>% 
-    #     mutate(자산군 = factor(자산군, 
-    #                         levels = c("","주식","대체자산",
-    #                                    "채권","현금성", 
-    #                                    "외화자산"))) %>% 
-    #     arrange(자산군, desc(계좌))
-    #   
-    #   
-    #   df6 <- bind_rows(df5, df4,
-    #                    
-    #                    ( bind_rows(df2, df3) %>%
-    #                        mutate(계좌 = factor(계좌, 
-    #                                           levels = c("한투","불리오","엔투하영","금현물",
-    #                                                      "한투ISA","엔투ISA",
-    #                                                      "엔투저축연금","한투연금저축", 
-    #                                                      "미래DC", "농협IRP","엔투IRP","합계")),
-    #                               자산군 = factor(자산군, 
-    #                                            levels = c("","주식","대체자산",
-    #                                                       "채권","현금성", 
-    #                                                       "외화자산"))) %>% 
-    #                        arrange(계좌, 자산군))) %>% 
-    #     select(-장부금액,-수익)
-    #   
-    #   
-    #   df7 <- df3 %>% group_by(계좌) %>% summarise(총평가=sum(평가금액)) %>% 
-    #     mutate(총평가 = if_else(계좌=='한투', 
-    #                          총평가-filter(df2,자산군=='외화자산')$평가금액, 총평가))
-    #   
-    #   df8 <- df6 %>% 
-    #     left_join(df7, by='계좌') %>% 
-    #     mutate(총평가=if_else(계좌=='전체'|계좌=='합계',
-    #                        df4$평가금액,총평가),
-    #            총평가=if_else(자산군=='외화자산',0,총평가),
-    #            비중 = 평가금액/총평가*100, .after=3) %>% 
-    #     select(-총평가) %>% 
-    #     mutate(비중=if_else(자산군=='외화자산',0,비중),
-    #            비중=if_else((계좌=='한투'&자산군==''),0,비중))
-    #   
-      
-      # df9 <- self$read_obj('return') %>% 
-      #   filter(year(기준일)==year(self$today)-1) %>% 
-      #   filter(기준일==max(기준일, na.rm=T), 
-      #          세부자산군=='', 세부자산군2=='') %>% 
-      #   collect() %>% transmute(자산군=c('','대체자산','주식',
-      #                                 '채권','현금성','외화자산'), 
-      #                           통화=c('','원화','원화','원화','원화','원화'), 
-      #                           전년평가손익=평가손익)
-      # 
-      # self$t_comm3 <- df8 %>% filter(계좌 %in% c("전체","합계")) %>% 
-      #   left_join(df9, by=c('자산군','통화')) %>% 
-      #   mutate(평가손익증감=평가손익-전년평가손익, 
-      #          총손익 = 실현손익+평가손익증감, .after='평가손익') %>% 
-      #   select(-평가수익률, -평가손익, -전년평가손익) %>% 
-      #   mutate(총수익률=총손익/평잔*100)
-      
-    #   self$t_comm4 <- df8 %>% filter(!(계좌 %in% c("전체","합계")))
-    #   
-    # },
-    
     ##10.(보유현황) 자산군별/상품별 보유현황 생성====
     compute_total = function(){
       df <- self$bs_pl_mkt_a
@@ -1293,6 +889,15 @@ MyAssets <- R6Class(
               평가금액=sum(평가금액),.groups = 'drop'),
           by=c('계좌','종목코드'))
 
+      tryCatch({
+        if(dbExistsTable(self$con, 'eval_profit')){
+          dbExecute(self$con, glue("DELETE FROM eval_profit WHERE \"연도\" = '{self$year}'"))
+        }
+      }, error = function(e) {
+        # 테이블이 없거나 권한 문제 등 에러 발생 시 무시하고 진행
+      })
+      
+      
       df00 %>% 
         filter(통화=='원화') %>% 
         transmute(
@@ -1372,47 +977,6 @@ MyAssets <- R6Class(
         select(!c(상품명, 장부금액)) %>%
         bind_rows(df6 %>%
                     select(-보유수량))
-
-      #DB 업로드
-      # df7 %>%
-      #   mutate(기준일=self$today, .before=1) %>%
-      #   self$upsert('return', c('기준일','자산군','세부자산군','세부자산군2'))
-
-      # 
-      # dates <- self$read_obj('return') %>%
-      #   distinct(기준일) %>%
-      #   arrange(desc(기준일)) %>%
-      #   pull()
-      # 
-      # start <- dates[1]
-      # end <- dates[2]
-      # 
-      # #전일대비손익
-      # df8 <- self$read_obj('return') %>%
-      #   filter(기준일 %in% c(end, start)) %>%
-      #   collect() %>%
-      #   select(-평가금액,-평가수익률) %>%
-      #   spread(key=기준일, value=평가손익, drop=T) %>%
-      #   rename_with(~c("전일","당일"), .cols=4:5) %>%
-      #   mutate(`전일대비(손익)` = .[[5]] - .[[4]]) %>%
-      #   select(!전일:당일)
-      # 
-      # #전일대비수익률
-      # df9 <- self$read_obj('return') %>%
-      #   filter(기준일 %in% c(end, start)) %>%
-      #   collect() %>%
-      #   select(-평가금액,-평가손익) %>%
-      #   spread(key=기준일, value=평가수익률, drop=T) %>%
-      #   rename_with(~c("전일","당일"), .cols=4:5) %>%
-      #   transmute(`전일대비(수익률)` = .[[5]] - .[[4]])
-      # 
-      # #전일대비테이블 최종
-      # self$t_class <-
-      #   df7 %>%
-      #   left_join(
-      #     df8 %>% bind_cols(df9),
-      #     by=c('자산군','세부자산군','세부자산군2')
-      #   )
 
       #상품별 보유현황테이블1 최종
       self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>%
@@ -1734,13 +1298,19 @@ MyAssets <- R6Class(
       
       # 자산군별 손익현황 DB업로드
       
+      tryCatch({
+        if(dbExistsTable(self$con, 'return')){
+          dbExecute(self$con, glue("DELETE FROM return WHERE \"기준일\" = '{self$today}'"))
+        }
+      }, error = function(e) {
+        # 테이블이 없거나 권한 문제 등 에러 발생 시 무시하고 진행
+      })
+      
       self$t_comm3 %>% 
         select(자산군:세부자산군2, 평가금액,총손익,총수익률) %>% 
         mutate(기준일=self$today, .before=1) %>% 
         self$upsert('return',c('기준일','자산군','세부자산군','세부자산군2'))
-      
-      
-      
+
       df7 <- df1 %>% 
         group_by(계좌, 자산군) %>% 
         summ_fun()
@@ -1924,8 +1494,8 @@ MyAssets <- R6Class(
     
     ##18.(메서드) 평가금액 계산====
     run_valuation = function(){
-      self$ex_usd <- get_exchange_rate('달러')
-      self$ex_jpy <- get_exchange_rate('엔')/100
+     
+      self$update_new_price()
       self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
       self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
       self$compute_total()
@@ -1964,162 +1534,3 @@ MyAssets <- R6Class(
     
   )
 )
-
-
-#[함수] 공휴일 얻기====
-get_holidays <- function(start_year, end_year){
-  service_key <- get_config()$holiday
-  request_url <- 'http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo'
-  
-  out <- tibble()
-  for (request_year in start_year:end_year) {
-    for (request_month in sprintf("%02d", 1:12)) {
-      x <- GET(url = request_url,
-               query = list(serviceKey = I(service_key),
-                            solYear = request_year,
-                            solMonth = request_month))
-      
-      # export data from json
-      x <- x %>% 
-        content(as = "text", encoding = "UTF-8") %>% 
-        fromJSON()
-      
-      if (x$response$body$items != "") {
-        x <- as_tibble(x$response$body$items$item)%>% 
-          transmute(
-            기준일=as.Date(as.character(locdate), 
-                        format='%Y%m%d'), 
-            공휴일명=dateName)
-        
-        out <- out %>% 
-          bind_rows(x)
-      }
-    }
-  }
-  return(out)
-}
-
-#[클래스] Scrap_econ ====
-Scrap_econ <- R6Class(
-  
-  classname = 'Scrap_econ',
-  inherit = MyData,
-  public=list(
-
-    ##1. 속성 초기화 ====
-    initialize = function(){
-      self$con <- dbConnect(SQLite(), 'mydata.sqlite', bigint = 'numeric',
-                            extended_types=T)
-      get_config()$ecos %>% ecos.setKey()
-    },
-    
-    ##2. 일별 금융데이터 수집====
-    scrap_daily = function(start=NULL, end=NULL, item=NULL){
-      
-      if(is.null(start)){
-        start <- self$read_obj('econ_daily') %>% 
-          distinct(date) %>% 
-          dbplyr::window_order(desc(date)) %>% 
-          filter(row_number()==1) %>% pull() %>% -10
-      }
-      
-      if(is.null(end)){end <- today()}
-      
-      info <- self$read('idx_info')
-      
-      if(!is.null(item)){info <- info %>% filter(item_name == item)}
-      
-      df <- info %>% 
-        filter(site=='ecos') %>%
-        select(stat_code, item_code, cycle, index) %>%
-        pmap_dfr(
-          ~tryCatch({
-            statSearch(stat_code = ..1,
-                       item_code1 = ..2,
-                       cycle = ..3,
-                       start_time = strftime(start,"%Y%m%d"),
-                       end_time = strftime(end,"%Y%m%d")
-            ) %>% 
-              as_tibble() %>% 
-              transmute(date = ymd(time), index = ..4, value = data_value)
-          }, error=function(e){
-            tibble()
-          }
-          )
-        )
-      
-      get_code <- list('fred' = c('economic.data', 'price'),
-                       'yahoo' = c("stock.prices", 'close'))
-      
-      
-      df2 <- info %>% 
-        filter(site!='ecos') %>%
-        select(item_code, site, index) %>% 
-        pmap_dfr(
-          ~tryCatch({
-            tq_get(..1, 
-                   get = get_code[[..2]][1], 
-                   from = start,
-                   to = end,
-            ) %>% 
-              as_tibble() %>% 
-              transmute(date = ymd(date), index = ..3, value= .data[[get_code[[..2]][2]]])
-          }, error=function(e){
-            tibble()
-          }
-          )
-        )
-      
-      bind_rows(df,df2) %>% 
-        filter(!is.na(value))
-    },
-    
-    ##3. 수집데이터 DB적재 ====
-    upsert_econ = function(record, table){
-      dbxUpsert(self$con, table, record, c("date", "index"))
-    },
-    
-    ##4. DB 일별데이터 조회 ====
-    query_daily = function(stats, start=NULL, end=NULL){
-      
-      if(is.null(start)){start <- '2000-01-01'}
-      if(is.null(end)){end <- today()}
-      
-      self$read_obj('econ_daily') %>% 
-        filter(between(date, start, end)) %>% 
-        right_join(
-          self$read_obj('idx_info') %>% 
-            filter(item_name %in% stats) %>% 
-            select(index, item_name),
-          by='index'
-        ) %>% 
-        select(date, item_name, value) %>% 
-        collect()
-    },
-    
-    ##5. 시계열 그래프 그리기 ====
-    plot_time_series = function(items, start=NULL, end=NULL){
-      
-      if(is.null(start)){start <- '2000-01-01'}
-      if(is.null(end)){end <- today()}
-      
-      self$query_daily(items) %>% 
-        filter(between_time(date, start, end)) %>% 
-        group_by(item_name) %>% 
-        plot_ly(x = ~date, y = ~value, color=~item_name, colors = RColorBrewer::brewer.pal(3, "Set2")) %>% 
-        add_lines() %>%
-        layout(showlegend = T, 
-               xaxis = list(
-                 tickformat = "%Y-%m",
-                 rangeselector=list(
-                 buttons=list(
-                   list(count=1, label="YTD", step="year", stepmode="todate"),
-                   list(count=3, label="3m", step="month", stepmode="backward"),
-                   list(count=1, label="1y", step="year", stepmode="backward"),
-                   list(count=5, label="5y", step="year", stepmode="backward"),
-                   list(count=10, label="10y", step="year", stepmode="backward")
-                 ))))
-    }
-  )
-)
-

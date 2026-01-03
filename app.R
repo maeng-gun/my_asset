@@ -23,7 +23,7 @@ sidebar <- dashboardSidebar(
   sidebarMenu(
     id = 'menu_tabs',
     actionButton('reval', '평가금액 재계산'),
-    actionButton('kis','주가 업데이트'),
+    # actionButton('kis','주가 업데이트'),
     br(),
     sidebarHeader("포트폴리오 관리"),
     menuItem(
@@ -769,14 +769,14 @@ server <- function(input, output, session) {
       w1$hide()
     })  
     
-    observeEvent(input$kis,{
-      w1$show()
-      
-      ma$update_new_price()
-      sk_v(!sk_v())
-      
-      w1$hide()
-    })  
+    # observeEvent(input$kis,{
+    #   w1$show()
+    #   
+    #   ma$update_new_price()
+    #   sk_v(!sk_v())
+    #   
+    #   w1$hide()
+    # })  
     
     ma_v <- reactive({
       sk_v()
