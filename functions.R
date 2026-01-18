@@ -1050,14 +1050,24 @@ MyAssets <- R6Class(
         mutate(과부족 = 평가금액-목표금액)
       
       self$account_allocation <- self$t_comm2 %>%
-        select(계좌, 자산군, 평가금액) %>%
+        select(계좌, 자산군, 세부자산군, 세부자산군2, 평가금액) %>%
         mutate(자산군 = if_else(자산군 == "" | is.na(자산군), 
                              "합계", as.character(자산군))) %>% 
-        group_by(계좌, 자산군) %>% 
+        group_by(계좌, 자산군, 세부자산군, 세부자산군2) %>% 
         summarise(평가금액=sum(평가금액),.groups = 'drop') %>%
-        pivot_wider(names_from = 자산군, values_from = 평가금액) %>% 
-        select(계좌, 주식, 대체자산, 채권, 현금성, 합계)%>%
-        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE))
+        pivot_wider(names_from = 계좌, values_from = 평가금액) %>% 
+        mutate(
+          자산군 = factor(자산군, levels = self$class_order),
+          세부자산군 = factor(세부자산군, levels = self$class2_order),
+          세부자산군2 = factor(세부자산군2, levels = self$class3_order),
+        ) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2) %>% 
+        select(자산군, 세부자산군, 세부자산군2,
+               한투연금저축,엔투저축연금,미래DC,엔투IRP,농협IRP,
+               엔투ISA,한투ISA,엔투하영,불리오,금현물,한투)
+               
+               
+               
     },
     
     

@@ -419,7 +419,7 @@ body <- dashboardBody(
           title = "총 자산배분",
           fluidRow(
             column(
-              width = 2,
+              width = 3,
               box(
                 width = 12,
                 title = "목표 비중 설정",
@@ -448,17 +448,21 @@ body <- dashboardBody(
               ) # box 닫기 (쉼표 없음)
             ), # column 닫기 (쉼표 있음)
             column(
-              width = 6,
+              width = 9,
               uiOutput('allocation_table')
-            ), # column 닫기 (쉼표 없음)
-            column(
-              width = 4,
-              uiOutput('account_allocation_table')
             )
           ) # fluidRow 닫기
         ), # tabPanel 닫기
 
-        ### b. 상품별 보유현황1====
+        ### b. 계좌별 자산배분====
+        tabPanel(
+          title="계좌별 자산배분",
+          fluidRow(
+            uiOutput('account_allocation_table')
+          )
+        ),
+        
+        ### c. 상품별 보유현황1====
         tabPanel(
           title="상품별 보유현황1",
           fluidRow(
@@ -466,7 +470,7 @@ body <- dashboardBody(
           )
         ),
         
-        ### c. 상품별 보유현황2====
+        ### d. 상품별 보유현황2====
         tabPanel(
           title="상품별 보유현황2",
           fluidRow(
@@ -1371,7 +1375,7 @@ server <- function(input, output, session) {
     update_new_allo <- reactive({
       
       input$allo_renew
-      df <- ma_b()$read('allocation')
+      df <- ma_v()$read('allocation')
       
       updateNumericInput(inputId = 'ass_bond', 
                          value = df$목표1[[7]])
@@ -1398,7 +1402,7 @@ server <- function(input, output, session) {
     }, once = T)
     
     observeEvent(input$allo_renew,{
-      df <- ma$read('allocation') %>% 
+      df <- ma_v$read('allocation') %>% 
         mutate(목표1 = c(input$ass_alter, NA, NA,
                        input$ass_stock, NA, NA,
                        input$ass_bond, NA, NA, NA, NA, NA),
@@ -1433,6 +1437,8 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
+    ## b. 계좌별 자산배분====
+    
     output$account_allocation_table <- renderUI({
       req(ma_v())
       
@@ -1445,7 +1451,7 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
-    ## b. 상품별 보유현황1====
+    ## c. 상품별 보유현황1====
     output$t_commodity <- renderUI({
       ma_v()$t_comm |>
         flextable() |>
@@ -1456,7 +1462,7 @@ server <- function(input, output, session) {
         htmltools_value()
     })
     
-    ## c. 상품별 보유현황2====
+    ## d. 상품별 보유현황2====
     output$t_commodity2 <- renderUI({
       ma_v()$t_comm2 |>
         flextable() |>
