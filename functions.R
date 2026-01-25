@@ -356,7 +356,7 @@ MyAssets <- R6Class(
     cur_order=NULL, class_order=NULL, class2_order=NULL,
     class3_order=NULL, t_allocation=NULL, account_allocation=NULL,
     y_num=NULL, grid=NULL, future_eval=NULL, closing_prices=NULL,
-    
+    account_allocation2=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(pw) {
@@ -395,7 +395,7 @@ MyAssets <- R6Class(
                              "엔화자산")
       self$class3_order <- c("","인덱스","종목","테마","원자재","에너지",
                              "부동산","인프라","선진국","신흥국","단기ETF",
-                             "원화상품","외환","원화")
+                             "원화상품","외화상품","외환","원화")
       
     },
     
@@ -1064,10 +1064,18 @@ MyAssets <- R6Class(
         arrange(자산군, 세부자산군, 세부자산군2) %>% 
         select(자산군, 세부자산군, 세부자산군2,
                한투연금저축,엔투저축연금,미래DC,엔투IRP,농협IRP,
-               엔투ISA,한투ISA,엔투하영,불리오,금현물,한투)
-               
-               
-               
+               엔투ISA,한투ISA,엔투하영,불리오,금현물,한투) %>% 
+        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE))
+      
+      self$account_allocation2 <- self$read('acct_allo') %>% 
+        mutate(
+          자산군 = factor(자산군, levels = self$class_order),
+          세부자산군 = factor(세부자산군, levels = self$class2_order),
+          세부자산군2 = factor(세부자산군2, levels = self$class3_order),
+        ) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2) %>% 
+        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE))
+        
     },
     
     

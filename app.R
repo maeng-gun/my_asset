@@ -459,6 +459,9 @@ body <- dashboardBody(
           title="계좌별 자산배분",
           fluidRow(
             uiOutput('account_allocation_table')
+          ),
+          fluidRow(
+            uiOutput('account_allocation_table2')
           )
         ),
         
@@ -1445,10 +1448,24 @@ server <- function(input, output, session) {
       ma_v()$account_allocation %>%
         flextable() %>%
         theme_vanilla() %>%
-        colformat_double(j=2:6, digits = 0) %>%
+        colformat_double(j=4:15, digits = 0) %>%
         set_table_properties(layout = 'autofit') %>%
         align(align = "center", part = "all") %>%
         htmltools_value()
+      
+    })
+    
+    output$account_allocation_table2 <- renderUI({
+      req(ma_v())
+      
+      ma_v()$account_allocation2 %>%
+        flextable() %>%
+        theme_vanilla() %>%
+        colformat_double(j=4:15, digits = 0) %>%
+        set_table_properties(layout = 'autofit') %>%
+        align(align = "center", part = "all") %>%
+        htmltools_value()
+      
     })
     
     ## c. 상품별 보유현황1====
