@@ -1201,7 +1201,7 @@ MyAssets <- R6Class(
       
       d1 <- self$today - days(1)
       d7 <- self$today - weeks(1)
-      dm <- self$today %m-% months(3)
+      dm <- self$today %m-% months(1)
       dy <- self$today %m-% years(1)
       ly <- make_date(self$year-1,12,31)
       
