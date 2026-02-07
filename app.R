@@ -544,11 +544,19 @@ body <- dashboardBody(
           )
         ),
         
-        ###e. 상품별 손익현황====
+        ###e. 계좌별상품 손익현황====
         tabPanel(
-          title="상품별",
+          title="계좌별상품",
           fluidRow(
             uiOutput("bs_pl_mkt_a")
+          )
+        ),
+        
+        ###f. 자산군별상품 손익현황====
+        tabPanel(
+          title="자산군별상품",
+          fluidRow(
+            uiOutput("bs_pl_mkt_a2")
           )
         )
       )
@@ -1581,8 +1589,8 @@ server <- function(input, output, session) {
         flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=c(4:6,8:11), digits = 0) %>%
-        colformat_double(j=7, digits = 2) %>%
+        colformat_double(j=c(4:6, 8, 10, 12, 14), digits = 0) %>%
+        colformat_double(j=c(7, 9, 11, 13, 15), digits = 2) %>%
         htmltools_value()
     })
     
@@ -1615,11 +1623,25 @@ server <- function(input, output, session) {
       
     })
   
-    ## d. 상품별 손익현황====
+    ## d. 계좌별상품 손익현황====
   
     output$bs_pl_mkt_a <-renderUI({
       
       ma_v()$comm_profit %>%
+        flextable() %>%
+        theme_vanilla() %>%
+        merge_v(j = 1:6) %>% # 상위 분류 병합
+        colformat_double(j = 7:14, digits = 0) %>% # 금액형은 소수점 제거
+        colformat_double(j = 15:18, digits = 2) %>% # 수익률은 소수점 2자리
+        set_table_properties(layout = 'autofit', width = 1) %>%
+        htmltools_value(ft.align = 'center')
+    })
+    
+    ## e. 자산군별상품 손익현황====
+    
+    output$bs_pl_mkt_a2 <-renderUI({
+      
+      ma_v()$comm_profit2 %>%
         flextable() %>%
         theme_vanilla() %>%
         merge_v(j = 1:6) %>% # 상위 분류 병합

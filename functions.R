@@ -356,7 +356,7 @@ MyAssets <- R6Class(
     cur_order=NULL, class_order=NULL, class2_order=NULL,
     class3_order=NULL, t_allocation=NULL, account_allocation=NULL,
     y_num=NULL, grid=NULL, future_eval=NULL, closing_prices=NULL,
-    account_allocation2=NULL,
+    account_allocation2=NULL,comm_profit2=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(pw) {
@@ -1215,20 +1215,25 @@ MyAssets <- R6Class(
         left_join(
           filtered, by='기록일'
         ) %>% 
-        select(-기록일,-평가금액,-총수익률) %>% 
+        select(-기록일,-평가금액) %>% 
         mutate(
           전년도 = if_else(year(기준일)<self$year, T,F),
           기준일 = case_match(기준일, d1~'1d', d7~'7d', dm~'1m', 
                            dy~'1y', ly~'ly'))
       
       ldays <- past_value %>% filter(전년도) %>% distinct(기준일) %>% .$기준일
+      ldays2 <- paste0(ldays, '_')
       
-      past_value <- past_value %>% select(-전년도) %>% 
+      past_value1 <- past_value %>% select(-전년도, -총수익률) %>% 
         pivot_wider(names_from = 기준일, values_from = 총손익)
       
+      past_value2 <- past_value %>% select(-전년도, -총손익) %>% 
+        pivot_wider(names_from = 기준일, values_from = 총수익률) %>% 
+        rename(`ly_`=`ly`, `1d_`=`1d`,`7d_`=`7d`,`1m_`=`1m`,`1y_`=`1y`)
+      
       if(ly %in% c(d1,d7,dm,dy)){
-        past_value <- 
-          past_value %>% 
+        past_value1 <- 
+          past_value1 %>% 
           left_join(
             self$read_obj('return') %>% 
               filter(기준일 == ly) %>% 
@@ -1237,17 +1242,36 @@ MyAssets <- R6Class(
               collect(),
             by=c('자산군','세부자산군','세부자산군2')
           )
+        
+        past_value2 <- 
+          past_value2 %>% 
+          left_join(
+            self$read_obj('return') %>% 
+              filter(기준일 == ly) %>% 
+              select(-기준일, -평가금액,-총손익) %>% 
+              rename(ly_=총수익률) %>% 
+              collect(),
+            by=c('자산군','세부자산군','세부자산군2')
+          )
+        
       }
       
       self$t_comm3 %>% 
         select(자산군:세부자산군2, 평가금액, 평잔, 총손익, 총수익률) %>% 
         left_join(
-          past_value, by=c('자산군','세부자산군','세부자산군2')
+          past_value1, by=c('자산군','세부자산군','세부자산군2')
         ) %>% 
         mutate(across(any_of(ldays), ~ ly - .x + 총손익)) %>% 
         mutate(across(any_of(setdiff(c('1d','7d','1m','1y'),ldays)), ~ 총손익 - .x)) %>% 
         select(-ly) %>% 
-        select(자산군:총수익률,'1d','7d','1m','1y')
+        left_join(
+          past_value2, by=c('자산군','세부자산군','세부자산군2')
+        ) %>% 
+        mutate(across(any_of(ldays2), ~ly_ - .x + 총수익률)) %>% 
+        mutate(across(any_of(setdiff(c('1d_','7d_','1m_','1y_'),ldays2)), 
+                      ~ 총수익률 - .x)) %>% 
+        select(-ly_) %>% 
+        select(자산군:총수익률,'1d','1d_','7d','7d_','1m','1m_','1y','1y_')
     },
     
     
@@ -1364,6 +1388,8 @@ MyAssets <- R6Class(
           계좌 = factor(계좌, levels = self$acct_order),
           통화 = factor(통화, levels = self$cur_order),
           자산군 = factor(자산군, levels = self$class_order),
+          세부자산군 = factor(세부자산군, levels = self$class2_order),
+          세부자산군2 = factor(세부자산군2, levels = self$class3_order),
           비용률 = if_else(평잔 != 0, 비용 / 평잔 * 100, 0),
           실현수익률 = if_else(평잔 != 0, 실현손익 / 평잔 * 100, 0),
           평가증감률 = if_else(평잔 != 0, 평가손익증감 / 평잔 * 100, 0),
@@ -1373,6 +1399,25 @@ MyAssets <- R6Class(
         select(계좌, 통화, 자산군, 세부자산군, 세부자산군2, 종목명, 보유수량, 
                장부금액, 평잔, 평가금액, 평가손익, 실현손익, 평가손익증감,
                총손익,비용률, 실현수익률, 평가증감률, 총수익률)
+      
+      self$comm_profit2 <- bind_rows(df_a, df_p) %>%
+        mutate(
+          계좌 = factor(계좌, levels = self$acct_order),
+          통화 = factor(통화, levels = self$cur_order),
+          자산군 = factor(자산군, levels = self$class_order),
+          세부자산군 = factor(세부자산군, levels = self$class2_order),
+          세부자산군2 = factor(세부자산군2, levels = self$class3_order),
+          비용률 = if_else(평잔 != 0, 비용 / 평잔 * 100, 0),
+          실현수익률 = if_else(평잔 != 0, 실현손익 / 평잔 * 100, 0),
+          평가증감률 = if_else(평잔 != 0, 평가손익증감 / 평잔 * 100, 0),
+          총수익률 = 실현수익률 + 평가증감률
+        ) %>%
+        arrange(자산군, 세부자산군, 세부자산군2, 통화, 종목명, 계좌, desc(평가금액)) %>%
+        select(자산군, 세부자산군, 세부자산군2, 종목명, 계좌, 통화,  보유수량, 
+               장부금액, 평잔, 평가금액, 평가손익, 실현손익, 평가손익증감,
+               총손익,비용률, 실현수익률, 평가증감률, 총수익률)
+      
+      
     },
     
     ## 17. (유동성관리) 가용자금 분석 테이블 생성 ====
