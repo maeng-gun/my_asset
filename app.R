@@ -414,45 +414,45 @@ body <- dashboardBody(
         width=12,
         status='primary',
         type='tabs',
-        ### a. 총 자산배분====
-        tabPanel(
-          title = "총 자산배분",
-          fluidRow(
-            column(
-              width = 3,
-              box(
-                width = 12,
-                title = "목표 비중 설정",
-                status = "info",
-                solidHeader = TRUE,
-                collapsible = FALSE,
-                div("자산군", align = 'center'),
-                numericInput(inputId = 'ass_bond', label = "채권", value = 0),
-                numericInput(inputId = 'ass_stock', label = "주식", value = 0),
-                numericInput(inputId = 'ass_alter', label = "대체투자", value = 0),
-                br(),
-                div("세부자산군", align = 'center'),
-                numericInput(inputId = 'ass_bond_sol', label = "채권_국채", value = 0),
-                numericInput(inputId = 'ass_bond_nr', label = "채권_만기무위험", value = 0),
-                numericInput(inputId = 'ass_bond_cor', label = "채권_만기회사채", value = 0),
-                numericInput(inputId = 'ass_bond_ig', label = "채권_투자등급", value = 0),
-                numericInput(inputId = 'ass_stock_dev', label = "주식_신흥국", value = 0),
-                numericInput(inputId = 'ass_alter_com', label = "대체투자_상품", value = 0),
-                br(),
-                actionButton(
-                  inputId = "allo_renew",
-                  label = "수정",
-                  status = "info",
-                  width = '100%'
-                )
-              ) # box 닫기 (쉼표 없음)
-            ), # column 닫기 (쉼표 있음)
-            column(
-              width = 9,
-              uiOutput('allocation_table')
-            )
-          ) # fluidRow 닫기
-        ), # tabPanel 닫기
+        ### a. 총 자산배분
+        # tabPanel(
+        #   title = "총 자산배분",
+        #   fluidRow(
+        #     column(
+        #       width = 3,
+        #       box(
+        #         width = 12,
+        #         title = "목표 비중 설정",
+        #         status = "info",
+        #         solidHeader = TRUE,
+        #         collapsible = FALSE,
+        #         div("자산군", align = 'center'),
+        #         numericInput(inputId = 'ass_bond', label = "채권", value = 0),
+        #         numericInput(inputId = 'ass_stock', label = "주식", value = 0),
+        #         numericInput(inputId = 'ass_alter', label = "대체투자", value = 0),
+        #         br(),
+        #         div("세부자산군", align = 'center'),
+        #         numericInput(inputId = 'ass_bond_sol', label = "채권_국채", value = 0),
+        #         numericInput(inputId = 'ass_bond_nr', label = "채권_만기무위험", value = 0),
+        #         numericInput(inputId = 'ass_bond_cor', label = "채권_만기회사채", value = 0),
+        #         numericInput(inputId = 'ass_bond_ig', label = "채권_투자등급", value = 0),
+        #         numericInput(inputId = 'ass_stock_dev', label = "주식_신흥국", value = 0),
+        #         numericInput(inputId = 'ass_alter_com', label = "대체투자_상품", value = 0),
+        #         br(),
+        #         actionButton(
+        #           inputId = "allo_renew",
+        #           label = "수정",
+        #           status = "info",
+        #           width = '100%'
+        #         )
+        #       ) # box 닫기 (쉼표 없음)
+        #     ), # column 닫기 (쉼표 있음)
+        #     column(
+        #       width = 9,
+        #       uiOutput('allocation_table')
+        #     )
+        #   ) # fluidRow 닫기
+        # ), # tabPanel 닫기
 
         ### b. 계좌별 자산배분====
         tabPanel(
@@ -460,9 +460,9 @@ body <- dashboardBody(
           fluidRow(
             uiOutput('account_allocation_table')
           ),
-          fluidRow(
-            uiOutput('account_allocation_table2')
-          )
+          # fluidRow(
+          #   uiOutput('account_allocation_table2')
+          # )
         ),
         
         ### c. 상품별 보유현황1====
@@ -1381,72 +1381,72 @@ server <- function(input, output, session) {
     # 2) 자산배분 및 보유현황 ====
     
     
-    ## a. 총 자산배분 ====
+    ## a. 총 자산배분
     
-    update_new_allo <- reactive({
-      
-      input$allo_renew
-      df <- ma_v()$read('allocation')
-      
-      updateNumericInput(inputId = 'ass_bond', 
-                         value = df$목표1[[7]])
-      updateNumericInput(inputId = 'ass_stock', 
-                         value = df$목표1[[4]])
-      updateNumericInput(inputId = 'ass_alter', 
-                         value = df$목표1[[1]])
-      updateNumericInput(inputId = 'ass_bond_sol', 
-                         value = df$목표2[[8]])
-      updateNumericInput(inputId = 'ass_bond_ig', 
-                         value = df$목표2[[9]])
-      updateNumericInput(inputId = 'ass_bond_nr', 
-                         value = df$목표2[[10]])
-      updateNumericInput(inputId = 'ass_bond_cor', 
-                         value = df$목표2[[11]])
-      updateNumericInput(inputId = 'ass_stock_dev', 
-                         value = df$목표2[[6]])
-      updateNumericInput(inputId = 'ass_alter_com', 
-                         value = df$목표2[[3]])
-    })
-    
-    observeEvent(T,{
-      update_new_allo()
-    }, once = T)
-    
-    observeEvent(input$allo_renew,{
-      df <- ma_v$read('allocation') %>% 
-        mutate(목표1 = c(input$ass_alter, NA, NA,
-                       input$ass_stock, NA, NA,
-                       input$ass_bond, NA, NA, NA, NA, NA),
-               목표2 = c(NA, 
-                       input$ass_alter - input$ass_alter_com,
-                       input$ass_alter_com,
-                       NA, 
-                       input$ass_stock - input$ass_stock_dev,
-                       input$ass_stock_dev,
-                       NA, 
-                       input$ass_bond_sol,
-                       input$ass_bond_ig,
-                       input$ass_bond_nr, 
-                       input$ass_bond_cor,
-                       input$ass_bond - input$ass_bond_sol - input$ass_bond_ig - input$ass_bond_nr - input$ass_bond_cor))
-      
-      dbWriteTable(ma$con, 'allocation', df, 
-                   overwrite = TRUE, row.names = FALSE)
-      
-      update_new_allo()
-    })
-    
-    output$allocation_table <- renderUI({
-      input$allo_renew
-      
-      ma_v()$t_allocation %>% 
-        flextable() |>
-        theme_vanilla() |>
-        set_table_properties(layout='autofit') |>
-        colformat_double(j=c(4,6,9), digits = 0) |>
-        colformat_double(j=c(5,7,8), digits = 1) |>
-        htmltools_value()
-    })
+    # update_new_allo <- reactive({
+    #   
+    #   input$allo_renew
+    #   df <- ma_v()$read('allocation')
+    #   
+    #   updateNumericInput(inputId = 'ass_bond', 
+    #                      value = df$목표1[[7]])
+    #   updateNumericInput(inputId = 'ass_stock', 
+    #                      value = df$목표1[[4]])
+    #   updateNumericInput(inputId = 'ass_alter', 
+    #                      value = df$목표1[[1]])
+    #   updateNumericInput(inputId = 'ass_bond_sol', 
+    #                      value = df$목표2[[8]])
+    #   updateNumericInput(inputId = 'ass_bond_ig', 
+    #                      value = df$목표2[[9]])
+    #   updateNumericInput(inputId = 'ass_bond_nr', 
+    #                      value = df$목표2[[10]])
+    #   updateNumericInput(inputId = 'ass_bond_cor', 
+    #                      value = df$목표2[[11]])
+    #   updateNumericInput(inputId = 'ass_stock_dev', 
+    #                      value = df$목표2[[6]])
+    #   updateNumericInput(inputId = 'ass_alter_com', 
+    #                      value = df$목표2[[3]])
+    # })
+    # 
+    # observeEvent(T,{
+    #   update_new_allo()
+    # }, once = T)
+    # 
+    # observeEvent(input$allo_renew,{
+    #   df <- ma_v$read('allocation') %>% 
+    #     mutate(목표1 = c(input$ass_alter, NA, NA,
+    #                    input$ass_stock, NA, NA,
+    #                    input$ass_bond, NA, NA, NA, NA, NA),
+    #            목표2 = c(NA, 
+    #                    input$ass_alter - input$ass_alter_com,
+    #                    input$ass_alter_com,
+    #                    NA, 
+    #                    input$ass_stock - input$ass_stock_dev,
+    #                    input$ass_stock_dev,
+    #                    NA, 
+    #                    input$ass_bond_sol,
+    #                    input$ass_bond_ig,
+    #                    input$ass_bond_nr, 
+    #                    input$ass_bond_cor,
+    #                    input$ass_bond - input$ass_bond_sol - input$ass_bond_ig - input$ass_bond_nr - input$ass_bond_cor))
+    #   
+    #   dbWriteTable(ma$con, 'allocation', df, 
+    #                overwrite = TRUE, row.names = FALSE)
+    #   
+    #   update_new_allo()
+    # })
+    # 
+    # output$allocation_table <- renderUI({
+    #   input$allo_renew
+    #   
+    #   ma_v()$t_allocation %>% 
+    #     flextable() |>
+    #     theme_vanilla() |>
+    #     set_table_properties(layout='autofit') |>
+    #     colformat_double(j=c(4,6,9), digits = 0) |>
+    #     colformat_double(j=c(5,7,8), digits = 1) |>
+    #     htmltools_value()
+    # })
     
     ## b. 계좌별 자산배분====
     
@@ -1457,24 +1457,25 @@ server <- function(input, output, session) {
         flextable() %>%
         theme_vanilla() %>%
         colformat_double(j=4:15, digits = 0) %>%
+        colformat_double(j=16, digits = 2) %>%
         set_table_properties(layout = 'autofit') %>%
         align(align = "center", part = "all") %>%
         htmltools_value()
       
     })
-    
-    output$account_allocation_table2 <- renderUI({
-      req(ma_v())
-      
-      ma_v()$account_allocation2 %>%
-        flextable() %>%
-        theme_vanilla() %>%
-        colformat_double(j=4:15, digits = 0) %>%
-        set_table_properties(layout = 'autofit') %>%
-        align(align = "center", part = "all") %>%
-        htmltools_value()
-      
-    })
+    # 
+    # output$account_allocation_table2 <- renderUI({
+    #   req(ma_v())
+    #   
+    #   ma_v()$account_allocation2 %>%
+    #     flextable() %>%
+    #     theme_vanilla() %>%
+    #     colformat_double(j=4:15, digits = 0) %>%
+    #     set_table_properties(layout = 'autofit') %>%
+    #     align(align = "center", part = "all") %>%
+    #     htmltools_value()
+    #   
+    # })
     
     ## c. 상품별 보유현황1====
     output$t_commodity <- renderUI({
