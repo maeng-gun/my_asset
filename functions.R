@@ -1,3 +1,4 @@
+library(data.table)
 library(tidyverse)
 library(timetk)
 library(R6)
@@ -9,7 +10,8 @@ library(RPostgres)
 library(dbx)
 library(tidyquant)
 library(pool)
-library(data.table)
+library(scales)
+source("stats.R")
 
 
 #[클래스] MyData ====
@@ -693,17 +695,17 @@ MyAssets <- R6Class(
       
       #DB 행번호
       self$assets_last_num <- self$read_obj('assets') %>% 
-        arrange(desc(행번호)) %>% first() %>% pull(행번호)
+        arrange(desc(행번호)) %>% head(1) %>% pull(행번호)
       self$assets_daily_last_num <- self$read_obj('assets_daily') %>% 
-        arrange(desc(행번호)) %>% first() %>% pull(행번호)
+        arrange(desc(행번호)) %>% head(1) %>% pull(행번호)
       
       self$pension_last_num <- self$read_obj('pension') %>% 
-        arrange(desc(행번호)) %>% first() %>% pull(행번호)
+        arrange(desc(행번호)) %>% head(1) %>% pull(행번호)
       self$pension_daily_last_num <- self$read_obj('pension_daily') %>% 
-        arrange(desc(행번호)) %>% first() %>% pull(행번호)
+        arrange(desc(행번호)) %>% head(1) %>% pull(행번호)
       
       self$inflow_last_num <- self$read_obj('inflow') %>% 
-        arrange(desc(행번호)) %>% first() %>% pull(행번호)
+        arrange(desc(행번호)) %>% head(1) %>% pull(행번호)
       
       
       
@@ -1606,3 +1608,4 @@ MyAssets <- R6Class(
     
   )
 )
+
