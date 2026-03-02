@@ -11,7 +11,6 @@ library(dbx)
 library(tidyquant)
 library(pool)
 library(scales)
-source("stats.R")
 
 
 #[클래스] MyData ====
