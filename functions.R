@@ -13,6 +13,7 @@ library(pool)
 library(scales)
 
 
+
 #[클래스] MyData ====
 MyData <- R6Class(
   
@@ -99,7 +100,7 @@ AutoInvest <- R6Class(
       cfg <- split(self$config$value, self$config$token)
       
       self$token_tmp <- paste0("KIS", account)
-
+      
       self$APP_KEY <- cfg[[paste0(account, '_app')]]
       self$APP_SECRET <- cfg[[paste0(account, '_sec')]]
       self$ACCT <- cfg[[paste0(account, '_acct')]]
@@ -127,8 +128,8 @@ AutoInvest <- R6Class(
       
       
       dbWriteTable(self$con, self$token_tmp, 
-                     tibble(token = my_token,
-                            valid_date = format(valid_date, '%Y-%m-%d %H:%M:%S')),
+                   tibble(token = my_token,
+                          valid_date = format(valid_date, '%Y-%m-%d %H:%M:%S')),
                    overwrite = TRUE)
       
     },
@@ -136,7 +137,7 @@ AutoInvest <- R6Class(
     ##메서드(2) - 토큰 불러오기 ====
     read_token = function() {
       tryCatch({
-
+        
         tkg_tmp <- self$read(self$token_tmp)
         
         # 토큰 만료 일,시간
@@ -209,8 +210,8 @@ AutoInvest <- R6Class(
       jbody <- toJSON(as.list(data), auto_unbox = T)
       headers2 <- c(self$base_headers, headers)
       res <- POST(URL, body = jbody, encode = "json",
-           add_headers(.headers = headers2))
-
+                  add_headers(.headers = headers2))
+      
       if (res$status_code == 200) {
         res <- res %>% 
           content("text", encoding = 'UTF-8') %>% 
@@ -363,7 +364,7 @@ MyAssets <- R6Class(
     initialize = function(pw) {
       
       self$pw <- pw
-
+      
       super$initialize(self$pw)
       self$today <- today()
       self$year <- year(self$today)
@@ -375,7 +376,7 @@ MyAssets <- R6Class(
       }, error = function(e) {
         # 테이블이 없거나 권한 문제 등 에러 발생 시 무시하고 진행
       })
-
+      
       self$days <- seq(make_date(2024,1,1), 
                        self$today,
                        by='day')
@@ -590,7 +591,7 @@ MyAssets <- R6Class(
       
       
       trade <- copy(trade_tbl)
-        
+      
       if(mode == 'assets') {
         codes <- as.data.table(self$assets)
       } else {
@@ -722,7 +723,8 @@ MyAssets <- R6Class(
         bind_rows(
           assets_daily %>% as_tibble()
         ) %>% 
-        group_by(거래일자) %>% 
+        filter(통화=='원화') %>% 
+        group_by(거래일자) %>%
         summarise(입출금=sum(입출금)) %>% 
         rename(기준일=거래일자)
       
@@ -797,9 +799,9 @@ MyAssets <- R6Class(
       price <- self$pension %>%
         select(계좌, 종목코드, 평가금액) %>% 
         filter(평가금액!=0) %>% as.data.table()
-     
+      
       bs_pl <- self$bs_pl_p
-
+      
       last_eval <- self$pension %>% 
         select(계좌, 종목코드, 기초평가손익) %>% 
         as.data.table()
@@ -872,7 +874,7 @@ MyAssets <- R6Class(
       jpy_bs <- round(filter(df, 통화=='엔화')$장부금액 * self$ex_jpy,0)
       usd_eval <- round(filter(df, 통화=='달러')$평가금액 * self$ex_usd,0)
       jpy_eval <- round(filter(df, 통화=='엔화')$평가금액 * self$ex_jpy,0)
-
+      
       # 1)계좌/자산군/상품까지 원재료
       df00 <- self$assets %>%
         bind_rows(self$pension) %>%
@@ -892,7 +894,7 @@ MyAssets <- R6Class(
               장부금액 = sum(장부금액),
               평가금액=sum(평가금액),.groups = 'drop'),
           by=c('계좌','종목코드'))
-
+      
       tryCatch({
         if(dbExistsTable(self$con, 'eval_profit')){
           dbExecute(self$con, glue("DELETE FROM eval_profit WHERE \"연도\" = '{self$year}'"))
@@ -925,7 +927,7 @@ MyAssets <- R6Class(
                   평가금액=sum(평가금액),
                   .groups = 'drop') %>%
         select(-종목코드)
-
+      
       # 3) 합계
       df2 <- df0 %>%
         filter(통화=='원화') %>%
@@ -934,32 +936,32 @@ MyAssets <- R6Class(
                   세부자산군2 = '',상품명 = '', 보유수량=0,
                   장부금액=sum(장부금액),
                   평가금액=sum(평가금액), .groups = 'drop')
-
+      
       # 4) 상품까지(외화빼고)
       df1 <- df0 %>%
         select(-통화) %>%
         filter(자산군!="외화자산")
-
+      
       # 5) 자산군 소계
       df3 <- df1 %>%
         group_by(자산군) %>%
         summarise(세부자산군='', 세부자산군2 = '', 상품명 = '', 보유수량=0,
                   장부금액=sum(장부금액),
                   평가금액=sum(평가금액))
-
+      
       # 6) 세부자산군 소계
       df4 <- df1 %>%
         group_by(자산군, 세부자산군) %>%
         summarise(세부자산군2 = '', 상품명 = '', 보유수량=0,
                   장부금액=sum(장부금액),
                   평가금액=sum(평가금액), .groups = 'drop')
-
+      
       # 7) 세부자산군2 소계
       df5 <- df1 %>%
         group_by(자산군, 세부자산군, 세부자산군2) %>%
         summarise(상품명 = "", 보유수량=0, 장부금액=sum(장부금액), 평가금액=sum(평가금액),
                   .groups = 'drop')
-
+      
       # 8) 환차손익 계산
       df6 <- tibble_row(
         자산군='환차손익', 세부자산군='', 세부자산군2 = '',
@@ -968,7 +970,7 @@ MyAssets <- R6Class(
         평가손익= (sum(df3$장부금액) - df2$장부금액),
         평가수익률 = round(평가손익/df2$장부금액*100,2)
       )
-
+      
       
       #합치기기(df2,3,4,5,6)
       df7 <- bind_rows(df2,df3,df4,df5) %>%
@@ -981,7 +983,7 @@ MyAssets <- R6Class(
         select(!c(상품명, 장부금액)) %>%
         bind_rows(df6 %>%
                     select(-보유수량))
-
+      
       #상품별 보유현황테이블1 최종
       self$t_comm <- bind_rows(df1,df2,df3,df4,df5) %>%
         mutate(자산군 = factor(자산군, levels = self$class_order),
@@ -995,7 +997,7 @@ MyAssets <- R6Class(
         ) %>%
         select(-장부금액) %>% 
         bind_rows(df6)
-
+      
       #상품별/계좌별 보유현황테이블2 최종
       
       self$t_comm2 <- df00 %>%
@@ -1075,7 +1077,7 @@ MyAssets <- R6Class(
           by=c('자산군','세부자산군','세부자산군2')
         ) %>% 
         mutate(비중=합계/last(합계)*100)
-        
+      
       
       # self$account_allocation2 <- self$read('acct_allo') %>% 
       #   mutate(
@@ -1085,7 +1087,7 @@ MyAssets <- R6Class(
       #   ) %>% 
       #   arrange(자산군, 세부자산군, 세부자산군2) %>% 
       #   mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE))
-        
+      
     },
     
     
@@ -1094,7 +1096,7 @@ MyAssets <- R6Class(
       df <- self$read_obj('return') %>% 
         filter(자산군=='<합계>') %>% 
         collect() %>% 
-        transmute(기준일=as.Date(기준일),평가금액) %>% 
+        transmute(기준일=as.Date(기준일),평가금액, 총손익) %>% 
         filter(기준일>=start, 기준일<=end) %>% 
         arrange(기준일)
       
@@ -1104,13 +1106,13 @@ MyAssets <- R6Class(
         by='기준일'
       ) %>% 
         arrange(기준일) %>% 
-        fill(평가금액, .direction = 'down') %>% 
+        fill(평가금액, 총손익, .direction = 'down') %>% 
         mutate(입출금=na.fill(입출금,0)) %>% 
-        mutate(
-          일간수익률 = na.fill((평가금액-입출금-lag(평가금액))/lag(평가금액)*100,0),
-          누적수익률 = (cumprod(일간수익률/100+1)-1)*100,
-          일간손익= na.fill(diff_vec(평가금액, silent = T)-입출금,0)/10000,
-          손익누계= cumsum(일간손익))
+        group_by(연도=year(기준일)) %>% 
+        mutate(총손익_1=lag(총손익, default = 0),
+               일간손익=if_else(기준일==start,0,총손익-총손익_1)/10000,
+               손익누계=cumsum(일간손익))
+      
     },
     
     ##12-2.(손익현황) 평가금액 추이 그래프 생성====
@@ -1200,6 +1202,7 @@ MyAssets <- R6Class(
     compute_profit_var = function(){
       dates <- self$read_obj('return') %>%
         distinct(기준일) %>%
+        arrange(기준일) %>% 
         pull()
       
       dates_list <- tibble(기준일=seq(first(dates), last(dates), by=1)) %>% 
@@ -1362,7 +1365,7 @@ MyAssets <- R6Class(
         select(자산군:세부자산군2, 평가금액,총손익,총수익률) %>% 
         mutate(기준일=self$today, .before=1) %>% 
         self$upsert('return',c('기준일','자산군','세부자산군','세부자산군2'))
-
+      
       df7 <- df1 %>% 
         group_by(계좌, 자산군) %>% 
         summ_fun()
@@ -1567,7 +1570,7 @@ MyAssets <- R6Class(
     
     ##18.(메서드) 평가금액 계산====
     run_valuation = function(){
-     
+      
       self$update_new_price()
       self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
       self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
