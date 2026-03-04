@@ -1433,7 +1433,25 @@ MyAssets <- R6Class(
       
     },
     
-    ## 17. (유동성관리) 가용자금 분석 테이블 생성 ====
+    ## 17. (유동성관리) 만기도래자금 테이블 생성 ====
+    get_maturiy_analysis = function() {
+      self$bs_pl_mkt_a %>% 
+        bind_rows(self$bs_pl_mkt_p) %>% 
+        filter(자산군=='채권', 세부자산군=='만기보유', 
+               통화=='원화', 평가금액>0) %>% 
+        select(계좌, 종목명, 종목코드, 평가금액) %>% 
+        left_join(
+          self$assets %>% 
+            bind_rows(self$pension) %>% 
+            select(종목코드, 만기일),
+          by='종목코드'
+        ) %>% 
+        filter(만기일>self$today) %>% 
+        select(계좌, 종목명, 평가금액, 만기일) %>% 
+        arrange(만기일)
+    },
+    
+    ## 18. (유동성관리) 가용자금 분석 테이블 생성 ====
     get_liquidity_analysis = function() {
       
       # [Step 1] inflow_table2: 현재 시점 계좌별 총자산/현금성자산 현황
@@ -1480,15 +1498,7 @@ MyAssets <- R6Class(
         summarise(금액 = sum(자금유출입, na.rm = TRUE), .groups = 'drop')
       
       # 2-2. 만기 자산 (maturity_table) 월별 집계
-      maturity_data <- self$bs_pl_mkt_a %>% 
-        bind_rows(self$bs_pl_mkt_p) %>% 
-        filter(자산군=='채권', 세부자산군 %in% c('만기무위험','만기회사채'), 
-               통화=='원화', 평가금액>0) %>% 
-        left_join(
-          self$assets %>% bind_rows(self$pension) %>% select(종목코드, 만기일),
-          by = "종목코드"
-        ) %>% 
-        filter(as.Date(만기일) > self$today) %>% 
+      maturity_data <- self$get_maturiy_analysis() %>% 
         mutate(거래월 = format(as.Date(만기일), "%Y-%m")) %>% 
         group_by(거래월, 계좌) %>% 
         summarise(금액 = sum(평가금액, na.rm = TRUE), .groups = 'drop')
@@ -1568,7 +1578,7 @@ MyAssets <- R6Class(
       ))
     },
     
-    ##18.(메서드) 평가금액 계산====
+    ##19.(메서드) 평가금액 계산====
     run_valuation = function(){
       
       self$update_new_price()
@@ -1581,7 +1591,7 @@ MyAssets <- R6Class(
       # self$plot_total_profit()
     },
     
-    ##19.(메서드) 기초평가손익 갱신====
+    ##20.(메서드) 기초평가손익 갱신====
     renew_last_eval_profit = function(){
       self$assets %>% 
         select(-기초평가손익) %>% 

@@ -1794,24 +1794,18 @@ server <- function(input, output, session) {
       sk_b(!sk_b())
     })
     
+    #### * 만기도래 및 유동성테이블 ====
+    
+    maturity_data <- reactive({
+      ma_v()$get_maturiy_analysis()
+    })
+    
     output$maturity_table <- renderUI({
-      ma_v()$bs_pl_mkt_a %>% 
-        bind_rows(ma_v()$bs_pl_mkt_p) %>% 
-        filter(자산군=='채권', 세부자산군 %in% c('만기무위험','만기회사채'), 
-               통화=='원화', 평가금액>0) %>% 
-        select(계좌, 종목명, 종목코드, 평가금액) %>% 
-        left_join(
-          ma_b()$assets %>% 
-            bind_rows(ma_b()$pension) %>% 
-            select(종목코드, 만기일),
-          by='종목코드'
-        ) %>% 
-        filter(만기일>ma$today) %>% 
-        select(계좌, 종목명, 평가금액, 만기일) %>% 
-        arrange(만기일) %>% 
+      maturity_data() %>% 
         flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
+        colformat_double(j = 3, digits = 0) %>% 
         htmltools_value(ft.align = 'center')
     })
     
