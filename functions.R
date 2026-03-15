@@ -11,7 +11,7 @@ library(dbx)
 library(tidyquant)
 library(pool)
 library(scales)
-
+library(PerformanceAnalytics)
 
 
 #[클래스] MyData ====
@@ -1432,6 +1432,236 @@ MyAssets <- R6Class(
       
       
     },
+    
+    ## 17.(배분및성과) 벤치마크용 타겟 일자 반환====
+    get_target_date = function(base_month) {
+      sel_date <- as.Date(paste0(format(base_month, "%Y-%m"), "-01"))
+      if (year(sel_date) == year(self$today) && month(sel_date) == month(self$today)) {
+        return(self$today)
+      } else {
+        return(ceiling_date(sel_date, "month") - days(1))
+      }
+    },
+    
+    ## 18.(배분및성과) 벤치마크 수익률 종합 데이터 산출====
+    get_benchmark_returns = function(base_month) {
+      
+      # [지역 헬퍼 함수] 네이버 회사채 금리 크롤링
+      get_naver_bond_yield <- function(start_date, end_date) {
+        base_url <- "https://finance.naver.com/marketindex/interestDailyQuote.naver?marketindexCd=IRR_CORP03Y&page="
+        page <- 1
+        results <- list()
+        
+        repeat {
+          url <- paste0(base_url, page)
+          req <- httr::GET(url, httr::user_agent("Mozilla/5.0"))
+          html <- rvest::read_html(req)
+          tables <- rvest::html_table(html)
+          
+          if (length(tables) == 0) break
+          df <- tables[[1]][, 1:2]
+          names(df) <- c("date", "rate")
+          
+          df <- df %>% filter(!is.na(date) & date != "")
+          if (nrow(df) == 0) break
+          
+          df$date <- as.Date(gsub("\\.", "-", df$date))
+          df$rate <- as.numeric(df$rate)
+          results[[page]] <- df
+          
+          if (min(df$date, na.rm = TRUE) <= as.Date(start_date)) break
+          page <- page + 1
+          Sys.sleep(0.1)
+        }
+        
+        bind_rows(results) %>%
+          filter(date >= as.Date(start_date) & date <= as.Date(end_date)) %>%
+          arrange(date) %>%
+          distinct(date, .keep_all = TRUE)
+      }
+      
+      
+      
+      t_date <- self$get_target_date(base_month)
+      s_ytd <- floor_date(t_date, "year") - days(1)
+      fetch_start <- s_ytd - days(7) 
+      
+      # 1. 내 포트폴리오
+      pf_return <- self$read_obj('return') %>% 
+        filter(자산군=='<합계>', 기준일 >= s_ytd, 기준일 <= t_date) %>% 
+        select(기준일, 평가금액, 총손익) %>% 
+        collect() %>% arrange(기준일) %>% 
+        group_by(연도 = year(기준일)) %>% 
+        mutate(총손익_1 = lag(총손익, default = 0),
+               일간손익 = if_else(기준일 == s_ytd, 0, 총손익 - 총손익_1)) %>% 
+        ungroup() %>% 
+        transmute(기준일, MyPF = 일간손익 / lag(평가금액) * 100) %>% 
+        filter(!is.na(MyPF))
+      
+      # 2. 야후 파이낸스 벤치마크 (시장형채권 추가)
+      tickers <- c("360200.KS", "278530.KS", "411060.KS", "329200.KS", "356540.KS")
+      prices <- suppressWarnings(
+        tidyquant::tq_get(tickers, get = "stock.prices", from = fetch_start, to = t_date)
+      ) %>%
+        select(date, symbol, adjusted) %>%
+        distinct(symbol, date, .keep_all = TRUE) %>% 
+        pivot_wider(names_from = symbol, values_from = adjusted) %>%
+        arrange(date)
+      
+      # 3. 네이버 회사채 크롤링
+      bond_yields <- get_naver_bond_yield(fetch_start, t_date)
+      
+      # 4. 결측치 보간
+      merged_prices <- prices %>%
+        left_join(bond_yields, by = "date") %>%
+        fill(everything(), .direction = "downup") 
+      
+      # 5. 주식/실물 자산군 일별 수익률 
+      bm_returns_long <- merged_prices %>%
+        select(date, `360200.KS`, `278530.KS`, `411060.KS`, `329200.KS`, `356540.KS`) %>%
+        pivot_longer(cols = -date, names_to = "symbol", values_to = "price") %>%
+        drop_na(price) %>% 
+        group_by(symbol) %>%
+        tidyquant::tq_transmute(select = price, mutate_fun = periodReturn, period = "daily", type = "arithmetic") %>%
+        ungroup() %>%
+        mutate(daily.returns = daily.returns * 100) %>%
+        mutate(Asset = recode(symbol, 
+                              "360200.KS" = "해외주식",
+                              "278530.KS" = "국내주식",
+                              "411060.KS" = "실물자산",
+                              "329200.KS" = "인컴자산",
+                              "356540.KS" = "시장형채권")) %>%
+        select(date, Asset, daily.returns)
+      
+      # 6. 회사채 및 현금성 자산 생성
+      bond_returns_long <- merged_prices %>% filter(date >= fetch_start) %>%
+        mutate(Asset = "만기보유채권", daily.returns = ((1 + (rate + 2.0) / 100)^(1/252) - 1) * 100) %>%
+        select(date, Asset, daily.returns)
+      
+      cash_returns_long <- data.frame(date = unique(merged_prices$date)) %>% filter(date >= fetch_start) %>%
+        mutate(Asset = "현금성", daily.returns = 0)
+      
+      all_bm_returns_long <- bind_rows(bm_returns_long, bond_returns_long, cash_returns_long) %>%
+        arrange(date, Asset)
+      
+      all_bm_returns_wide <- all_bm_returns_long %>% 
+        pivot_wider(names_from = Asset, values_from = daily.returns) %>%
+        arrange(date) %>%
+        replace(is.na(.), 0)
+      
+      ret_xts <- timetk::tk_xts(all_bm_returns_wide, date_var = date)
+      asset_cols <- colnames(ret_xts) 
+      
+      # 7. SAA, TAA1, TAA2 포트폴리오 수익률 계산
+      weight_df <- self$read('allo_table') %>% 
+        mutate(배분일자 = as.Date(배분일자),
+               현금성 = 1 - (국내주식 + 해외주식 + 만기보유채권 + 시장형채권 + 실물자산 + 인컴자산))
+      
+      months_grid <- tibble(date = seq(floor_date(as.Date(fetch_start) - months(1), "month"),
+                                       ceiling_date(as.Date(t_date) + months(1), "month"), by="month") + days(20))
+      
+      calc_pf_return <- function(pf_name) {
+        w_raw <- weight_df %>% filter(구분 == pf_name) %>%
+          select(date = 배분일자, 국내주식, 해외주식, 만기보유채권, 시장형채권, 실물자산, 인컴자산, 현금성)
+        
+        if(nrow(w_raw) == 0) return(tibble(date = as.Date(character()), !!pf_name := numeric()))
+        if(min(w_raw$date) > min(months_grid$date)) {
+          pad_w <- w_raw %>% filter(date == min(w_raw$date)) %>% mutate(date = min(months_grid$date))
+          w_raw <- bind_rows(pad_w, w_raw)
+        }
+        
+        w_monthly <- months_grid %>%
+          left_join(w_raw, by = "date") %>%
+          fill(all_of(asset_cols), .direction = "down") %>%
+          drop_na() %>%
+          select(date, all_of(asset_cols)) 
+        
+        suppressWarnings(
+          w_xts <- timetk::tk_xts(w_monthly, date_var = date)
+        )
+        pf_ret_xts <- PerformanceAnalytics::Return.portfolio(R = ret_xts / 100, weights = w_xts)
+        
+        pf_ret <- timetk::tk_tbl(pf_ret_xts * 100, rename_index = "date") %>%
+          rename(!!pf_name := portfolio.returns)
+        return(pf_ret)
+      }
+      
+      pf_SAA <- calc_pf_return("SAA")
+      pf_TAA1 <- calc_pf_return("TAA1")
+      pf_TAA2 <- calc_pf_return("TAA2")
+      
+      final_wide <- all_bm_returns_long %>% pivot_wider(names_from = Asset, values_from = daily.returns)
+      if(nrow(pf_SAA) > 0) final_wide <- final_wide %>% left_join(pf_SAA, by="date")
+      if(nrow(pf_TAA1) > 0) final_wide <- final_wide %>% left_join(pf_TAA1, by="date")
+      if(nrow(pf_TAA2) > 0) final_wide <- final_wide %>% left_join(pf_TAA2, by="date")
+      
+      final_wide <- final_wide %>%
+        rename(기준일 = date, 코스피 = 국내주식, `S&P` = 해외주식, 
+               회사채 = 만기보유채권, 금현물 = 실물자산, 리츠 = 인컴자산) %>%
+        left_join(pf_return, by = "기준일") %>% 
+        arrange(기준일) %>% replace(is.na(.), 0)
+      
+      return(final_wide)
+    },
+    
+    ## 19.(배분및성과) 성과분석 그래프 그리기 메서드====
+    plot_pf_return = function(data, subset_cols, start_date) {
+      
+      # [지역 헬퍼 함수] 누적수익률 계산
+      calc_cum_return <- function(df, s_date) {
+        df <- df %>% filter(기준일 > as.Date(s_date))
+        if(nrow(df) == 0) return(NULL)
+        df %>%
+          mutate(across(-기준일, ~ (cumprod(1 + ./100) - 1) * 100)) %>%
+          pivot_longer(cols = -기준일, names_to = "Asset", values_to = "CumReturn")
+      }
+      
+      if(is.null(data)) return(ggplot() + theme_void() + ggtitle("데이터가 부족합니다."))
+      df_sub <- data %>% select(any_of(subset_cols))
+      
+      # 내장된 헬퍼 함수 호출
+      data_long <- calc_cum_return(df_sub, start_date)
+      
+      if(is.null(data_long)) return(ggplot() + theme_void() + ggtitle("데이터가 부족합니다."))
+      
+      label_data <- data_long %>% group_by(Asset) %>% filter(기준일 == max(기준일)) %>% arrange(CumReturn) %>% ungroup()
+      
+      y_range <- max(label_data$CumReturn, na.rm=T) - min(label_data$CumReturn, na.rm=T)
+      min_gap <- ifelse(y_range == 0, 1, y_range * 0.04) 
+      label_data$Label_Y <- label_data$CumReturn 
+      
+      if(nrow(label_data) > 1) {
+        for(i in 2:nrow(label_data)) {
+          if(label_data$Label_Y[i] - label_data$Label_Y[i-1] < min_gap) {
+            label_data$Label_Y[i] <- label_data$Label_Y[i-1] + min_gap
+          }
+        }
+      }
+      
+      label_data <- label_data %>% arrange(desc(Label_Y))
+      last_vals <- label_data %>% pull(Asset)
+      data_long <- data_long %>% mutate(Asset = factor(Asset, levels = last_vals))
+      label_data <- label_data %>% mutate(Asset = factor(Asset, levels = last_vals))
+      
+      col_map <- c("MyPF"="#D9534F", "S&P"="#0275D8", "코스피"="#292B2C", "리츠"="#5CB85C", 
+                   "금현물"="#F0AD4E", "회사채"="#8E44AD", "시장형채권"="#A0522D", 
+                   "SAA"="#007BFF", "TAA1"="#28A745", "TAA2"="#6F42C1")
+      line_map <- c("MyPF"=1.8, "S&P"=0.8, "코스피"=0.8, "리츠"=0.8, "금현물"=0.8, 
+                    "회사채"=0.8, "시장형채권"=0.8, "SAA"=1.2, "TAA1"=1.2, "TAA2"=1.2)
+      
+      ggplot(data_long, aes(x = 기준일, y = CumReturn, color = Asset, linewidth = Asset)) +
+        geom_line() +
+        geom_text(data = label_data, aes(y = Label_Y, label = sprintf("%.2f%%", CumReturn)),
+                  hjust = -0.15, fontface = "bold", size = 4, show.legend = FALSE) +
+        scale_linewidth_manual(values = line_map) +
+        scale_color_manual(values = col_map) +
+        scale_x_date(date_labels = "%m.%d.", expand = expansion(mult = c(0.05, 0.20))) +
+        scale_y_continuous(n.breaks = 10) + labs(x = "", y = "누적수익률 (%)") +
+        theme_minimal() +
+        theme(legend.position = "right", legend.title = element_blank(),
+              legend.text = element_text(size = 11), legend.key.height = unit(1.5, "cm"))
+    },
+    
     
     ## 17. (유동성관리) 만기도래자금 테이블 생성 ====
     get_maturiy_analysis = function() {
