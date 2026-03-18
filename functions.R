@@ -1504,6 +1504,7 @@ MyAssets <- R6Class(
         tidyquant::tq_get(tickers, get = "stock.prices", from = fetch_start, to = t_date)
       ) %>%
         select(date, symbol, adjusted) %>%
+        filter(!is.na(adjusted)) %>% 
         distinct(symbol, date, .keep_all = TRUE) %>% 
         pivot_wider(names_from = symbol, values_from = adjusted) %>%
         arrange(date)
