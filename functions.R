@@ -328,7 +328,7 @@ AutoInvest <- R6Class(
         
         # (중요) 연속 호출 시 API 제한(초당 건수 등)을 피하기 위해 미세한 딜레이 추가
         # 필요에 따라 시간(0.05초)을 조절하세요.
-        Sys.sleep(0.05) 
+        Sys.sleep(0.2) 
         
         fetch_single(code)
       })
