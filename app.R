@@ -484,6 +484,14 @@ body <- dashboardBody(
           fluidRow(
             uiOutput("t_commodity2")
           )
+        ),
+        
+        ### e. 상품별 보유현황3====
+        tabPanel(
+          title="상품별 보유현황3",
+          fluidRow(
+            uiOutput("t_commodity3")
+          )
         )
       )
     ),
@@ -1550,6 +1558,16 @@ server <- function(input, output, session) {
         set_table_properties(layout='autofit') |>
         colformat_double(j=7:9, digits = 0) |>
         colformat_double(j=10, digits = 2) |>
+        htmltools_value()
+    })
+    
+    ## e. 상품별 보유현황3====
+    output$t_commodity3 <- renderUI({
+      ma_v()$t_comm10 |>
+        flextable() |>
+        theme_vanilla() |>
+        set_table_properties(layout='autofit') |>
+        colformat_double(j=5, digits = 0) |>
         htmltools_value()
     })
     

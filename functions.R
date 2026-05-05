@@ -358,7 +358,7 @@ MyAssets <- R6Class(
     cur_order=NULL, class_order=NULL, class2_order=NULL,
     class3_order=NULL, t_allocation=NULL, account_allocation=NULL,
     y_num=NULL, grid=NULL, future_eval=NULL, closing_prices=NULL,
-    account_allocation2=NULL,comm_profit2=NULL,
+    account_allocation2=NULL,comm_profit2=NULL, t_comm10=NULL,
     
     ## 1. 속성 초기화====
     initialize = function(pw) {
@@ -1023,6 +1023,13 @@ MyAssets <- R6Class(
         arrange(계좌, 자산군, 세부자산군, 세부자산군2, 
                 desc(평가수익률), 상품명) %>% 
         filter(자산군!='외화자산')
+      
+      #상품별 보유현황테이블3 최종
+      
+      self$t_comm10 <- self$t_comm %>% 
+        filter(상품명!='') %>% 
+        select(자산군,세부자산군,세부자산군2,상품명,평가금액)
+      
     },
     
     
