@@ -1545,8 +1545,8 @@ server <- function(input, output, session) {
         flextable() |>
         theme_vanilla() |>
         set_table_properties(layout='autofit') |>
-        colformat_double(j=5:7, digits = 0) |>
-        colformat_double(j=8, digits = 2) |>
+        colformat_double(j=5:8, digits = 0) |>
+        colformat_double(j=9, digits = 2) |>
         htmltools_value()
     })
     
