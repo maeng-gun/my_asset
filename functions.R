@@ -1026,9 +1026,16 @@ MyAssets <- R6Class(
       
       #상품별 보유현황테이블3 최종
       
-      self$t_comm10 <- self$t_comm %>% 
-        filter(상품명!='') %>% 
-        select(자산군,세부자산군,세부자산군2,상품명,평가금액)
+      self$t_comm10 <- df00 %>% 
+        select(자산군,세부자산군,세부자산군2,상품명,평가금액,계좌) %>% 
+        filter(자산군!='외화자산') %>% 
+        mutate(
+          자산군 = factor(자산군, levels = self$class_order),
+          세부자산군 = factor(세부자산군, levels = self$class2_order),
+          세부자산군2 = factor(세부자산군2, levels = self$class3_order),
+          계좌 = factor(계좌, levels = self$acct_order)
+        ) %>% 
+        arrange(자산군, 세부자산군, 세부자산군2, 계좌)
       
     },
     
