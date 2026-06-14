@@ -365,41 +365,51 @@ body <- dashboardBody(
                 )
               ),
               column(
-                width = 3,
+                width = 2,
                 selectInput(
                   inputId = 'total_ass1',
                   label = "자산군",
-                  choices = c("전체","대체자산","외화자산",
-                              "주식","채권")
+                  choices = c("전체","주식", "대체자산", 
+                              "채권", "현금성")
                 )
               ),
               column(
-                width = 3,
+                width = 2,
                 selectInput(
                   inputId = 'total_ass2',
                   label = "세부자산군",
-                  choices = c("전체","부동산인프라","상품",
-                              "달러자산","엔화자산","선진국",
-                              "신흥국","간접","직접")
+                  choices = c("전체","선진국","국내","신흥국","실물자산",
+                              "인컴자산","상품","부동산인프라",
+                              "만기보유","시장형",
+                              "국채","투자등급","하이일드","만기무위험",
+                              "만기회사채","금융상품","현금")
                 )
               ),
               column(
-                width = 3,
+                width = 2,
                 selectInput(
                   inputId = 'total_ass3',
                   label = "세부자산군2",
-                  choices = c("전체","부동산","인프라",
-                              "에너지","원자재","",
-                              "섹터","인덱스","종목",
-                              "신흥국","선진국")
+                  choices = c("전체","인덱스","종목","테마","귀금속","원자재",
+                              "에너지", "국내","해외", "안전자산", "크레딧",
+                              "부동산","인프라","선진국","신흥국","단기ETF",
+                              "원화상품","외화상품","외환","원화")
                 )
               ),
               column(
-                width = 1,
+                width = 2,
                 selectInput(
                   inputId = 'total_curr',
                   label = "통화",
                   choices = c("전체","원화","달러","엔화")
+                )
+              ),
+              column(
+                width = 2,
+                textInput(
+                  inputId = 'total_comm_name',
+                  label = "상품명",
+                  value = ""
                 )
               )
             )
@@ -1428,12 +1438,19 @@ server <- function(input, output, session) {
           df <- df %>% filter(통화==input$total_curr)
         }
         
+        if(input$total_comm_name!=""){
+          df <- df %>% filter(상품명==input$total_comm_name)
+        }
+        
+        
+        
+        
         df |>
           flextable() |>
           theme_box() |>
           merge_v(j=1:5) |>
           set_table_properties(layout='autofit') |>
-          colformat_double(j=7:11, digits = 0) |>
+          colformat_double(j=8:13, digits = 0) |>
           htmltools_value(ft.align = 'center') 
       } else{
         
