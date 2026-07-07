@@ -12,6 +12,10 @@ __pycache__/
 mydata.sqlite
 Untitled.R
 exam/
+.lintr
+.R-lab/
+.vscode/
+
 
 a.R
 saa.R
