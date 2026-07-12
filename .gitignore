@@ -21,3 +21,5 @@ a.R
 saa.R
 saa.qmd
 stats.R
+.Renviron
+sandbox/
