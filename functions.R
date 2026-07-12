@@ -1128,8 +1128,9 @@ MyAssets <- R6Class(
         mutate(입출금=na.fill(입출금,0)) %>% 
         group_by(연도=year(기준일)) %>% 
         mutate(총손익_1=lag(총손익, default = 0),
-               일간손익=if_else(기준일==start,0,총손익-총손익_1)/10000,
-               손익누계=cumsum(일간손익))
+               일간손익=if_else(기준일==start,0,총손익-총손익_1)/10000) %>% 
+        ungroup() %>% 
+        mutate(손익누계=cumsum(일간손익))
       
     },
     
@@ -1837,7 +1838,6 @@ MyAssets <- R6Class(
       self$compute_total_allocation()
       self$compute_asset_profit()
       self$compute_comm_profit()
-      # self$plot_total_profit()
     },
     
     ##20.(메서드) 기초평가손익 갱신====
