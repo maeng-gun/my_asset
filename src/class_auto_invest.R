@@ -3,6 +3,7 @@
 # =============================================================================
 # MyData를 상속하며, 토큰 관리·국내/해외 주식 잔고 조회·개별 현재가 조회 등
 # 한국투자증권 REST API와의 통신을 전담
+# pool 객체는 외부에서 주입받음
 # =============================================================================
 
 AutoInvest <- R6Class(
@@ -17,8 +18,8 @@ AutoInvest <- R6Class(
     token_headers = NULL,
 
     ## 속성 초기화 ====
-    initialize = function(pw, account = "my") {
-      super$initialize(pw)
+    initialize = function(pool, account = "my") {
+      super$initialize(pool)
       cfg <- split(self$config$value, self$config$token)
 
       self$token_tmp <- paste0("KIS", account)

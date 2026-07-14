@@ -1,6 +1,9 @@
 # =============================================================================
 # mod_profit — 손익현황 모듈 (종합손익, 손익변동, 자산군별, 계좌별, 상품별)
 # =============================================================================
+# 순수 함수(utils_analytics.R)를 호출하여 계산 수행
+# R6 인스턴스의 특정 속성만 reactive()로 참조
+# =============================================================================
 
 mod_profit_ui <- function(id) {
   ns <- NS(id)
@@ -68,7 +71,16 @@ mod_profit_server <- function(id, ma_v, on_initial_load) {
     ## a. 종합손익 테이블
     output$t_profit1 <- renderUI({
       big_border <- officer::fp_border(color = "black", width = 2)
-      ma_v()$compute_t_profit() %>%
+      ma_obj <- ma_v()
+
+      # calc_total_profit 순수 함수 호출
+      calc_total_profit(
+        book_info       = ma_obj$book_info,
+        eval_profit_tbl = ma_obj$read_obj('eval_profit'),
+        return_tbl      = ma_obj$read_obj('return'),
+        today           = ma_obj$today,
+        cur_year        = ma_obj$year
+      ) %>%
         flextable() |> theme_box() |>
         set_table_properties(layout = 'autofit') |>
         vline(j = 7, border = big_border, part = "all") %>%
@@ -83,7 +95,15 @@ mod_profit_server <- function(id, ma_v, on_initial_load) {
     ## 손익 그래프 데이터
     df_graph <- reactive({
       input$total_s_date; input$total_e_date
-      ma_v()$plot_total_profit(input$total_s_date, input$total_e_date)
+      ma_obj <- ma_v()
+
+      # build_profit_trend_data 순수 함수 호출
+      build_profit_trend_data(
+        return_tbl  = ma_obj$read_obj('return'),
+        cash_in_out = ma_obj$cash_in_out,
+        start       = input$total_s_date,
+        end         = input$total_e_date
+      )
     })
 
     y_num <- reactive({
@@ -101,8 +121,14 @@ mod_profit_server <- function(id, ma_v, on_initial_load) {
     output$total_profit <- renderPlot({
       req(input$graph_limt2)
       num <- as.numeric(input$graph_limt2)
+      ma_obj <- ma_v()
 
-      fig1 <- ma_v()$plot_total_eval()
+      # build_eval_trend_plot 순수 함수 호출
+      fig1 <- build_eval_trend_plot(
+        return_tbl = ma_obj$read_obj('return'),
+        inflow_df  = ma_obj$inflow,
+        today      = ma_obj$today
+      )
 
       fig2 <- df_graph() %>%
         ggplot(aes(x = 기준일)) +
@@ -132,7 +158,15 @@ mod_profit_server <- function(id, ma_v, on_initial_load) {
 
     ## b. 손익변동
     output$profit_var <- renderUI({
-      ma_v()$compute_profit_var() %>%
+      ma_obj <- ma_v()
+
+      # calc_profit_variation 순수 함수 호출
+      calc_profit_variation(
+        return_tbl = ma_obj$read_obj('return'),
+        t_comm3    = ma_obj$t_comm3,
+        today      = ma_obj$today,
+        cur_year   = ma_obj$year
+      ) %>%
         flextable() |> theme_vanilla() |>
         set_table_properties(layout = 'autofit') |>
         colformat_double(j = c(4:6, 8, 10, 12, 14), digits = 0) %>%

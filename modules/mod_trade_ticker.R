@@ -1,8 +1,11 @@
 # =============================================================================
-# mod_ticker — 투자종목 관리 모듈
+# mod_trade_ticker — 투자종목 관리 모듈
+# =============================================================================
+# (구 mod_ticker.R에서 이름 변경)
+# DB CRUD는 pool 객체 직접 주입받아 사용
 # =============================================================================
 
-mod_ticker_ui <- function(id) {
+mod_trade_ticker_ui <- function(id) {
   ns <- NS(id)
   tabPanel(
     title = "투자종목 관리",
@@ -31,7 +34,7 @@ mod_ticker_ui <- function(id) {
   )
 }
 
-mod_ticker_server <- function(id, ma, ma_b, sk_b, ctg) {
+mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     rv <- reactiveValues(tickers = NULL, ticker_new = NULL)
@@ -154,10 +157,10 @@ mod_ticker_server <- function(id, ma, ma_b, sk_b, ctg) {
     observeEvent(input$ticker_new, {
       if (input$type1 == "투자자산") {
         rv$ticker_new$행번호 <- ma$assets_last_num + 1
-        dbxInsert(ma$con, 'assets', rv$ticker_new)
+        dbxInsert(pool, 'assets', rv$ticker_new)
       } else {
         rv$ticker_new$행번호 <- ma$pension_last_num + 1
-        dbxInsert(ma$con, 'pension', rv$ticker_new)
+        dbxInsert(pool, 'pension', rv$ticker_new)
       }
       sk_b(!sk_b())
       rv$tickers <- reset_ticker()
@@ -167,9 +170,9 @@ mod_ticker_server <- function(id, ma, ma_b, sk_b, ctg) {
     observeEvent(input$ticker_mod, {
       rv$ticker_new$행번호 <- input$new1
       if (input$type1 == "투자자산") {
-        dbxUpdate(ma$con, 'assets', rv$ticker_new, where_cols = c("행번호"))
+        dbxUpdate(pool, 'assets', rv$ticker_new, where_cols = c("행번호"))
       } else {
-        dbxUpdate(ma$con, 'pension', rv$ticker_new, where_cols = c("행번호"))
+        dbxUpdate(pool, 'pension', rv$ticker_new, where_cols = c("행번호"))
       }
       sk_b(!sk_b())
       rv$tickers <- reset_ticker()
@@ -179,9 +182,9 @@ mod_ticker_server <- function(id, ma, ma_b, sk_b, ctg) {
     observeEvent(input$ticker_del, {
       rv$ticker_new$행번호 <- input$new1
       if (input$type1 == "투자자산") {
-        dbxDelete(ma$con, 'assets', rv$ticker_new)
+        dbxDelete(pool, 'assets', rv$ticker_new)
       } else {
-        dbxDelete(ma$con, 'pension', rv$ticker_new)
+        dbxDelete(pool, 'pension', rv$ticker_new)
       }
       sk_b(!sk_b())
       rv$tickers <- reset_ticker()

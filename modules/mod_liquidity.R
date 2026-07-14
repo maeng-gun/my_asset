@@ -1,6 +1,9 @@
 # =============================================================================
 # mod_liquidity — 유동성 관리 모듈 (자금유출입 + 총자산추이 + 가용자금추이)
 # =============================================================================
+# DB CRUD는 pool 객체 직접 주입
+# 분석 로직은 순수 함수(calc_maturity_analysis, calc_liquidity_analysis) 호출
+# =============================================================================
 
 mod_liquidity_ui <- function(id) {
   ns <- NS(id)
@@ -54,7 +57,7 @@ mod_liquidity_ui <- function(id) {
   )
 }
 
-mod_liquidity_server <- function(id, ma, ma_b, ma_v, sk_b) {
+mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -132,7 +135,7 @@ mod_liquidity_server <- function(id, ma, ma_b, ma_v, sk_b) {
 
     observeEvent(input$inflow_new, {
       liq$d$행번호 <- ma$inflow_last_num + 1
-      dbxInsert(ma$con, 'inflow', liq$d)
+      dbxInsert(pool, 'inflow', liq$d)
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
@@ -140,21 +143,31 @@ mod_liquidity_server <- function(id, ma, ma_b, ma_v, sk_b) {
 
     observeEvent(input$inflow_mod, {
       liq$d$행번호 <- input$new3
-      dbxUpdate(ma$con, 'inflow', liq$d, where_cols = c("행번호"))
+      dbxUpdate(pool, 'inflow', liq$d, where_cols = c("행번호"))
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
     })
 
     observeEvent(input$inflow_del, {
-      dbxDelete(ma$con, 'inflow', tibble::tibble_row(행번호 = input$new3))
+      dbxDelete(pool, 'inflow', tibble::tibble_row(행번호 = input$new3))
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
     })
 
     ## 만기도래 테이블
-    maturity_data <- reactive({ ma_v()$get_maturiy_analysis() })
+    maturity_data <- reactive({
+      ma_obj <- ma_v()
+      # calc_maturity_analysis 순수 함수 호출
+      calc_maturity_analysis(
+        bs_pl_mkt_a = ma_obj$bs_pl_mkt_a,
+        bs_pl_mkt_p = ma_obj$bs_pl_mkt_p,
+        assets_df   = ma_obj$assets,
+        pension_df  = ma_obj$pension,
+        today       = ma_obj$today
+      )
+    })
 
     output$maturity_table <- renderUI({
       maturity_data() %>%
@@ -166,7 +179,17 @@ mod_liquidity_server <- function(id, ma, ma_b, ma_v, sk_b) {
 
     # === b. 총자산추이 탭 ===
 
-    liquidity_data <- reactive({ ma_v()$get_liquidity_analysis() })
+    liquidity_data <- reactive({
+      ma_obj <- ma_v()
+      # calc_liquidity_analysis 순수 함수 호출
+      calc_liquidity_analysis(
+        t_comm2     = ma_obj$t_comm2,
+        inflow_df   = ma_obj$inflow,
+        maturity_df = maturity_data(),
+        today       = ma_obj$today,
+        acct_order  = ma_obj$acct_order
+      )
+    })
 
     output$current_total_asset_table <- renderUI({
       liquidity_data()$current_status %>%

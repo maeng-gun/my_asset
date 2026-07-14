@@ -1,10 +1,13 @@
 # =============================================================================
-# mod_trading — 거래내역 기록 모듈
+# mod_trade_history — 거래내역 기록 모듈
+# =============================================================================
+# (구 mod_trading.R에서 이름 변경)
+# DB CRUD는 pool 객체 직접 주입받아 사용
 # =============================================================================
 
 #' 거래내역 기록 탭 UI
 #' @param id 모듈 네임스페이스 ID
-mod_trading_ui <- function(id) {
+mod_trade_history_ui <- function(id) {
   ns <- NS(id)
   tabPanel(
     title = "거래내역",
@@ -86,10 +89,11 @@ mod_trading_ui <- function(id) {
 
 #' 거래내역 기록 탭 서버
 #' @param id 모듈 네임스페이스 ID
-#' @param ma MyAssets R6 인스턴스
+#' @param pool DB 커넥션 풀
+#' @param ma MyAssets R6 인스턴스 (상태 참조용)
 #' @param ma_b reactive — 장부금액 데이터
 #' @param sk_b reactiveVal — 장부금액 갱신 트리거
-mod_trading_server <- function(id, ma, ma_b, sk_b) {
+mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b) {
   moduleServer(id, function(input, output, session) {
 
     # 모듈 내부 반응성 값
@@ -227,10 +231,10 @@ mod_trading_server <- function(id, ma, ma_b, sk_b) {
     observeEvent(input$ass_trade_new, {
       if (input$type2 == "투자자산") {
         rv$trade_new$행번호 <- ma$assets_daily_last_num + 1
-        dbxInsert(ma$con, 'assets_daily', rv$trade_new)
+        dbxInsert(pool, 'assets_daily', rv$trade_new)
       } else {
         rv$trade_new$행번호 <- ma$pension_daily_last_num + 1
-        dbxInsert(ma$con, 'pension_daily', rv$trade_new)
+        dbxInsert(pool, 'pension_daily', rv$trade_new)
       }
       sk_b(!sk_b())
       rv$trade <- reset_trade()
@@ -241,10 +245,10 @@ mod_trading_server <- function(id, ma, ma_b, sk_b) {
     observeEvent(input$ass_trade_mod, {
       rv$trade_new$행번호 <- input$new2
       if (input$type2 == "투자자산") {
-        dbxUpdate(ma$con, 'assets_daily', rv$trade_new,
+        dbxUpdate(pool, 'assets_daily', rv$trade_new,
                   where_cols = c("행번호"))
       } else {
-        dbxUpdate(ma$con, 'pension_daily', rv$trade_new,
+        dbxUpdate(pool, 'pension_daily', rv$trade_new,
                   where_cols = c("행번호"))
       }
       sk_b(!sk_b())
@@ -256,9 +260,9 @@ mod_trading_server <- function(id, ma, ma_b, sk_b) {
     observeEvent(input$ass_trade_del, {
       rv$trade_new$행번호 <- input$new2
       if (input$type2 == "투자자산") {
-        dbxDelete(ma$con, 'assets_daily', rv$trade_new)
+        dbxDelete(pool, 'assets_daily', rv$trade_new)
       } else {
-        dbxDelete(ma$con, 'pension_daily', rv$trade_new)
+        dbxDelete(pool, 'pension_daily', rv$trade_new)
       }
       sk_b(!sk_b())
       rv$trade <- reset_trade()

@@ -1,6 +1,8 @@
 # =============================================================================
 # mod_strategy — 배분전략 및 성과분석 모듈
 # =============================================================================
+# DB CRUD는 pool 객체 직접 주입, 성과분석은 순수 함수 호출
+# =============================================================================
 
 mod_strategy_ui <- function(id) {
   ns <- NS(id)
@@ -46,7 +48,7 @@ mod_strategy_ui <- function(id) {
   )
 }
 
-mod_strategy_server <- function(id, ma, ma_b, ma_v, sk_b) {
+mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -105,7 +107,7 @@ mod_strategy_server <- function(id, ma, ma_b, ma_v, sk_b) {
         행번호 = as.integer(next_id),
         stringsAsFactors = FALSE
       )
-      dbxInsert(conn = ma$con, table = "allo_table", records = new_row)
+      dbxInsert(conn = pool, table = "allo_table", records = new_row)
       sk_b(!sk_b())
       show_delay("자산배분 내역이 추가되었습니다.", "success")
     })
@@ -125,7 +127,7 @@ mod_strategy_server <- function(id, ma, ma_b, ma_v, sk_b) {
         행번호 = as.numeric(input$allo_new),
         stringsAsFactors = FALSE
       )
-      dbxUpdate(conn = ma$con, table = "allo_table", records = mod_row,
+      dbxUpdate(conn = pool, table = "allo_table", records = mod_row,
                 where_cols = c("행번호"))
       sk_b(!sk_b())
       show_delay("성공적으로 수정되었습니다.", "success")
@@ -134,7 +136,7 @@ mod_strategy_server <- function(id, ma, ma_b, ma_v, sk_b) {
     ## 삭제
     observeEvent(input$allo_del, {
       if (input$allo_new == "신규") return(show_delay("삭제할 행을 선택해주세요.", "error"))
-      dbxDelete(conn = ma$con, table = "allo_table",
+      dbxDelete(conn = pool, table = "allo_table",
                 where = data.frame(행번호 = as.numeric(input$allo_new)))
       updateSelectInput(session, "allo_new", selected = "신규")
       sk_b(!sk_b())
@@ -217,11 +219,20 @@ mod_strategy_server <- function(id, ma, ma_b, ma_v, sk_b) {
 
     raw_bm_data <- reactive({
       req(input$base_month)
-      ma_v()$get_benchmark_returns(input$base_month)
+      ma_obj <- ma_v()
+
+      # calc_benchmark_returns 순수 함수 호출
+      calc_benchmark_returns(
+        return_tbl    = ma_obj$read_obj('return'),
+        cash_in_out   = ma_obj$cash_in_out,
+        allo_table_df = ma_obj$read('allo_table'),
+        base_month    = input$base_month,
+        today         = ma_obj$today
+      )
     })
 
     output$dynamic_boxes <- renderUI({
-      t_date <- ma_v()$get_target_date(input$base_month)
+      t_date <- get_target_date(input$base_month, ma_v()$today)
       fluidRow(
         box(title = paste0(month(t_date), "월 MTD (BM vs MyPF)"),
             width = 6, status = "primary", solidHeader = TRUE,
@@ -247,29 +258,30 @@ mod_strategy_server <- function(id, ma, ma_b, ma_v, sk_b) {
     cols_bm <- c("기준일", "MyPF", "코스피", "S&P", "금현물", "리츠", "회사채", "시장형채권")
     cols_pf <- c("기준일", "MyPF", "SAA", "TAA1", "TAA2")
 
+    # build_pf_return_plot 순수 함수 호출
     output$plot_mtd_bm <- renderPlot({
-      ma_v()$plot_pf_return(raw_bm_data(), cols_bm,
-                            floor_date(ma_v()$get_target_date(input$base_month), "month") - days(1))
+      build_pf_return_plot(raw_bm_data(), cols_bm,
+                            floor_date(get_target_date(input$base_month, ma_v()$today), "month") - days(1))
     })
     output$plot_mtd_pf <- renderPlot({
-      ma_v()$plot_pf_return(raw_bm_data(), cols_pf,
-                            floor_date(ma_v()$get_target_date(input$base_month), "month") - days(1))
+      build_pf_return_plot(raw_bm_data(), cols_pf,
+                            floor_date(get_target_date(input$base_month, ma_v()$today), "month") - days(1))
     })
     output$plot_qtd_bm <- renderPlot({
-      ma_v()$plot_pf_return(raw_bm_data(), cols_bm,
-                            floor_date(ma_v()$get_target_date(input$base_month), "quarter") - days(1))
+      build_pf_return_plot(raw_bm_data(), cols_bm,
+                            floor_date(get_target_date(input$base_month, ma_v()$today), "quarter") - days(1))
     })
     output$plot_qtd_pf <- renderPlot({
-      ma_v()$plot_pf_return(raw_bm_data(), cols_pf,
-                            floor_date(ma_v()$get_target_date(input$base_month), "quarter") - days(1))
+      build_pf_return_plot(raw_bm_data(), cols_pf,
+                            floor_date(get_target_date(input$base_month, ma_v()$today), "quarter") - days(1))
     })
     output$plot_ytd_bm <- renderPlot({
-      ma_v()$plot_pf_return(raw_bm_data(), cols_bm,
-                            floor_date(ma_v()$get_target_date(input$base_month), "year") - days(1))
+      build_pf_return_plot(raw_bm_data(), cols_bm,
+                            floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
     })
     output$plot_ytd_pf <- renderPlot({
-      ma_v()$plot_pf_return(raw_bm_data(), cols_pf,
-                            floor_date(ma_v()$get_target_date(input$base_month), "year") - days(1))
+      build_pf_return_plot(raw_bm_data(), cols_pf,
+                            floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
     })
   })
 }

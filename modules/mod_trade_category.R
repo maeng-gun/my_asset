@@ -1,8 +1,11 @@
 # =============================================================================
-# mod_category — 구분항목 관리 모듈
+# mod_trade_category — 구분항목 관리 모듈
+# =============================================================================
+# (구 mod_category.R에서 이름 변경)
+# DB CRUD는 pool 객체 직접 주입받아 사용
 # =============================================================================
 
-mod_category_ui <- function(id) {
+mod_trade_category_ui <- function(id) {
   ns <- NS(id)
   tabPanel(
     title = "구분항목 관리",
@@ -27,7 +30,7 @@ mod_category_ui <- function(id) {
   )
 }
 
-mod_category_server <- function(id, ma, sk_c, ctg) {
+mod_trade_category_server <- function(id, pool, ma, sk_c, ctg) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -67,7 +70,7 @@ mod_category_server <- function(id, ma, sk_c, ctg) {
           key = i,
           value = input[[glue("select_{i}")]]
         )
-        dbxDelete(ma$con, 'categories', item_to_delete)
+        dbxDelete(pool, 'categories', item_to_delete)
         sk_c(!sk_c())
       })
     })

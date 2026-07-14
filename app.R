@@ -1,7 +1,7 @@
 # =============================================================================
 # app.R — 엔트리포인트 (모듈 조립 전용)
 # =============================================================================
-# 기존 2,147줄 → 모듈 호출 중심으로 축소
+# pool 기반 DB 커넥션 관리, R6 의존성 주입, 모듈 라우팅
 # global.R에서 모든 패키지와 소스 파일을 로드한 상태에서 실행
 # =============================================================================
 
@@ -92,10 +92,10 @@ body <- dashboardBody(
       tabName = "trading_record",
       tabBox(
         id = "trading_box", width = 12, status = "primary", type = "tabs",
-        mod_trading_ui("trading"),
-        mod_ticker_ui("ticker"),
-        mod_category_ui("category"),
-        mod_total_trade_ui("total_trade")
+        mod_trade_history_ui("trading"),
+        mod_trade_ticker_ui("ticker"),
+        mod_trade_category_ui("category"),
+        mod_trade_total_ui("total_trade")
       )
     ),
 
@@ -143,13 +143,24 @@ server <- function(input, output, session) {
 
       show_delay("앱 구동중...", "info")
 
+      # --- DB Pool 생성 (외부 관리) ---
+      cfg <- yaml::read_yaml(file = 'ccc.yaml', readLines.warn = FALSE)
+      db_pool <- dbPool(
+        drv = RPostgres::Postgres(),
+        host = cfg$c,
+        port = 5432,
+        dbname = "postgres",
+        user = cfg$a,
+        password = auth_rv$pg_pass
+      )
+
       # 갱신 트리거 (토글 방식)
       sk_b <- reactiveVal(TRUE)
       sk_v <- reactiveVal(TRUE)
       sk_c <- reactiveVal(TRUE)
 
-      # MyAssets R6 인스턴스 생성
-      ma <- MyAssets$new(auth_rv$pg_pass)
+      # MyAssets R6 인스턴스 생성 (pool 주입)
+      ma <- MyAssets$new(pool = db_pool)
 
       # 장부금액 반응성 데이터
       ma_b <- reactive({
@@ -179,18 +190,24 @@ server <- function(input, output, session) {
         split(df$value, df$key)
       })
 
-      # --- 모듈 서버 호출 ---
-      mod_trading_server("trading", ma = ma, ma_b = ma_b, sk_b = sk_b)
-      mod_ticker_server("ticker", ma = ma, ma_b = ma_b, sk_b = sk_b, ctg = ctg)
-      mod_category_server("category", ma = ma, sk_c = sk_c, ctg = ctg)
-      mod_total_trade_server("total_trade", ma_b = ma_b)
+      # --- 모듈 서버 호출 (pool 주입) ---
+      mod_trade_history_server("trading",
+        pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b)
+      mod_trade_ticker_server("ticker",
+        pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b, ctg = ctg)
+      mod_trade_category_server("category",
+        pool = db_pool, ma = ma, sk_c = sk_c, ctg = ctg)
+      mod_trade_total_server("total_trade",
+        pool = db_pool, ma_b = ma_b)
       mod_holdings_server("holdings", ma_v = ma_v)
       mod_profit_server("profit",
         ma_v = ma_v,
         on_initial_load = function() show_delay("완료!", "success")
       )
-      mod_strategy_server("strategy", ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b)
-      mod_liquidity_server("liquidity", ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b)
+      mod_strategy_server("strategy",
+        pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b)
+      mod_liquidity_server("liquidity",
+        pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b)
 
       # --- 프로그램 종료 ---
       observeEvent(input$close_win, {
@@ -202,14 +219,25 @@ server <- function(input, output, session) {
       observeEvent(input$renew_last_eval_profit, {
         ma$renew_last_eval_profit()
       })
+
+      # --- 세션 종료 시 pool 안전 종료 ---
+      session$onSessionEnded(function() {
+        tryCatch({
+          if (pool::dbIsValid(db_pool)) {
+            pool::poolClose(db_pool)
+            message("[INFO] 세션 종료 — pool 연결 해제 완료")
+          }
+        }, error = function(e) {
+          message("[WARN] pool 종료 중 오류: ", e$message)
+        })
+      })
     },
     ignoreInit = FALSE
   )
 
-  # --- DB 연결 안전 종료 (세션 종료 시) ---
+  # --- 앱 전체 종료 시 안전장치 ---
   onStop(function() {
-    # R6 finalize에서도 처리하지만 이중 안전장치
-    message("[INFO] 세션 종료 — 자원 정리 완료")
+    message("[INFO] 앱 종료 — 자원 정리 완료")
   })
 }
 

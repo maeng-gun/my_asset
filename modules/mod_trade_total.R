@@ -1,8 +1,11 @@
 # =============================================================================
-# mod_total_trade — 종합거래내역 모듈
+# mod_trade_total — 종합거래내역 모듈
+# =============================================================================
+# (구 mod_total_trade.R에서 이름 변경)
+# 순수 함수 calc_total_trading() 사용
 # =============================================================================
 
-mod_total_trade_ui <- function(id) {
+mod_trade_total_ui <- function(id) {
   ns <- NS(id)
   tabPanel(
     title = "종합거래내역",
@@ -43,7 +46,7 @@ mod_total_trade_ui <- function(id) {
   )
 }
 
-mod_total_trade_server <- function(id, ma_b) {
+mod_trade_total_server <- function(id, pool, ma_b) {
   moduleServer(id, function(input, output, session) {
 
     output$total_trade_table <- renderUI({
@@ -52,7 +55,16 @@ mod_total_trade_server <- function(id, ma_b) {
       input$total_curr
 
       if (!is.null(input$total_trade_date)) {
-        df <- ma_b()$total_trading(input$total_trade_date)
+        ma_obj <- ma_b()
+
+        # calc_total_trading 순수 함수 호출
+        df <- calc_total_trading(
+          assets_df         = ma_obj$assets,
+          pension_df        = ma_obj$pension,
+          assets_daily_tbl  = ma_obj$read_obj('assets_daily'),
+          pension_daily_tbl = ma_obj$read_obj('pension_daily'),
+          dates             = input$total_trade_date
+        )
 
         if (input$total_ass1 != "전체")
           df <- df %>% filter(자산군 == input$total_ass1)

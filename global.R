@@ -41,7 +41,8 @@ r_files <- c(
   "src/class_my_data.R",
   "src/class_auto_invest.R",
   "src/class_my_assets.R",
-  "src/utils_flextable.R"
+  "src/utils_flextable.R",
+  "src/utils_analytics.R"
 )
 purrr::walk(r_files, source, encoding = "UTF-8")
 
