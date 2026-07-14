@@ -69,83 +69,7 @@ MyAssets <- R6Class(
                              "원화상품", "외화상품", "외환", "원화")
     },
 
-    ## 2.(공통) 가격 업데이트 ====
-    update_new_price = function() {
-
-      # 1) 환율
-      get_exchange_rate <- function(cur = '달러') {
-        num <- c('달러' = 1, '엔' = 2, '유로' = 3, '위안' = 4)
-        suppressWarnings({
-          (read_html("http://finance.naver.com/marketindex/") %>%
-             html_nodes("div.head_info > span.value")
-          )[num[cur]] %>%
-            html_text() %>%
-            readr::parse_number()
-        })
-      }
-
-      self$ex_usd <- get_exchange_rate('달러')
-      self$ex_jpy <- get_exchange_rate('엔') / 100
-
-      # 2) 국내주식 종목/ETF 종가
-      all_codes <- tibble(self$bs_pl_a) %>%
-        bind_rows(
-          tibble(self$bs_pl_p)
-        ) %>%
-        filter(보유수량 != 0) %>%
-        .$종목코드
-
-      target_codes <- unique(all_codes[str_detect(all_codes,
-                                                  "^\\d[a-zA-Z0-9]{4}\\d$")])
-
-      closing_prices <-
-        tibble(종목코드 = target_codes,
-               종가 = self$bl$get_current_price(target_codes))
-
-      # 3) 금가격 종가
-      url <- "https://api.stock.naver.com/marketindex/metals/M04020000"
-
-      tryCatch({
-        resp <- GET(url = url)
-        json_data <- content(resp, as = 'text', encoding = 'UTF-8') %>%
-          jsonlite::fromJSON()
-        price <- json_data$closePrice %>%
-          readr::parse_number()
-        gold <- tibble(종목코드 = '04020000', 종가 = price)
-      }, error = function(e) {
-        message("금 시세 조회 실패")
-        gold <<- tibble()
-      })
-
-      # 4) 펀드 기준가
-      get_fund_price <- function(code) {
-        map_dbl(code, function(x) {
-          x %>%
-            {
-              paste0('https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=', .)
-            } %>%
-            read_html() %>%
-            html_element(xpath = '/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]') %>%
-            html_text() %>%
-            stringr::str_remove(',') %>%
-            as.numeric()
-        })
-      }
-
-      fund_codes <- all_codes[(str_sub(all_codes, 1, 2) == 'K5')]
-      if (length(fund_codes) > 0) {
-        fund_prices <- tibble(종목코드 = fund_codes,
-                              종가 = get_fund_price(fund_codes) / 1000)
-      } else {
-        fund_prices <- tibble()
-      }
-
-      # 5) 결합
-      self$closing_prices <-
-        bind_rows(closing_prices, gold, fund_prices)
-    },
-
-    ## 3.(거래내역) 거래내역 기록 테이블 ====
+    ## 2.(장부금액) 거래내역 기록 테이블 ====
     get_trading_record = function(table, acct, cur, limit_n) {
 
       if (table == "투자자산") {
@@ -188,7 +112,7 @@ MyAssets <- R6Class(
         collect()
     },
 
-    ## 4.(장부금액) 계좌거래 내역 전처리 ====
+    ## 3.(장부금액) 계좌거래 내역 전처리 ====
     get_daily_trading = function(ast_info, trade) {
 
       dt_info  <- as.data.table(ast_info)
@@ -228,7 +152,7 @@ MyAssets <- R6Class(
                    수익, 비용, 실현손익, 현금수입, 입출금, 현금지출)]
     },
 
-    ## 5.(장부금액) 운용자산 잔액-손익 테이블 생성 ====
+    ## 4.(장부금액) 운용자산 잔액-손익 테이블 생성 ====
     get_bs_pl = function(mode = 'assets', trade_tbl) {
 
       trade <- copy(trade_tbl)
@@ -325,7 +249,7 @@ MyAssets <- R6Class(
       return(bs_pl)
     },
 
-    ## 6.(장부금액) 장부금액 자료 산출 ====
+    ## 5.(장부금액) 장부금액 자료 산출 ====
     run_book = function() {
 
       # DB 원자료 캐싱
@@ -381,7 +305,83 @@ MyAssets <- R6Class(
                   실현손익 = sum(실현손익))
     },
 
-    ## 7.(평가금액) 투자자산 평가반영 잔액-손익 테이블 생성 ====
+    ## 6.(평가및손익) 가격 업데이트 ====
+    update_new_price = function() {
+
+      # 1) 환율
+      get_exchange_rate <- function(cur = '달러') {
+        num <- c('달러' = 1, '엔' = 2, '유로' = 3, '위안' = 4)
+        suppressWarnings({
+          (read_html("http://finance.naver.com/marketindex/") %>%
+             html_nodes("div.head_info > span.value")
+          )[num[cur]] %>%
+             html_text() %>%
+             readr::parse_number()
+        })
+      }
+
+      self$ex_usd <- get_exchange_rate('달러')
+      self$ex_jpy <- get_exchange_rate('엔') / 100
+
+      # 2) 국내주식 종목/ETF 종가
+      all_codes <- tibble(self$bs_pl_a) %>%
+        bind_rows(
+          tibble(self$bs_pl_p)
+        ) %>%
+        filter(보유수량 != 0) %>%
+        .$종목코드
+
+      target_codes <- unique(all_codes[str_detect(all_codes,
+                                                  "^\\d[a-zA-Z0-9]{4}\\d$")])
+
+      closing_prices <-
+        tibble(종목코드 = target_codes,
+               종가 = self$bl$get_current_price(target_codes))
+
+      # 3) 금가격 종가
+      url <- "https://api.stock.naver.com/marketindex/metals/M04020000"
+
+      tryCatch({
+        resp <- GET(url = url)
+        json_data <- content(resp, as = 'text', encoding = 'UTF-8') %>%
+          jsonlite::fromJSON()
+        price <- json_data$closePrice %>%
+          readr::parse_number()
+        gold <- tibble(종목코드 = '04020000', 종가 = price)
+      }, error = function(e) {
+        message("금 시세 조회 실패")
+        gold <<- tibble()
+      })
+
+      # 4) 펀드 기준가
+      get_fund_price <- function(code) {
+        map_dbl(code, function(x) {
+          x %>%
+            {
+              paste0('https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=', .)
+            } %>%
+            read_html() %>%
+            html_element(xpath = '/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]') %>%
+            html_text() %>%
+            stringr::str_remove(',') %>%
+            as.numeric()
+        })
+      }
+
+      fund_codes <- all_codes[(str_sub(all_codes, 1, 2) == 'K5')]
+      if (length(fund_codes) > 0) {
+        fund_prices <- tibble(종목코드 = fund_codes,
+                              종가 = get_fund_price(fund_codes) / 1000)
+      } else {
+        fund_prices <- tibble()
+      }
+
+      # 5) 결합
+      self$closing_prices <-
+        bind_rows(closing_prices, gold, fund_prices)
+    },
+
+    ## 7.(평가및손익) 투자자산 평가반영 잔액-손익 테이블 생성 ====
     evaluate_bs_pl_assets = function() {
 
       price <- self$assets %>%
@@ -423,7 +423,7 @@ MyAssets <- R6Class(
       return(as_tibble(bs_pl))
     },
 
-    ## 8.(장부금액) 연금 평가반영 잔액-손익 테이블 생성 ====
+    ## 8.(평가및손익) 연금 평가반영 잔액-손익 테이블 생성 ====
     evaluate_bs_pl_pension = function() {
 
       price <- self$pension %>%
@@ -456,49 +456,7 @@ MyAssets <- R6Class(
       return(as_tibble(bs_pl))
     },
 
-    ## 9.(자산운용내역) 기간별 거래내역 생성 ====
-    total_trading = function(dates) {
-
-      if (length(dates) == 1) {
-        start <- dates
-        end   <- dates
-      } else {
-        start <- dates[1]
-        end   <- dates[2]
-      }
-
-      df1 <- self$assets %>%
-        bind_rows(self$pension)
-
-      df2 <- self$read_obj('assets_daily') %>%
-        filter(between(거래일자, start, end)) %>%
-        collect() %>%
-        bind_rows(
-          self$read_obj('pension_daily') %>%
-            filter(between(거래일자, start, end)) %>%
-            collect()
-        )
-
-      df3 <- df2 %>% left_join(
-        (df1 %>% transmute(계좌, 통화, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명)),
-        by = c('계좌', '종목코드')) %>%
-        filter(자산군 != '현금성') %>%
-        filter(매입액 != 0 | 매도액 != 0) %>%
-        select(자산군, 세부자산군, 세부자산군2, 통화, 거래일자, 계좌, 상품명,
-               매입수량, 매입액, 매도수량, 매도액) %>%
-        mutate(매입단가 = 매입액 / 매입수량, .after = 매입액) %>%
-        mutate(매도단가 = 매도액 / 매도수량, .after = 매도액) %>%
-        arrange(자산군, 세부자산군, 세부자산군2, 통화, 상품명, 거래일자,
-                desc(매입액), desc(매도액))
-
-      df4 <- df3 %>% summarise(거래일자 = NA_Date_, 계좌 = '', 자산군 = '', 세부자산군 = '',
-                               세부자산군2 = '', 상품명 = '합계', 매도액 = sum(매도액),
-                               매입액 = sum(매입액), .groups = 'drop')
-
-      df3 %>% bind_rows(df4)
-    },
-
-    ## 10.(보유현황) 자산군별/상품별 보유현황 생성 ====
+    ## 9.(평가및손익) 자산군별/상품별 보유현황 생성 ====
     compute_total = function() {
       df <- self$bs_pl_mkt_a
       usd_bs   <- round(filter(df, 통화 == '달러')$장부금액 * self$ex_usd, 0)
@@ -664,7 +622,7 @@ MyAssets <- R6Class(
         arrange(자산군, 세부자산군, 세부자산군2, 계좌)
     },
 
-    ## 11.(배분현황) 자산배분 생성 ====
+    ## 10.(평가및손익) 자산배분 생성 ====
     compute_total_allocation = function() {
 
       self$account_allocation <- self$read('groups') %>%
@@ -685,201 +643,7 @@ MyAssets <- R6Class(
         mutate(비중 = 합계 / last(합계) * 100)
     },
 
-    ## 12-1.(손익현황) 종합손익 그래프 생성 ====
-    plot_total_profit = function(start, end) {
-      df <- self$read_obj('return') %>%
-        filter(자산군 == '<합계>') %>%
-        collect() %>%
-        transmute(기준일 = as.Date(기준일), 평가금액, 총손익) %>%
-        filter(기준일 >= start, 기준일 <= end) %>%
-        arrange(기준일)
-
-      df %>% full_join(
-        self$cash_in_out %>%
-          filter(기준일 %>% between(first(df$기준일), last(df$기준일))),
-        by = '기준일'
-      ) %>%
-        arrange(기준일) %>%
-        fill(평가금액, 총손익, .direction = 'down') %>%
-        mutate(입출금 = na.fill(입출금, 0)) %>%
-        group_by(연도 = year(기준일)) %>%
-        mutate(총손익_1 = lag(총손익, default = 0),
-               일간손익 = if_else(기준일 == start, 0, 총손익 - 총손익_1) / 10000) %>%
-        ungroup() %>%
-        mutate(손익누계 = cumsum(일간손익))
-    },
-
-    ## 12-2.(손익현황) 평가금액 추이 그래프 생성 ====
-    plot_total_eval = function() {
-      days1 <- self$today %m-% years(1)
-
-      df2 <- self$read_obj('return') %>%
-        filter(자산군 == '<합계>') %>%
-        transmute(기준일 = as.Date(기준일), 평가금액 = 평가금액 / 10000) %>%
-        filter(기준일 >= days1) %>%
-        arrange(기준일) %>%
-        collect() %>%
-        mutate(구분 = '실선')
-
-      df3 <- tibble(기준일 = seq(self$today + 1, self$today %m+% years(1), 1)) %>%
-        left_join(
-          self$inflow %>%
-            transmute(기준일 = 거래일자, 자금유출입 = 자금유출입 / 10000) %>%
-            group_by(기준일) %>%
-            summarise(평가금액 = sum(자금유출입)),
-          by = '기준일'
-        ) %>%
-        mutate(평가금액 = if_else(is.na(평가금액), 0, 평가금액),
-               평가금액 = if_else(기준일 == self$today + 1,
-                            평가금액 + last(df2$평가금액),
-                            평가금액),
-               평가금액 = cumsum(평가금액)) %>%
-        mutate(구분 = '점선')
-
-      bind_rows(df2, df3) %>%
-        ggplot(aes(x = 기준일, y = 평가금액)) +
-        geom_line(aes(group = 1), color = "grey80", alpha = 0.5) +
-        geom_line(aes(linetype = 구분, color = 구분), linewidth = 1) +
-        scale_linetype_manual(
-          values = c("실선" = "solid", "점선" = "dashed")) +
-        scale_color_manual(values =
-                             c("실선" = "steelblue", "점선" = "firebrick")) +
-        scale_y_continuous(
-          breaks = function(x) {seq(
-            floor(x[1] / 5000) * 5000,
-            ceiling(x[2] / 5000) * 5000,
-            by = 5000
-          )}, sec.axis = dup_axis(name = NULL)
-        ) +
-        scale_x_date(date_breaks = "2 month", date_labels = "%Y-%m") +
-        theme(text = element_text(size = 20),
-              axis.text.x = element_text(angle = 45, hjust = 1))
-    },
-
-    ## 13.(손익현황) 종합손익 테이블 생성 ====
-    compute_t_profit = function() {
-      tibble(연도 = 2023,
-             장부금액 = 77986913,
-             평잔 = 63019405,
-             실현손익 = 2376343) %>%
-        bind_rows(self$book_info) %>%
-        left_join(
-          self$read_obj('eval_profit') %>%
-            group_by(연도) %>%
-            summarise(평가손익 = sum(평가손익, na.rm = TRUE)) %>%
-            collect(),
-          by = '연도'
-        ) %>%
-        left_join(
-          self$read_obj('return') %>%
-            filter(자산군 == '<합계>') %>%
-            filter((month(기준일) == 12 & day(기준일) == 31) |
-                     기준일 == self$today) %>%
-            transmute(연도 = year(기준일), 평가금액) %>%
-            collect() %>%
-            add_row(연도 = 2023, 평가금액 = 78916405),
-          by = '연도'
-        ) %>%
-        transmute(
-          연도 = as.character(연도),
-          장부금액, 평잔, 평가금액, 평가손익, 실현손익,
-          평가손익증감 = if_else(연도 == 2023, first(평가손익),
-                         diff_vec(평가손익, silent = TRUE)),
-          총손익 = 실현손익 + 평가손익증감,
-          실현수익률 = 실현손익 / 평잔 * 100,
-          평가증감률 = 평가손익증감 / 평잔 * 100,
-          총수익률 = 실현수익률 + 평가증감률)
-    },
-
-    ## 14.(손익현황) 손익변동 생성 ====
-    compute_profit_var = function() {
-      dates <- self$read_obj('return') %>%
-        distinct(기준일) %>%
-        arrange(기준일) %>%
-        pull()
-
-      dates_list <- tibble(기준일 = seq(first(dates), last(dates), by = 1)) %>%
-        left_join(
-          tibble(기준일 = dates, 기록일 = dates),
-          by = '기준일'
-        ) %>%
-        fill(기록일)
-
-      d1 <- self$today - days(1)
-      d7 <- self$today - weeks(1)
-      dm <- self$today %m-% months(1)
-      dy <- self$today %m-% years(1)
-      ly <- make_date(self$year - 1, 12, 31)
-
-      filtered <- dates_list %>%
-        filter(기준일 %in% c(d1, d7, dm, dy, ly))
-
-      past_value <- self$read_obj('return') %>%
-        filter(기준일 %in% filtered$기록일) %>%
-        rename(기록일 = 기준일) %>%
-        collect() %>%
-        left_join(
-          filtered, by = '기록일'
-        ) %>%
-        select(-기록일, -평가금액) %>%
-        mutate(
-          전년도 = if_else(year(기준일) < self$year, TRUE, FALSE),
-          기준일 = case_match(기준일, d1 ~ '1d', d7 ~ '7d', dm ~ '1m',
-                           dy ~ '1y', ly ~ 'ly'))
-
-      ldays  <- past_value %>% filter(전년도) %>% distinct(기준일) %>% .$기준일
-      ldays2 <- paste0(ldays, '_')
-
-      past_value1 <- past_value %>% select(-전년도, -총수익률) %>%
-        pivot_wider(names_from = 기준일, values_from = 총손익)
-
-      past_value2 <- past_value %>% select(-전년도, -총손익) %>%
-        pivot_wider(names_from = 기준일, values_from = 총수익률) %>%
-        rename(`ly_` = `ly`, `1d_` = `1d`, `7d_` = `7d`, `1m_` = `1m`, `1y_` = `1y`)
-
-      if (ly %in% c(d1, d7, dm, dy)) {
-        past_value1 <-
-          past_value1 %>%
-          left_join(
-            self$read_obj('return') %>%
-              filter(기준일 == ly) %>%
-              select(-기준일, -평가금액, -총수익률) %>%
-              rename(ly = 총손익) %>%
-              collect(),
-            by = c('자산군', '세부자산군', '세부자산군2')
-          )
-
-        past_value2 <-
-          past_value2 %>%
-          left_join(
-            self$read_obj('return') %>%
-              filter(기준일 == ly) %>%
-              select(-기준일, -평가금액, -총손익) %>%
-              rename(ly_ = 총수익률) %>%
-              collect(),
-            by = c('자산군', '세부자산군', '세부자산군2')
-          )
-      }
-
-      self$t_comm3 %>%
-        select(자산군:세부자산군2, 평가금액, 평잔, 총손익, 총수익률) %>%
-        left_join(
-          past_value1, by = c('자산군', '세부자산군', '세부자산군2')
-        ) %>%
-        mutate(across(any_of(ldays), ~ ly - .x + 총손익)) %>%
-        mutate(across(any_of(setdiff(c('1d', '7d', '1m', '1y'), ldays)), ~ 총손익 - .x)) %>%
-        select(-ly) %>%
-        left_join(
-          past_value2, by = c('자산군', '세부자산군', '세부자산군2')
-        ) %>%
-        mutate(across(any_of(ldays2), ~ly_ - .x + 총수익률)) %>%
-        mutate(across(any_of(setdiff(c('1d_', '7d_', '1m_', '1y_'), ldays2)),
-                      ~ 총수익률 - .x)) %>%
-        select(-ly_) %>%
-        select(자산군:총수익률, '1d', '1d_', '7d', '7d_', '1m', '1m_', '1y', '1y_')
-    },
-
-    ## 15.(손익현황) 자산군별/계좌별 손익현황 생성 ====
+    ## 11.(평가및손익) 자산군별/계좌별 손익현황 생성 ====
     compute_asset_profit = function() {
 
       df1 <- self$bs_pl_mkt_a %>%
@@ -975,7 +739,7 @@ MyAssets <- R6Class(
         arrange(계좌, 자산군)
     },
 
-    ## 16.(손익현황) 상품별 손익현황 계산 ====
+    ## 12.(평가및손익) 상품별 손익현황 계산 ====
     compute_comm_profit = function() {
 
       df_a <- self$bs_pl_mkt_a
@@ -1015,8 +779,256 @@ MyAssets <- R6Class(
                장부금액, 평잔, 평가금액, 평가손익, 실현손익, 평가손익증감,
                총손익, 비용률, 실현수익률, 평가증감률, 총수익률)
     },
-
-    ## 17.(배분및성과) 벤치마크용 타겟 일자 반환 ====
+    
+    ## 13.(평가및손익) 평가금액 계산 ====
+    run_valuation = function() {
+      self$update_new_price()
+      self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
+      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
+      self$compute_total()
+      self$compute_total_allocation()
+      self$compute_asset_profit()
+      self$compute_comm_profit()
+    },
+    
+    ## 14.(자산운용내역) 기간별 거래내역 생성 ====
+    total_trading = function(dates) {
+      
+      if (length(dates) == 1) {
+        start <- dates
+        end   <- dates
+      } else {
+        start <- dates[1]
+        end   <- dates[2]
+      }
+      
+      df1 <- self$assets %>%
+        bind_rows(self$pension)
+      
+      df2 <- self$read_obj('assets_daily') %>%
+        filter(between(거래일자, start, end)) %>%
+        collect() %>%
+        bind_rows(
+          self$read_obj('pension_daily') %>%
+            filter(between(거래일자, start, end)) %>%
+            collect()
+        )
+      
+      df3 <- df2 %>% left_join(
+        (df1 %>% transmute(계좌, 통화, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명)),
+        by = c('계좌', '종목코드')) %>%
+        filter(자산군 != '현금성') %>%
+        filter(매입액 != 0 | 매도액 != 0) %>%
+        select(자산군, 세부자산군, 세부자산군2, 통화, 거래일자, 계좌, 상품명,
+               매입수량, 매입액, 매도수량, 매도액) %>%
+        mutate(매입단가 = 매입액 / 매입수량, .after = 매입액) %>%
+        mutate(매도단가 = 매도액 / 매도수량, .after = 매도액) %>%
+        arrange(자산군, 세부자산군, 세부자산군2, 통화, 상품명, 거래일자,
+                desc(매입액), desc(매도액))
+      
+      df4 <- df3 %>% summarise(거래일자 = NA_Date_, 계좌 = '', 자산군 = '', 세부자산군 = '',
+                               세부자산군2 = '', 상품명 = '합계', 매도액 = sum(매도액),
+                               매입액 = sum(매입액), .groups = 'drop')
+      
+      df3 %>% bind_rows(df4)
+    },
+    
+    ## 15.(손익현황) 종합손익 테이블 생성 ====
+    compute_t_profit = function() {
+      tibble(연도 = 2023,
+             장부금액 = 77986913,
+             평잔 = 63019405,
+             실현손익 = 2376343) %>%
+        bind_rows(self$book_info) %>%
+        left_join(
+          self$read_obj('eval_profit') %>%
+            group_by(연도) %>%
+            summarise(평가손익 = sum(평가손익, na.rm = TRUE)) %>%
+            collect(),
+          by = '연도'
+        ) %>%
+        left_join(
+          self$read_obj('return') %>%
+            filter(자산군 == '<합계>') %>%
+            filter((month(기준일) == 12 & day(기준일) == 31) |
+                     기준일 == self$today) %>%
+            transmute(연도 = year(기준일), 평가금액) %>%
+            collect() %>%
+            add_row(연도 = 2023, 평가금액 = 78916405),
+          by = '연도'
+        ) %>%
+        transmute(
+          연도 = as.character(연도),
+          장부금액, 평잔, 평가금액, 평가손익, 실현손익,
+          평가손익증감 = if_else(연도 == 2023, first(평가손익),
+                           diff_vec(평가손익, silent = TRUE)),
+          총손익 = 실현손익 + 평가손익증감,
+          실현수익률 = 실현손익 / 평잔 * 100,
+          평가증감률 = 평가손익증감 / 평잔 * 100,
+          총수익률 = 실현수익률 + 평가증감률)
+    },
+    
+    ## 16.(손익현황) 종합손익 그래프 생성 ====
+    plot_total_profit = function(start, end) {
+      df <- self$read_obj('return') %>%
+        filter(자산군 == '<합계>') %>%
+        collect() %>%
+        transmute(기준일 = as.Date(기준일), 평가금액, 총손익) %>%
+        filter(기준일 >= start, 기준일 <= end) %>%
+        arrange(기준일)
+      
+      df %>% full_join(
+        self$cash_in_out %>%
+          filter(기준일 %>% between(first(df$기준일), last(df$기준일))),
+        by = '기준일'
+      ) %>%
+        arrange(기준일) %>%
+        fill(평가금액, 총손익, .direction = 'down') %>%
+        mutate(입출금 = na.fill(입출금, 0)) %>%
+        group_by(연도 = year(기준일)) %>%
+        mutate(총손익_1 = lag(총손익, default = 0),
+               일간손익 = if_else(기준일 == start, 0, 총손익 - 총손익_1) / 10000) %>%
+        ungroup() %>%
+        mutate(손익누계 = cumsum(일간손익))
+    },
+    
+    
+    ## 17.(손익현황) 평가금액 추이 그래프 생성 ====
+    plot_total_eval = function() {
+      days1 <- self$today %m-% years(1)
+      
+      df2 <- self$read_obj('return') %>%
+        filter(자산군 == '<합계>') %>%
+        transmute(기준일 = as.Date(기준일), 평가금액 = 평가금액 / 10000) %>%
+        filter(기준일 >= days1) %>%
+        arrange(기준일) %>%
+        collect() %>%
+        mutate(구분 = '실선')
+      
+      df3 <- tibble(기준일 = seq(self$today + 1, self$today %m+% years(1), 1)) %>%
+        left_join(
+          self$inflow %>%
+            transmute(기준일 = 거래일자, 자금유출입 = 자금유출입 / 10000) %>%
+            group_by(기준일) %>%
+            summarise(평가금액 = sum(자금유출입)),
+          by = '기준일'
+        ) %>%
+        mutate(평가금액 = if_else(is.na(평가금액), 0, 평가금액),
+               평가금액 = if_else(기준일 == self$today + 1,
+                              평가금액 + last(df2$평가금액),
+                              평가금액),
+               평가금액 = cumsum(평가금액)) %>%
+        mutate(구분 = '점선')
+      
+      bind_rows(df2, df3) %>%
+        ggplot(aes(x = 기준일, y = 평가금액)) +
+        geom_line(aes(group = 1), color = "grey80", alpha = 0.5) +
+        geom_line(aes(linetype = 구분, color = 구분), linewidth = 1) +
+        scale_linetype_manual(
+          values = c("실선" = "solid", "점선" = "dashed")) +
+        scale_color_manual(values =
+                             c("실선" = "steelblue", "점선" = "firebrick")) +
+        scale_y_continuous(
+          breaks = function(x) {seq(
+            floor(x[1] / 5000) * 5000,
+            ceiling(x[2] / 5000) * 5000,
+            by = 5000
+          )}, sec.axis = dup_axis(name = NULL)
+        ) +
+        scale_x_date(date_breaks = "2 month", date_labels = "%Y-%m") +
+        theme(text = element_text(size = 20),
+              axis.text.x = element_text(angle = 45, hjust = 1))
+    },
+        
+    ## 18.(손익현황) 손익변동 생성 ====
+    compute_profit_var = function() {
+      dates <- self$read_obj('return') %>%
+        distinct(기준일) %>%
+        arrange(기준일) %>%
+        pull()
+      
+      dates_list <- tibble(기준일 = seq(first(dates), last(dates), by = 1)) %>%
+        left_join(
+          tibble(기준일 = dates, 기록일 = dates),
+          by = '기준일'
+        ) %>%
+        fill(기록일)
+      
+      d1 <- self$today - days(1)
+      d7 <- self$today - weeks(1)
+      dm <- self$today %m-% months(1)
+      dy <- self$today %m-% years(1)
+      ly <- make_date(self$year - 1, 12, 31)
+      
+      filtered <- dates_list %>%
+        filter(기준일 %in% c(d1, d7, dm, dy, ly))
+      
+      past_value <- self$read_obj('return') %>%
+        filter(기준일 %in% filtered$기록일) %>%
+        rename(기록일 = 기준일) %>%
+        collect() %>%
+        left_join(
+          filtered, by = '기록일'
+        ) %>%
+        select(-기록일, -평가금액) %>%
+        mutate(
+          전년도 = if_else(year(기준일) < self$year, TRUE, FALSE),
+          기준일 = case_match(기준일, d1 ~ '1d', d7 ~ '7d', dm ~ '1m',
+                           dy ~ '1y', ly ~ 'ly'))
+      
+      ldays  <- past_value %>% filter(전년도) %>% distinct(기준일) %>% .$기준일
+      ldays2 <- paste0(ldays, '_')
+      
+      past_value1 <- past_value %>% select(-전년도, -총수익률) %>%
+        pivot_wider(names_from = 기준일, values_from = 총손익)
+      
+      past_value2 <- past_value %>% select(-전년도, -총손익) %>%
+        pivot_wider(names_from = 기준일, values_from = 총수익률) %>%
+        rename(`ly_` = `ly`, `1d_` = `1d`, `7d_` = `7d`, `1m_` = `1m`, `1y_` = `1y`)
+      
+      if (ly %in% c(d1, d7, dm, dy)) {
+        past_value1 <-
+          past_value1 %>%
+          left_join(
+            self$read_obj('return') %>%
+              filter(기준일 == ly) %>%
+              select(-기준일, -평가금액, -총수익률) %>%
+              rename(ly = 총손익) %>%
+              collect(),
+            by = c('자산군', '세부자산군', '세부자산군2')
+          )
+        
+        past_value2 <-
+          past_value2 %>%
+          left_join(
+            self$read_obj('return') %>%
+              filter(기준일 == ly) %>%
+              select(-기준일, -평가금액, -총손익) %>%
+              rename(ly_ = 총수익률) %>%
+              collect(),
+            by = c('자산군', '세부자산군', '세부자산군2')
+          )
+      }
+      
+      self$t_comm3 %>%
+        select(자산군:세부자산군2, 평가금액, 평잔, 총손익, 총수익률) %>%
+        left_join(
+          past_value1, by = c('자산군', '세부자산군', '세부자산군2')
+        ) %>%
+        mutate(across(any_of(ldays), ~ ly - .x + 총손익)) %>%
+        mutate(across(any_of(setdiff(c('1d', '7d', '1m', '1y'), ldays)), ~ 총손익 - .x)) %>%
+        select(-ly) %>%
+        left_join(
+          past_value2, by = c('자산군', '세부자산군', '세부자산군2')
+        ) %>%
+        mutate(across(any_of(ldays2), ~ly_ - .x + 총수익률)) %>%
+        mutate(across(any_of(setdiff(c('1d_', '7d_', '1m_', '1y_'), ldays2)),
+                      ~ 총수익률 - .x)) %>%
+        select(-ly_) %>%
+        select(자산군:총수익률, '1d', '1d_', '7d', '7d_', '1m', '1m_', '1y', '1y_')
+    },
+    
+    ## 19.(배분및성과) 벤치마크용 타겟 일자 반환 ====
     get_target_date = function(base_month) {
       sel_date <- as.Date(paste0(format(base_month, "%Y-%m"), "-01"))
       if (year(sel_date) == year(self$today) && month(sel_date) == month(self$today)) {
@@ -1026,7 +1038,7 @@ MyAssets <- R6Class(
       }
     },
 
-    ## 18.(배분및성과) 벤치마크 수익률 종합 데이터 산출 ====
+    ## 20.(배분및성과) 벤치마크 수익률 종합 데이터 산출 ====
     get_benchmark_returns = function(base_month) {
 
       # [지역 헬퍼 함수] 네이버 회사채 금리 크롤링
@@ -1190,7 +1202,7 @@ MyAssets <- R6Class(
       return(final_wide)
     },
 
-    ## 19.(배분및성과) 성과분석 그래프 그리기 메서드 ====
+    ## 21.(배분및성과) 성과분석 그래프 그리기 메서드 ====
     plot_pf_return = function(data, subset_cols, start_date) {
 
       # [지역 헬퍼 함수] 누적수익률 계산
@@ -1250,7 +1262,7 @@ MyAssets <- R6Class(
               legend.text = element_text(size = 11), legend.key.height = unit(1.5, "cm"))
     },
 
-    ## 17.(유동성관리) 만기도래자금 테이블 생성 ====
+    ## 22.(유동성관리) 만기도래자금 테이블 생성 ====
     get_maturiy_analysis = function() {
       self$bs_pl_mkt_a %>%
         bind_rows(self$bs_pl_mkt_p) %>%
@@ -1268,7 +1280,7 @@ MyAssets <- R6Class(
         arrange(만기일)
     },
 
-    ## 18.(유동성관리) 가용자금 분석 테이블 생성 ====
+    ## 23.(유동성관리) 가용자금 분석 테이블 생성 ====
     get_liquidity_analysis = function() {
 
       # [Step 1] 현재 시점 계좌별 총자산/현금성자산 현황
@@ -1372,18 +1384,8 @@ MyAssets <- R6Class(
       ))
     },
 
-    ## 19.(메서드) 평가금액 계산 ====
-    run_valuation = function() {
-      self$update_new_price()
-      self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
-      self$bs_pl_mkt_p <- self$evaluate_bs_pl_pension()
-      self$compute_total()
-      self$compute_total_allocation()
-      self$compute_asset_profit()
-      self$compute_comm_profit()
-    },
 
-    ## 20.(메서드) 기초평가손익 갱신 ====
+    ## 24.(연초갱신) 기초평가손익 갱신 ====
     renew_last_eval_profit = function() {
       self$assets %>%
         select(-기초평가손익) %>%
