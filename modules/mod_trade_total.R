@@ -41,7 +41,7 @@ mod_trade_total_ui <- function(id) {
       )
     ),
     fluidRow(
-      uiOutput(ns("total_trade_table"))
+      reactableOutput(ns("total_trade_table"))
     )
   )
 }
@@ -49,7 +49,7 @@ mod_trade_total_ui <- function(id) {
 mod_trade_total_server <- function(id, pool, ma_b) {
   moduleServer(id, function(input, output, session) {
 
-    output$total_trade_table <- renderUI({
+    output$total_trade_table <- renderReactable({
       input$total_trade_date
       input$total_ass1; input$total_ass2; input$total_ass3
       input$total_curr
@@ -77,12 +77,8 @@ mod_trade_total_server <- function(id, pool, ma_b) {
         if (input$total_comm_name != "")
           df <- df %>% filter(상품명 == input$total_comm_name)
 
-        df |>
-          flextable() |> theme_box() |>
-          merge_v(j = 1:5) |>
-          set_table_properties(layout = 'autofit') |>
-          colformat_double(j = 8:13, digits = 0) |>
-          htmltools_value(ft.align = 'center')
+        render_rt(df |> arrange(pick(1:5)), int_cols = 8:13,
+                  sticky_cols = names(df)[1:7])
       }
     })
   })

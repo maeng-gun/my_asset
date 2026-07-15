@@ -27,7 +27,7 @@ mod_strategy_ui <- function(id) {
             width = 12, title = "자산배분 시계열", status = "info",
             solidHeader = TRUE, collapsible = FALSE,
             fluidRow(column(3, uiOutput(ns('allo_year')))),
-            fluidRow(uiOutput(ns('allo_table_ui')))
+            fluidRow(reactableOutput(ns('allo_table_ui')))
           )
         )
       )
@@ -48,7 +48,7 @@ mod_strategy_ui <- function(id) {
   )
 }
 
-mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
+mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -196,23 +196,22 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
     })
 
     ## 배분 테이블
-    output$allo_table_ui <- renderUI({
+    output$allo_table_ui <- renderReactable({
       sk_b()
+      req(menu_tabs() == "pf_strategy")
       req(input$allo_year_select)
       df <- ma_b()$read('allo_table')
       if (nrow(df) == 0) return(tags$p("입력된 자산배분 기록이 없습니다."))
 
-      df %>%
+      df <- df %>%
         filter(year(as.Date(배분일자)) == as.numeric(input$allo_year_select)) %>%
         select(행번호, 배분일자, 구분, 국내주식, 해외주식, 만기보유채권,
                시장형채권, 실물자산, 인컴자산) %>%
         mutate(현금성 = 1 - (국내주식 + 해외주식 + 만기보유채권 + 시장형채권 +
                             실물자산 + 인컴자산)) %>%
-        arrange(배분일자, 행번호) %>%
-        flextable() %>% theme_vanilla() %>%
-        colformat_double(j = 4:10, digits = 3) %>%
-        set_table_properties(layout = 'autofit') %>%
-        htmltools_value(ft.align = 'center')
+        arrange(배분일자, 행번호)
+      
+      render_rt(df, pct_cols = 4:10)
     })
 
     # === b. 성과분석 ===
@@ -236,52 +235,72 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
       fluidRow(
         box(title = paste0(month(t_date), "월 MTD (BM vs MyPF)"),
             width = 6, status = "primary", solidHeader = TRUE,
-            plotOutput(ns("plot_mtd_bm"))),
+            echarts4rOutput(ns("plot_mtd_bm"))),
         box(title = paste0(month(t_date), "월 MTD (BMPF vs MyPF)"),
             width = 6, status = "primary", solidHeader = TRUE,
-            plotOutput(ns("plot_mtd_pf"))),
+            echarts4rOutput(ns("plot_mtd_pf"))),
         box(title = paste0(quarter(t_date), "분기 QTD (BM vs MyPF)"),
             width = 6, status = "info", solidHeader = TRUE,
-            plotOutput(ns("plot_qtd_bm"))),
+            echarts4rOutput(ns("plot_qtd_bm"))),
         box(title = paste0(quarter(t_date), "분기 QTD (BMPF vs MyPF)"),
             width = 6, status = "info", solidHeader = TRUE,
-            plotOutput(ns("plot_qtd_pf"))),
+            echarts4rOutput(ns("plot_qtd_pf"))),
         box(title = paste0(year(t_date), "년 YTD (BM vs MyPF)"),
             width = 6, status = "success", solidHeader = TRUE,
-            plotOutput(ns("plot_ytd_bm"))),
+            echarts4rOutput(ns("plot_ytd_bm"))),
         box(title = paste0(year(t_date), "년 YTD (BMPF vs MyPF)"),
             width = 6, status = "success", solidHeader = TRUE,
-            plotOutput(ns("plot_ytd_pf")))
+            echarts4rOutput(ns("plot_ytd_pf")))
       )
     })
 
     cols_bm <- c("기준일", "MyPF", "코스피", "S&P", "금현물", "리츠", "회사채", "시장형채권")
     cols_pf <- c("기준일", "MyPF", "SAA", "TAA1", "TAA2")
 
-    # build_pf_return_plot 순수 함수 호출
-    output$plot_mtd_bm <- renderPlot({
-      build_pf_return_plot(raw_bm_data(), cols_bm,
-                            floor_date(get_target_date(input$base_month, ma_v()$today), "month") - days(1))
+    render_pf_echart <- function(df, cols, base_date) {
+      df |>
+        filter(기준일 >= base_date) |>
+        select(all_of(cols)) |>
+        # 일간수익률 → 누적수익률로 변환 (각 자산별 독립 계산)
+        mutate(across(-기준일, ~ (cumprod(1 + . / 100) - 1) * 100)) |>
+        pivot_longer(-기준일) |>
+        group_by(name) |>
+        e_charts(기준일) |>
+        e_line(value, symbol = "none") |>
+        e_tooltip(trigger = "axis") |>
+        e_y_axis(
+          position   = "right",    # Y축 우측 배치
+          axisLabel  = list(formatter = htmlwidgets::JS(
+            "function(v) { return v.toFixed(1) + '%'; }"
+          ))
+        ) |>
+        e_datazoom()
+    }
+
+
+    output$plot_mtd_bm <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(input$base_month, ma_v()$today), "month") - days(1))
     })
-    output$plot_mtd_pf <- renderPlot({
-      build_pf_return_plot(raw_bm_data(), cols_pf,
-                            floor_date(get_target_date(input$base_month, ma_v()$today), "month") - days(1))
+    output$plot_mtd_pf <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(input$base_month, ma_v()$today), "month") - days(1))
     })
-    output$plot_qtd_bm <- renderPlot({
-      build_pf_return_plot(raw_bm_data(), cols_bm,
-                            floor_date(get_target_date(input$base_month, ma_v()$today), "quarter") - days(1))
+    output$plot_qtd_bm <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(input$base_month, ma_v()$today), "quarter") - days(1))
     })
-    output$plot_qtd_pf <- renderPlot({
-      build_pf_return_plot(raw_bm_data(), cols_pf,
-                            floor_date(get_target_date(input$base_month, ma_v()$today), "quarter") - days(1))
+    output$plot_qtd_pf <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(input$base_month, ma_v()$today), "quarter") - days(1))
     })
-    output$plot_ytd_bm <- renderPlot({
-      build_pf_return_plot(raw_bm_data(), cols_bm,
-                            floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
+    output$plot_ytd_bm <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
     })
-    output$plot_ytd_pf <- renderPlot({
-      build_pf_return_plot(raw_bm_data(), cols_pf,
-                            floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
+    output$plot_ytd_pf <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
     })
   })
 }

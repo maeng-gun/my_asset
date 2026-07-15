@@ -8,7 +8,8 @@
 library(shiny)
 library(bs4Dash)
 library(waiter)
-library(flextable)
+library(reactable)
+library(echarts4r)
 library(shinyWidgets)
 library(lubridate)
 library(shiny.pwa)
@@ -41,7 +42,7 @@ r_files <- c(
   "src/class_my_data.R",
   "src/class_auto_invest.R",
   "src/class_my_assets.R",
-  "src/utils_flextable.R",
+  "src/utils_reactable.R",
   "src/utils_analytics.R"
 )
 purrr::walk(r_files, source, encoding = "UTF-8")

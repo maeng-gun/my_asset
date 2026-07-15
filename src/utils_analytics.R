@@ -134,57 +134,45 @@ build_profit_trend_data <- function(return_tbl, cash_in_out, start, end) {
 }
 
 
-#' 4. 평가금액 추이 그래프 생성 (구 메서드 17)
+#' 4. 평가금액 추이 그래프 데이터 생성 (구 메서드 17)
 #'
 #' @param return_tbl return dbplyr tbl
 #' @param inflow_df 자금유출입 tibble
 #' @param today 오늘 날짜 (Date)
-#' @return ggplot 객체
-build_eval_trend_plot <- function(return_tbl, inflow_df, today) {
+#' @return tibble
+build_eval_trend_data <- function(return_tbl, inflow_df, today) {
   days1 <- today %m-% years(1)
 
+  # 과거 1년 평가금액 (원금 제거)
   df2 <- return_tbl %>%
     filter(자산군 == '<합계>') %>%
     transmute(기준일 = as.Date(기준일), 평가금액 = 평가금액 / 10000) %>%
     filter(기준일 >= days1) %>%
     arrange(기준일) %>%
     collect() %>%
-    mutate(구분 = '실선')
+    mutate(구분 = '과거평가액')
 
+  # 미래 1년 예상 평가금액 (자금유출입 가정, 원금 제거)
   df3 <- tibble(기준일 = seq(today + 1, today %m+% years(1), 1)) %>%
     left_join(
       inflow_df %>%
         transmute(기준일 = 거래일자, 자금유출입 = 자금유출입 / 10000) %>%
         group_by(기준일) %>%
-        summarise(평가금액 = sum(자금유출입)),
+        summarise(변동액 = sum(자금유출입)),
       by = '기준일'
     ) %>%
-    mutate(평가금액 = if_else(is.na(평가금액), 0, 평가금액),
+    mutate(변동액 = if_else(is.na(변동액), 0, 변동액),
            평가금액 = if_else(기준일 == today + 1,
-                          평가금액 + last(df2$평가금액),
-                          평가금액),
+                           변동액 + last(df2$평가금액),
+                           변동액),
            평가금액 = cumsum(평가금액)) %>%
-    mutate(구분 = '점선')
+    select(기준일, 평가금액) %>%
+    mutate(구분 = '예상평가액(점선)')
 
-  bind_rows(df2, df3) %>%
-    ggplot(aes(x = 기준일, y = 평가금액)) +
-    geom_line(aes(group = 1), color = "grey80", alpha = 0.5) +
-    geom_line(aes(linetype = 구분, color = 구분), linewidth = 1) +
-    scale_linetype_manual(
-      values = c("실선" = "solid", "점선" = "dashed")) +
-    scale_color_manual(values =
-                         c("실선" = "steelblue", "점선" = "firebrick")) +
-    scale_y_continuous(
-      breaks = function(x) {seq(
-        floor(x[1] / 5000) * 5000,
-        ceiling(x[2] / 5000) * 5000,
-        by = 5000
-      )}, sec.axis = dup_axis(name = NULL)
-    ) +
-    scale_x_date(date_breaks = "2 month", date_labels = "%Y-%m") +
-    theme(text = element_text(size = 20),
-          axis.text.x = element_text(angle = 45, hjust = 1))
+  bind_rows(df2, df3)
 }
+
+
 
 
 #' 5. 손익변동 분석 (구 메서드 18)
@@ -226,8 +214,15 @@ calc_profit_variation <- function(return_tbl, t_comm3, today, cur_year) {
     select(-기록일, -평가금액) %>%
     mutate(
       전년도 = if_else(year(기준일) < cur_year, TRUE, FALSE),
-      기준일 = case_match(기준일, d1 ~ '1d', d7 ~ '7d', dm ~ '1m',
-                       dy ~ '1y', ly ~ 'ly'))
+      기준일 = case_when(
+        기준일 == d1 ~ '1d',
+        기준일 == d7 ~ '7d',
+        기준일 == dm ~ '1m',
+        기준일 == dy ~ '1y',
+        기준일 == ly ~ 'ly',
+        TRUE ~ as.character(기준일)
+      )
+    )
 
   ldays  <- past_value %>% filter(전년도) %>% distinct(기준일) %>% .$기준일
   ldays2 <- paste0(ldays, '_')
@@ -469,71 +464,6 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
   return(final_wide)
 }
 
-
-#' 8. 성과분석 누적수익률 그래프 그리기 (구 메서드 21)
-#'
-#' @param data wide 형태 수익률 데이터 (tibble)
-#' @param subset_cols 표시할 컬럼명 벡터
-#' @param start_date 시작일 (Date)
-#' @return ggplot 객체
-build_pf_return_plot <- function(data, subset_cols, start_date) {
-
-  # [지역 헬퍼 함수] 누적수익률 계산
-  calc_cum_return <- function(df, s_date) {
-    df <- df %>% filter(기준일 > as.Date(s_date))
-    if (nrow(df) == 0) return(NULL)
-    df %>%
-      mutate(across(-기준일, ~ (cumprod(1 + . / 100) - 1) * 100)) %>%
-      pivot_longer(cols = -기준일, names_to = "Asset", values_to = "CumReturn")
-  }
-
-  if (is.null(data)) return(ggplot() + theme_void() + ggtitle("데이터가 부족합니다."))
-  df_sub <- data %>% select(any_of(subset_cols))
-
-  data_long <- calc_cum_return(df_sub, start_date)
-
-  if (is.null(data_long)) return(ggplot() + theme_void() + ggtitle("데이터가 부족합니다."))
-
-  label_data <- data_long %>% group_by(Asset) %>%
-    filter(기준일 == max(기준일)) %>% arrange(CumReturn) %>% ungroup()
-
-  y_range <- max(label_data$CumReturn, na.rm = TRUE) - min(label_data$CumReturn, na.rm = TRUE)
-  min_gap <- ifelse(y_range == 0, 1, y_range * 0.04)
-  label_data$Label_Y <- label_data$CumReturn
-
-  if (nrow(label_data) > 1) {
-    for (i in 2:nrow(label_data)) {
-      if (label_data$Label_Y[i] - label_data$Label_Y[i - 1] < min_gap) {
-        label_data$Label_Y[i] <- label_data$Label_Y[i - 1] + min_gap
-      }
-    }
-  }
-
-  label_data <- label_data %>% arrange(desc(Label_Y))
-  last_vals  <- label_data %>% pull(Asset)
-  data_long  <- data_long %>% mutate(Asset = factor(Asset, levels = last_vals))
-  label_data <- label_data %>% mutate(Asset = factor(Asset, levels = last_vals))
-
-  col_map <- c("MyPF" = "#D9534F", "S&P" = "#0275D8", "코스피" = "#292B2C",
-               "리츠" = "#5CB85C", "금현물" = "#F0AD4E", "회사채" = "#8E44AD",
-               "시장형채권" = "#A0522D",
-               "SAA" = "#007BFF", "TAA1" = "#28A745", "TAA2" = "#6F42C1")
-  line_map <- c("MyPF" = 1.8, "S&P" = 0.8, "코스피" = 0.8, "리츠" = 0.8,
-                "금현물" = 0.8, "회사채" = 0.8, "시장형채권" = 0.8,
-                "SAA" = 1.2, "TAA1" = 1.2, "TAA2" = 1.2)
-
-  ggplot(data_long, aes(x = 기준일, y = CumReturn, color = Asset, linewidth = Asset)) +
-    geom_line() +
-    geom_text(data = label_data, aes(y = Label_Y, label = sprintf("%.2f%%", CumReturn)),
-              hjust = -0.15, fontface = "bold", size = 4, show.legend = FALSE) +
-    scale_linewidth_manual(values = line_map) +
-    scale_color_manual(values = col_map) +
-    scale_x_date(date_labels = "%m.%d.", expand = expansion(mult = c(0.05, 0.20))) +
-    scale_y_continuous(n.breaks = 10) + labs(x = "", y = "누적수익률 (%)") +
-    theme_minimal() +
-    theme(legend.position = "right", legend.title = element_blank(),
-          legend.text = element_text(size = 11), legend.key.height = unit(1.5, "cm"))
-}
 
 
 #' 9. 만기도래자금 분석 (구 메서드 22)

@@ -81,7 +81,7 @@ mod_trade_history_ui <- function(id) {
       box(
         width = 12, solidHeader = FALSE,
         collapsible = FALSE, headerBorder = FALSE,
-        uiOutput(ns("trade_table"))
+        reactableOutput(ns("trade_table"))
       )
     )
   )
@@ -93,7 +93,8 @@ mod_trade_history_ui <- function(id) {
 #' @param ma MyAssets R6 인스턴스 (상태 참조용)
 #' @param ma_b reactive — 장부금액 데이터
 #' @param sk_b reactiveVal — 장부금액 갱신 트리거
-mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b) {
+#' @param menu_tabs reactive - 선택된 탭 정보
+mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
   moduleServer(id, function(input, output, session) {
 
     # 모듈 내부 반응성 값
@@ -103,14 +104,41 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b) {
       trade_new = NULL
     )
 
+    # --- 통화별 숫자 컬럼 포맷 결정 헬퍼 ---
+    # USD/JPY는 소수점 2자리, 원화는 정수(0자리)
+    build_trade_col_defs <- function(cur) {
+      # 수량 컬럼은 항상 정수(또는 소수 2자리)
+      qty_cols   <- c("매입수량", "매도수량")
+      money_cols <- c("매입액", "매입비용", "매도원금", "현금지출", "매도액", "매매수익",
+                      "매도비용","순수익", "잔액", "이자배당액", "현금수입", "입출금")
+
+      if (cur %in% c("달러", "엔화")) {
+        # 외화: 소수점 2자리, 천단위 쉼표
+        dec_cols_use <- money_cols
+        int_cols_use <- qty_cols
+      } else {
+        # 원화: 소수점 0자리, 천단위 쉼표
+        dec_cols_use <- character(0)
+        int_cols_use <- c(qty_cols, money_cols)
+      }
+      list(int_cols = int_cols_use, dec_cols = dec_cols_use)
+    }
+
     # --- 테이블 렌더링 ---
-    output$trade_table <- renderUI({
-      if (!is.null(rv$trade)) {
-        rv$trade |>
-          flextable() |>
-          theme_vanilla() |>
-          set_table_properties(layout = 'autofit') |>
-          htmltools_value(ft.align = 'center')
+    output$trade_table <- renderReactable({
+      req(menu_tabs() == "trading_record")
+      if (!is.null(rv$trade) && nrow(rv$trade) > 0) {
+        cur <- isolate(input$ass_cur2)
+        fmt <- build_trade_col_defs(cur)
+        render_rt(
+          rv$trade,
+          int_cols      = fmt$int_cols,
+          dec_cols      = fmt$dec_cols,
+          # 앞 5개 컬럼(행번호~종목코드) 좌측 고정
+          sticky_cols   = names(rv$trade)[1:5],
+          # 종목명/상품명 컬럼은 말줄임 + 호버 툴팁
+          long_str_cols = intersect(c("종목명", "종목코드"), names(rv$trade))
+        )
       }
     })
 

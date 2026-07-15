@@ -1,0 +1,27 @@
+/* custom.css - Mobile optimization for Shiny Dashboard */
+
+/* Ensure reactable does not wrap and has horizontal scrolling */
+.reactable {
+  white-space: nowrap !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Make sure container boxes have overflow auto */
+.box-body {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Adjust font size for mobile devices */
+@media (max-width: 768px) {
+  .reactable {
+    font-size: 12px !important;
+  }
+  
+  /* Make echarts responsive */
+  .echarts4r {
+    width: 100% !important;
+    min-height: 300px;
+  }
+}

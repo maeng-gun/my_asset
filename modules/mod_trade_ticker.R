@@ -28,7 +28,7 @@ mod_trade_ticker_ui <- function(id) {
       box(
         width = 12, solidHeader = FALSE,
         collapsible = FALSE, headerBorder = FALSE,
-        uiOutput(ns("ticker_table"))
+        reactableOutput(ns("ticker_table"))
       )
     )
   )
@@ -66,12 +66,9 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
     })
 
     # --- 테이블 렌더링 ---
-    output$ticker_table <- renderUI({
+    output$ticker_table <- renderReactable({
       if (!is.null(rv$tickers)) {
-        rv$tickers |> arrange(desc(행번호)) |>
-          flextable() |> theme_vanilla() |>
-          set_table_properties(layout = 'autofit') |>
-          htmltools_value(ft.align = 'center')
+        render_rt(rv$tickers |> arrange(desc(행번호)))
       }
     })
 

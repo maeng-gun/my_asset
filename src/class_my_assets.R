@@ -577,7 +577,9 @@ MyAssets <- R6Class(
         arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액), 상품명) %>%
         mutate(
           평단가 = round(장부금액 / 보유수량, 0),
+          평단가 = replace(평단가, is.infinite(평단가),0),
           현재가 = round(평가금액 / 보유수량, 0),
+          현재가 = replace(현재가, is.infinite(현재가),0),
           평가손익 = round(평가금액 - 장부금액, 0),
           평가수익률 = round(평가손익 / 장부금액 * 100, 2)
         ) %>%

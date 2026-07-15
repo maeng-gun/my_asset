@@ -7,78 +7,93 @@ mod_holdings_ui <- function(id) {
   tagList(
     br(),
     tabBox(
-      id = ns('pf_box2'), width = 12, status = 'primary', type = 'tabs',
+      id = ns("pf_box2"), width = 12, status = "primary", type = "tabs",
 
       ## 계좌별 자산배분
       tabPanel(
         title = "계좌별 자산배분",
-        fluidRow(uiOutput(ns('account_allocation_table')))
+        fluidRow(reactableOutput(ns("account_allocation_table")))
       ),
 
       ## 상품별 보유현황1
       tabPanel(
         title = "상품별 보유현황1",
-        fluidRow(uiOutput(ns("t_commodity")))
+        fluidRow(reactableOutput(ns("t_commodity1")))
       ),
 
       ## 상품별 보유현황2
       tabPanel(
         title = "상품별 보유현황2",
-        fluidRow(uiOutput(ns("t_commodity2")))
+        fluidRow(reactableOutput(ns("t_commodity2")))
       ),
 
       ## 상품별 보유현황3
       tabPanel(
         title = "상품별 보유현황3",
-        fluidRow(uiOutput(ns("t_commodity3")))
+        fluidRow(reactableOutput(ns("t_commodity3")))
       )
     )
   )
 }
 
-mod_holdings_server <- function(id, ma_v) {
+mod_holdings_server <- function(id, ma_v, menu_tabs) {
   moduleServer(id, function(input, output, session) {
-
     ## 계좌별 자산배분
-    output$account_allocation_table <- renderUI({
+    output$account_allocation_table <- renderReactable({
+      req(menu_tabs() == "pf_total")
       req(ma_v())
-      ma_v()$account_allocation %>%
-        flextable() %>%
-        theme_vanilla() %>%
-        colformat_double(j = 4:15, digits = 0) %>%
-        colformat_double(j = 16, digits = 2) %>%
-        set_table_properties(layout = 'autofit') %>%
-        align(align = "center", part = "all") %>%
-        htmltools_value()
+
+      df <- ma_v()$account_allocation
+      render_rt(
+        df,
+        int_cols    = 4:15,
+        pct_cols    = 16,
+        sticky_cols = names(df)[1:3], # 앞 3개 컬럼(자산군, 세부자산군, 계좌 등) 좌측 고
+      )
     })
 
     ## 상품별 보유현황1
-    output$t_commodity <- renderUI({
-      ma_v()$t_comm |>
-        flextable() |> theme_vanilla() |>
-        set_table_properties(layout = 'autofit') |>
-        colformat_double(j = 5:10, digits = 0) |>
-        colformat_double(j = 11, digits = 2) |>
-        htmltools_value()
+    output$t_commodity1 <- renderReactable({
+      req(menu_tabs() == "pf_total")
+      req(ma_v())
+
+      df <- ma_v()$t_comm
+      render_rt(
+        df,
+        int_cols      = 5:10,
+        pct_cols      = 11,
+        sticky_cols   = names(df)[1:4],
+        long_str_cols = c("상품명")
+      )
     })
 
     ## 상품별 보유현황2
-    output$t_commodity2 <- renderUI({
-      ma_v()$t_comm2 |>
-        flextable() |> theme_vanilla() |>
-        set_table_properties(layout = 'autofit') |>
-        colformat_double(j = 7:9, digits = 0) |>
-        colformat_double(j = 10, digits = 2) |>
-        htmltools_value()
+    output$t_commodity2 <- renderReactable({
+      req(menu_tabs() == "pf_total")
+      req(ma_v())
+
+      df <- ma_v()$t_comm2
+      render_rt(
+        df,
+        int_cols = 7:9,
+        pct_cols = 10,
+        sticky_cols = names(df)[1:4],
+        long_str_cols = c("상품명")
+      )
     })
 
     ## 상품별 보유현황3
-    output$t_commodity3 <- renderUI({
-      ma_v()$t_comm10 |>
-        flextable() |> theme_vanilla() |>
-        set_table_properties(layout = 'autofit') |>
-        colformat_double(j = 5, digits = 0) |>
-        htmltools_value()
+    output$t_commodity3 <- renderReactable({
+      req(menu_tabs() == "pf_total")
+      req(ma_v())
+
+      df <- ma_v()$t_comm10
+      render_rt(
+        df,
+        int_cols = 5,
+        sticky_cols = names(df)[1:3],
+        long_str_cols = c("상품명", "계좌")
+      )
     })
   })
 }

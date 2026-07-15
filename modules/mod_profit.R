@@ -13,7 +13,7 @@ mod_profit_ui <- function(id) {
     ## a. 종합손익
     tabPanel(
       title = "종합손익",
-      fluidRow(uiOutput(ns("t_profit1"))),
+      fluidRow(reactableOutput(ns("t_profit1"))),
       fluidRow(
         column(
           width = 2, class = "col-12 col-md-4 col-lg-2",
@@ -21,12 +21,13 @@ mod_profit_ui <- function(id) {
                              addon = "none",
                              value = make_date(year(Sys.Date()), 1, 1) - 1),
           airDatepickerInput(ns('total_e_date'), label = "종료일",
-                             addon = "none", value = Sys.Date()),
-          uiOutput(ns("graph_limt"))
+                             addon = "none", value = Sys.Date())
         ),
         column(
           width = 10, class = "col-12 col-md-8 col-lg-10",
-          plotOutput(ns("total_profit"), height = "800px")
+          # 손익 차트(콤보 막대+꺾은선)를 위에, 평가금액 꺾은선을 아래에 배치
+          echarts4rOutput(ns("total_profit_bar"),   height = "400px"),
+          echarts4rOutput(ns("total_profit_trend"), height = "400px")
         )
       )
     ),
@@ -34,70 +35,64 @@ mod_profit_ui <- function(id) {
     ## b. 손익변동
     tabPanel(
       title = "손익변동",
-      fluidRow(uiOutput(ns("profit_var")))
+      fluidRow(reactableOutput(ns("profit_var")))
     ),
 
     ## c. 자산군별 손익현황
     tabPanel(
       title = "자산군별",
-      fluidRow(uiOutput(ns("total_accounts1")))
+      fluidRow(reactableOutput(ns("total_accounts1")))
     ),
 
     ## d. 계좌별 손익현황
     tabPanel(
       title = "계좌별",
-      fluidRow(uiOutput(ns("total_accounts2")))
+      fluidRow(reactableOutput(ns("total_accounts2")))
     ),
 
     ## e. 계좌별상품 손익현황
     tabPanel(
       title = "계좌별상품",
-      fluidRow(uiOutput(ns("bs_pl_mkt_a")))
+      fluidRow(reactableOutput(ns("bs_pl_mkt_a")))
     ),
 
     ## f. 자산군별상품 손익현황
     tabPanel(
       title = "자산군별상품",
-      fluidRow(uiOutput(ns("bs_pl_mkt_a2")))
+      fluidRow(reactableOutput(ns("bs_pl_mkt_a2")))
     )
   )
 }
 
-mod_profit_server <- function(id, ma_v, on_initial_load) {
+mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
   moduleServer(id, function(input, output, session) {
 
     initial_done <- reactiveVal(FALSE)
 
     ## a. 종합손익 테이블
-    output$t_profit1 <- renderUI({
-      big_border <- officer::fp_border(color = "black", width = 2)
+    output$t_profit1 <- renderReactable({
+      req(menu_tabs() == "pf_bs_pl")
       ma_obj <- ma_v()
 
-      # calc_total_profit 순수 함수 호출
-      calc_total_profit(
+      df <- calc_total_profit(
         book_info       = ma_obj$book_info,
         eval_profit_tbl = ma_obj$read_obj('eval_profit'),
         return_tbl      = ma_obj$read_obj('return'),
         today           = ma_obj$today,
         cur_year        = ma_obj$year
-      ) %>%
-        flextable() |> theme_box() |>
-        set_table_properties(layout = 'autofit') |>
-        vline(j = 7, border = big_border, part = "all") %>%
-        vline(j = 8, border = big_border, part = "all") %>%
-        hline_top(j = 8, border = big_border, part = "header") %>%
-        hline_bottom(j = 8, border = big_border, part = "body") %>%
-        colformat_double(j = 2:8, digits = 0) |>
-        colformat_double(j = 9:11, digits = 2) |>
-        htmltools_value()
+      )
+      render_rt(df,
+                int_cols    = 2:8,
+                pct_cols    = 9:11,
+                sticky_cols = names(df)[1],
+                height=NULL)
     })
 
-    ## 손익 그래프 데이터
+    ## 손익 그래프 데이터 (일간손익 + 손익누계)
     df_graph <- reactive({
       input$total_s_date; input$total_e_date
       ma_obj <- ma_v()
 
-      # build_profit_trend_data 순수 함수 호출
       build_profit_trend_data(
         return_tbl  = ma_obj$read_obj('return'),
         cash_in_out = ma_obj$cash_in_out,
@@ -110,42 +105,9 @@ mod_profit_server <- function(id, ma_v, on_initial_load) {
       ceiling(max(abs(df_graph()$손익누계)) / 10)
     })
 
-    output$graph_limt <- renderUI({
-      searchInput(
-        session$ns("graph_limt2"), label = "손익단위",
-        value = y_num(),
-        btnSearch = icon("search"), btnReset = NULL, width = "100%"
-      )
-    })
-
-    output$total_profit <- renderPlot({
-      req(input$graph_limt2)
-      num <- as.numeric(input$graph_limt2)
-      ma_obj <- ma_v()
-
-      # build_eval_trend_plot 순수 함수 호출
-      fig1 <- build_eval_trend_plot(
-        return_tbl = ma_obj$read_obj('return'),
-        inflow_df  = ma_obj$inflow,
-        today      = ma_obj$today
-      )
-
-      fig2 <- df_graph() %>%
-        ggplot(aes(x = 기준일)) +
-        geom_line(aes(y = 손익누계)) +
-        geom_bar(aes(y = 일간손익), stat = 'identity') +
-        scale_y_continuous(
-          breaks = function(x) {seq(
-            floor(x[1] / num) * num,
-            ceiling(x[2] / num) * num,
-            by = num
-          )}, sec.axis = dup_axis(name = NULL)
-        ) +
-        scale_x_date(date_breaks = "1 month", date_labels = "%Y-%m") +
-        theme(text = element_text(size = 20),
-              axis.text.x = element_text(angle = 45, hjust = 1))
-
-      plot_obj <- gridExtra::grid.arrange(fig2, fig1, nrow = 2)
+    ## [위] 손익 콤보 차트 — 일간손익(막대) + 손익누계(꺾은선)
+    output$total_profit_bar <- renderEcharts4r({
+      req(menu_tabs() == "pf_bs_pl")
 
       # 최초 로딩 완료 콜백
       if (!initial_done()) {
@@ -153,69 +115,97 @@ mod_profit_server <- function(id, ma_v, on_initial_load) {
         initial_done(TRUE)
       }
 
-      plot_obj
+      df_graph() |>
+        e_charts(기준일) |>
+        e_bar(일간손익,   name = "일간손익") |>
+        e_line(손익누계,  name = "손익누계", symbol = "none") |>
+        e_tooltip(trigger = "axis") |>
+        e_datazoom(x_index = 0, type = "slider") |>
+        e_y_axis(position = "right") |>
+        e_legend(bottom = 0)
+    })
+
+    ## [아래] 평가금액 추이 차트 — 원금 라인 제거, 평가금액만 표시
+    output$total_profit_trend <- renderEcharts4r({
+      req(menu_tabs() == "pf_bs_pl")
+      ma_obj <- ma_v()
+
+      # build_eval_trend_data: 평가금액만 반환 (원금 제거됨)
+      fig1_df <- build_eval_trend_data(
+        return_tbl = ma_obj$read_obj('return'),
+        inflow_df  = ma_obj$inflow,
+        today      = ma_obj$today
+      )
+
+      fig1_df |>
+        group_by(구분) |>
+        e_charts(기준일) |>
+        e_line(평가금액, name = "평가금액", symbol = "none") |>
+        e_tooltip(trigger = "axis") |>
+        e_datazoom(x_index = 0, type = "slider") |>
+        e_y_axis(position = "right") |>
+        e_legend(bottom = 0)
     })
 
     ## b. 손익변동
-    output$profit_var <- renderUI({
+    output$profit_var <- renderReactable({
+      req(menu_tabs() == "pf_bs_pl")
       ma_obj <- ma_v()
 
-      # calc_profit_variation 순수 함수 호출
-      calc_profit_variation(
+      df <- calc_profit_variation(
         return_tbl = ma_obj$read_obj('return'),
         t_comm3    = ma_obj$t_comm3,
         today      = ma_obj$today,
         cur_year   = ma_obj$year
-      ) %>%
-        flextable() |> theme_vanilla() |>
-        set_table_properties(layout = 'autofit') |>
-        colformat_double(j = c(4:6, 8, 10, 12, 14), digits = 0) %>%
-        colformat_double(j = c(7, 9, 11, 13, 15), digits = 2) %>%
-        htmltools_value()
+      )
+      render_rt(df,
+                int_cols    = c(4:6, 8, 10, 12, 14),
+                pct_cols    = c(7, 9, 11, 13, 15),
+                sticky_cols = names(df)[1:3])
     })
 
     ## c. 자산군별 손익현황
-    output$total_accounts1 <- renderUI({
-      ma_v()$t_comm3 %>%
-        flextable() |> theme_vanilla() |>
-        merge_v(j = 1:3) |>
-        set_table_properties(layout = 'autofit') |>
-        colformat_double(j = c(4:10), digits = 0) |>
-        colformat_double(j = c(11:14), digits = 2) |>
-        htmltools_value()
+    output$total_accounts1 <- renderReactable({
+      req(menu_tabs() == "pf_bs_pl")
+      df <- ma_v()$t_comm3 %>% arrange(자산군, 세부자산군)
+      render_rt(df,
+                int_cols    = 4:10,
+                pct_cols    = 11:14,
+                sticky_cols = names(df)[1:3])
     })
 
     ## d. 계좌별 손익현황
-    output$total_accounts2 <- renderUI({
-      ma_v()$t_comm4 %>%
-        flextable() |> theme_vanilla() |>
-        merge_v(j = 1:2) |>
-        set_table_properties(layout = 'autofit') |>
-        colformat_double(j = c(3:9), digits = 0) |>
-        colformat_double(j = c(10:13), digits = 2) |>
-        htmltools_value()
+    output$total_accounts2 <- renderReactable({
+      req(menu_tabs() == "pf_bs_pl")
+      df <- ma_v()$t_comm4 %>% arrange(계좌)
+      render_rt(df,
+                int_cols    = 3:9,
+                pct_cols    = 10:13,
+                sticky_cols = names(df)[1:2])
     })
 
     ## e. 계좌별상품 손익현황
-    output$bs_pl_mkt_a <- renderUI({
-      ma_v()$comm_profit %>%
-        flextable() %>% theme_vanilla() %>%
-        merge_v(j = 1:6) %>%
-        colformat_double(j = 7:14, digits = 0) %>%
-        colformat_double(j = 15:18, digits = 2) %>%
-        set_table_properties(layout = 'autofit', width = 1) %>%
-        htmltools_value(ft.align = 'center')
+    output$bs_pl_mkt_a <- renderReactable({
+      req(menu_tabs() == "pf_bs_pl")
+      df <- ma_v()$comm_profit %>%
+        arrange(계좌, 통화, 자산군, 세부자산군, 세부자산군2)
+      render_rt(df,
+                int_cols      = 7:14,
+                pct_cols      = 15:18,
+                sticky_cols   = names(df)[1:6],
+                long_str_cols = intersect(c("종목명", "상품명"), names(df)))
     })
 
     ## f. 자산군별상품 손익현황
-    output$bs_pl_mkt_a2 <- renderUI({
-      ma_v()$comm_profit2 %>%
-        flextable() %>% theme_vanilla() %>%
-        merge_v(j = 1:6) %>%
-        colformat_double(j = 7:14, digits = 0) %>%
-        colformat_double(j = 15:18, digits = 2) %>%
-        set_table_properties(layout = 'autofit', width = 1) %>%
-        htmltools_value(ft.align = 'center')
+    output$bs_pl_mkt_a2 <- renderReactable({
+      req(menu_tabs() == "pf_bs_pl")
+      df <- ma_v()$comm_profit2 %>%
+        arrange(자산군, 세부자산군, 세부자산군2, 종목명, 계좌, 통화)
+      render_rt(df,
+                int_cols      = 7:14,
+                pct_cols      = 15:18,
+                sticky_cols   = names(df)[1:5],
+                long_str_cols = intersect(c("종목명", "상품명"), names(df)))
     })
   })
 }

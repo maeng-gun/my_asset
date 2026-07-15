@@ -66,6 +66,7 @@ body <- dashboardBody(
     output = "www",
     icon = "www/3890929_chart_growth_invest_market_stock_icon.png"
   ),
+  tags$head(tags$link(rel = "stylesheet", href = "custom.css")),
   useShinyjs(),
   extendShinyjs(
     text = "
@@ -164,10 +165,9 @@ server <- function(input, output, session) {
 
       # 장부금액 반응성 데이터
       ma_b <- reactive({
-        sk_b()
         ma$run_book()
         ma
-      })
+      }) %>% bindEvent(sk_b())
 
       # 평가금액 재계산
       observeEvent(input$reval, {
@@ -178,10 +178,9 @@ server <- function(input, output, session) {
 
       # 평가금액 반응성 데이터
       ma_v <- reactive({
-        sk_v()
         ma$run_valuation()
         ma
-      })
+      }) %>% bindEvent(sk_v())
 
       # 카테고리 반응성 데이터
       ctg <- reactive({
@@ -192,22 +191,27 @@ server <- function(input, output, session) {
 
       # --- 모듈 서버 호출 (pool 주입) ---
       mod_trade_history_server("trading",
-        pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b)
+        pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b,
+        menu_tabs = reactive(input$menu_tabs))
       mod_trade_ticker_server("ticker",
         pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b, ctg = ctg)
       mod_trade_category_server("category",
         pool = db_pool, ma = ma, sk_c = sk_c, ctg = ctg)
       mod_trade_total_server("total_trade",
         pool = db_pool, ma_b = ma_b)
-      mod_holdings_server("holdings", ma_v = ma_v)
+      mod_holdings_server("holdings", ma_v = ma_v,
+        menu_tabs = reactive(input$menu_tabs))
       mod_profit_server("profit",
         ma_v = ma_v,
+        menu_tabs = reactive(input$menu_tabs),
         on_initial_load = function() show_delay("완료!", "success")
       )
       mod_strategy_server("strategy",
-        pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b)
+        pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b,
+        menu_tabs = reactive(input$menu_tabs))
       mod_liquidity_server("liquidity",
-        pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b)
+        pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b,
+        menu_tabs = reactive(input$menu_tabs))
 
       # --- 프로그램 종료 ---
       observeEvent(input$close_win, {

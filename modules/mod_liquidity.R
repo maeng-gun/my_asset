@@ -21,11 +21,11 @@ mod_liquidity_ui <- function(id) {
         column(width = 5, class = "col-12 col-md-4 col-lg-5",
                box(width = 12, title = "유출입 내역", status = "info",
                    solidHeader = TRUE, collapsible = FALSE,
-                   uiOutput(ns('inflow_table1')))),
+                   reactableOutput(ns('inflow_table1')))),
         column(width = 4, class = "col-12 col-md-4 col-lg-4",
                box(width = 12, title = "만기도래내역", status = "info",
                    solidHeader = TRUE, collapsible = FALSE,
-                   uiOutput(ns('maturity_table'))))
+                   reactableOutput(ns('maturity_table'))))
       )
     ),
 
@@ -35,11 +35,11 @@ mod_liquidity_ui <- function(id) {
       fluidRow(
         box(width = 12, title = "총자산현황", status = "info",
             solidHeader = TRUE, collapsible = FALSE,
-            uiOutput(ns('current_total_asset_table')))),
+            reactableOutput(ns('current_total_asset_table')))),
       fluidRow(
         box(width = 12, title = "총자산추이", status = "info",
             solidHeader = TRUE, collapsible = FALSE,
-            uiOutput(ns('inflow_table3'))))
+            reactableOutput(ns('inflow_table3'))))
     ),
 
     ## c. 가용자금추이 탭
@@ -48,16 +48,16 @@ mod_liquidity_ui <- function(id) {
       fluidRow(
         box(width = 12, title = "현금성자산현황", status = "info",
             solidHeader = TRUE, collapsible = FALSE,
-            uiOutput(ns('current_cash_asset_table')))),
+            reactableOutput(ns('current_cash_asset_table')))),
       fluidRow(
         box(width = 12, title = "가용자금추이", status = "info",
             solidHeader = TRUE, collapsible = FALSE,
-            uiOutput(ns('inflow_table4'))))
+            reactableOutput(ns('inflow_table4'))))
     )
   )
 }
 
-mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
+mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -92,14 +92,12 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
         arrange(거래일자)
     })
 
-    output$inflow_table1 <- renderUI({
+    output$inflow_table1 <- renderReactable({
+      req(menu_tabs() == "pf_liquid")
       liq$c <- reset_inflow()
-      liq$c %>%
-        flextable() |> theme_vanilla() %>%
-        set_header_labels(자금유출입 = "금액") %>%
-        colformat_double(j = "자금유출입", digits = 0) %>%
-        set_table_properties(layout = 'autofit') %>%
-        htmltools_value(ft.align = 'center')
+      df <- liq$c
+      names(df)[names(df) == "자금유출입"] <- "금액"
+      render_rt(df, int_cols = c("금액"))
     })
 
     update_manage_inflow <- reactive({
@@ -169,12 +167,9 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
       )
     })
 
-    output$maturity_table <- renderUI({
-      maturity_data() %>%
-        flextable() |> theme_vanilla() |>
-        set_table_properties(layout = 'autofit') |>
-        colformat_double(j = 3, digits = 0) %>%
-        htmltools_value(ft.align = 'center')
+    output$maturity_table <- renderReactable({
+      req(menu_tabs() == "pf_liquid")
+      render_rt(maturity_data(), int_cols = 3)
     })
 
     # === b. 총자산추이 탭 ===
@@ -191,40 +186,35 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b) {
       )
     })
 
-    output$current_total_asset_table <- renderUI({
-      liquidity_data()$current_status %>%
-        filter(구분 == '총자산') %>%
-        flextable() %>% theme_box() %>%
-        colformat_double(digits = 0) %>%
-        set_table_properties(layout = 'autofit', width = 1) %>%
-        htmltools_value()
+    output$current_total_asset_table <- renderReactable({
+      req(menu_tabs() == "pf_liquid")
+      df <- liquidity_data()$current_status %>% filter(구분 == '총자산')
+      # Apply integer format to all numeric columns
+      int_c <- names(df)[sapply(df, is.numeric)]
+      render_rt(df, int_cols = int_c)
     })
 
-    output$inflow_table3 <- renderUI({
-      liquidity_data()$total_projection %>%
-        flextable() %>% theme_vanilla() %>%
-        colformat_double(digits = 0) %>%
-        set_table_properties(layout = 'autofit') %>%
-        htmltools_value()
+    output$inflow_table3 <- renderReactable({
+      req(menu_tabs() == "pf_liquid")
+      df <- liquidity_data()$total_projection
+      int_c <- names(df)[sapply(df, is.numeric)]
+      render_rt(df, int_cols = int_c)
     })
 
     # === c. 가용자금추이 탭 ===
 
-    output$current_cash_asset_table <- renderUI({
-      liquidity_data()$current_status %>%
-        filter(구분 == '현금성자산') %>%
-        flextable() %>% theme_box() %>%
-        colformat_double(digits = 0) %>%
-        set_table_properties(layout = 'autofit', width = 1) %>%
-        htmltools_value()
+    output$current_cash_asset_table <- renderReactable({
+      req(menu_tabs() == "pf_liquid")
+      df <- liquidity_data()$current_status %>% filter(구분 == '현금성자산')
+      int_c <- names(df)[sapply(df, is.numeric)]
+      render_rt(df, int_cols = int_c)
     })
 
-    output$inflow_table4 <- renderUI({
-      liquidity_data()$cash_projection %>%
-        flextable() %>% theme_vanilla() %>%
-        colformat_double(digits = 0) %>%
-        set_table_properties(layout = 'autofit') %>%
-        htmltools_value()
+    output$inflow_table4 <- renderReactable({
+      req(menu_tabs() == "pf_liquid")
+      df <- liquidity_data()$cash_projection
+      int_c <- names(df)[sapply(df, is.numeric)]
+      render_rt(df, int_cols = int_c)
     })
   })
 }
