@@ -24,7 +24,7 @@ mod_auth_server <- function(id, is_local) {
     # 반환용 반응성 값
     auth_rv <- reactiveValues(authenticated = FALSE, pg_pass = NULL)
 
-    # --- 로컬 환경: .Renviron에서 비밀번호 자동 읽기 ---
+# --- 로컬 환경: .Renviron에서 비밀번호 자동 읽기 ----
     if (is_local) {
       local_pw <- Sys.getenv("SUPABASE_PW")
 
@@ -52,11 +52,11 @@ mod_auth_server <- function(id, is_local) {
         show_login_modal(session, ns)
       }
     } else {
-      # --- 배포 환경: 항상 비밀번호 모달 표시 ---
+# --- 배포 환경: 항상 비밀번호 모달 표시 ----
       show_login_modal(session, ns)
     }
 
-    # --- 로그인 버튼 이벤트 ---
+# --- 로그인 버튼 이벤트 ----
     observeEvent(input$login_button, {
       req(input$db_password_input)
 
@@ -103,7 +103,7 @@ mod_auth_server <- function(id, is_local) {
 }
 
 
-# --- 헬퍼: 비밀번호 입력 모달 표시 ---
+# --- 헬퍼: 비밀번호 입력 모달 표시 ----
 show_login_modal <- function(session, ns) {
   login_modal <- modalDialog(
     title = "보안 접속",
@@ -114,7 +114,7 @@ show_login_modal <- function(session, ns) {
                            width = "100%"),
              br(),
              actionButton(ns("login_button"), "접속",
-                          status = "info", width = "100%"),
+                          class = "btn btn-info", width = "100%"),
              br(),
              uiOutput(ns("login_error_modal"))
       )

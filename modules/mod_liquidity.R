@@ -7,52 +7,52 @@
 
 mod_liquidity_ui <- function(id) {
   ns <- NS(id)
-  tabBox(
-    id = ns('liquid_tabs'), width = 12, status = 'primary', type = 'tabs',
+  navset_card_tab(
+    id = ns('liquid_tabs'),
 
-    ## a. 자금유출입 탭
-    tabPanel(
+## a. 자금유출입 탭 ----
+    nav_panel(
       title = "자금유출입",
       fluidRow(
         column(width = 3, class = "col-12 col-md-4 col-lg-3",
-               box(width = 12, title = "입력사항", status = "info",
-                   solidHeader = TRUE, collapsible = FALSE,
-                   uiOutput(ns('manage_inflow')))),
+               card(class = "mb-3 border-info",
+                   card_header("입력사항", class = "bg-info text-white"),
+                   card_body(uiOutput(ns('manage_inflow'))))),
         column(width = 5, class = "col-12 col-md-4 col-lg-5",
-               box(width = 12, title = "유출입 내역", status = "info",
-                   solidHeader = TRUE, collapsible = FALSE,
-                   reactableOutput(ns('inflow_table1')))),
+               card(class = "mb-3 border-info",
+                   card_header("유출입 내역", class = "bg-info text-white"),
+                   card_body(reactableOutput(ns('inflow_table1'))))),
         column(width = 4, class = "col-12 col-md-4 col-lg-4",
-               box(width = 12, title = "만기도래내역", status = "info",
-                   solidHeader = TRUE, collapsible = FALSE,
-                   reactableOutput(ns('maturity_table'))))
+               card(class = "mb-3 border-info",
+                   card_header("만기도래내역", class = "bg-info text-white"),
+                   card_body(reactableOutput(ns('maturity_table')))))
       )
     ),
 
-    ## b. 총자산추이 탭
-    tabPanel(
+## b. 총자산추이 탭 ----
+    nav_panel(
       title = "총자산추이",
       fluidRow(
-        box(width = 12, title = "총자산현황", status = "info",
-            solidHeader = TRUE, collapsible = FALSE,
-            reactableOutput(ns('current_total_asset_table')))),
+        card(class = "mb-3 border-info",
+            card_header("총자산현황", class = "bg-info text-white"),
+            card_body(reactableOutput(ns('current_total_asset_table'))))),
       fluidRow(
-        box(width = 12, title = "총자산추이", status = "info",
-            solidHeader = TRUE, collapsible = FALSE,
-            reactableOutput(ns('inflow_table3'))))
+        card(class = "mb-3 border-info",
+            card_header("총자산추이", class = "bg-info text-white"),
+            card_body(reactableOutput(ns('inflow_table3')))))
     ),
 
-    ## c. 가용자금추이 탭
-    tabPanel(
+## c. 가용자금추이 탭 ----
+    nav_panel(
       title = "가용자금추이",
       fluidRow(
-        box(width = 12, title = "현금성자산현황", status = "info",
-            solidHeader = TRUE, collapsible = FALSE,
-            reactableOutput(ns('current_cash_asset_table')))),
+        card(class = "mb-3 border-info",
+            card_header("현금성자산현황", class = "bg-info text-white"),
+            card_body(reactableOutput(ns('current_cash_asset_table'))))),
       fluidRow(
-        box(width = 12, title = "가용자금추이", status = "info",
-            solidHeader = TRUE, collapsible = FALSE,
-            reactableOutput(ns('inflow_table4'))))
+        card(class = "mb-3 border-info",
+            card_header("가용자금추이", class = "bg-info text-white"),
+            card_body(reactableOutput(ns('inflow_table4')))))
     )
   )
 }
@@ -65,7 +65,7 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
 
     # === a. 자금유출입 탭 ===
 
-    ## 메뉴 설정
+## 메뉴 설정 ----
     output$manage_inflow <- renderUI({
       acct_list <- unique(c(ma_b()$assets$계좌, ma_b()$pension$계좌))
       fluidRow(
@@ -76,15 +76,15 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
                     choices = acct_list, width = '100%'),
         autonumericInput(ns('payment'), label = "자금유출입", value = 0, width = '100%'),
         br(),
-        actionButton(ns("inflow_new"), label = "추가", status = "info", width = '100%'),
-        br(),
-        actionButton(ns("inflow_mod"), label = "수정", status = "success", width = '100%'),
-        br(),
-        actionButton(ns("inflow_del"), label = "삭제", status = "primary", width = '100%')
+        actionButton(ns("inflow_new"), label = "추가", class = "btn btn-info", width = '100%'),
+        br(), br(),
+        actionButton(ns("inflow_mod"), label = "수정", class = "btn btn-success", width = '100%'),
+        br(), br(),
+        actionButton(ns("inflow_del"), label = "삭제", class = "btn btn-primary", width = '100%')
       )
     })
 
-    ## 유출입 내역 조회
+## 유출입 내역 조회 ----
     reset_inflow <- reactive({
       ma_b()[['inflow']] %>%
         filter(거래일자 >= ma$today) %>%
@@ -106,7 +106,7 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
                         selected = '신규')
     })
 
-    ## 신규/구분 선택
+## 신규/구분 선택 ----
     observeEvent(input$new3, {
       if (input$new3 != "신규") {
         t_rows <- filter(liq$c, 행번호 == input$new3)
@@ -121,7 +121,7 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       }
     })
 
-    ## 레코드 조립
+## 레코드 조립 ----
     observe({
       liq$d <- tibble::tibble_row(
         행번호 = 0,
@@ -154,7 +154,7 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       sk_b(!sk_b())
     })
 
-    ## 만기도래 테이블
+## 만기도래 테이블 ----
     maturity_data <- reactive({
       ma_obj <- ma_v()
       # calc_maturity_analysis 순수 함수 호출

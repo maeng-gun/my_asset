@@ -26,7 +26,7 @@ MyAssets <- R6Class(
     y_num = NULL, grid = NULL, future_eval = NULL, closing_prices = NULL,
     account_allocation2 = NULL, comm_profit2 = NULL, t_comm10 = NULL,
 
-    ## 1. 속성 초기화 ====
+## 1. 속성 초기화 ====
     initialize = function(pool) {
 
       super$initialize(pool)
@@ -68,7 +68,7 @@ MyAssets <- R6Class(
                              "원화상품", "외화상품", "외환", "원화")
     },
 
-    ## 2.(장부금액) 거래내역 기록 테이블 ====
+## 2.(장부금액) 거래내역 기록 테이블 ====
     get_trading_record = function(table, acct, cur, limit_n) {
 
       if (table == "투자자산") {
@@ -111,7 +111,7 @@ MyAssets <- R6Class(
         collect()
     },
 
-    ## 3.(장부금액) 계좌거래 내역 전처리 ====
+## 3.(장부금액) 계좌거래 내역 전처리 ====
     get_daily_trading = function(ast_info, trade) {
 
       dt_info  <- as.data.table(ast_info)
@@ -151,7 +151,7 @@ MyAssets <- R6Class(
                    수익, 비용, 실현손익, 현금수입, 입출금, 현금지출)]
     },
 
-    ## 4.(장부금액) 운용자산 잔액-손익 테이블 생성 ====
+## 4.(장부금액) 운용자산 잔액-손익 테이블 생성 ====
     get_bs_pl = function(mode = 'assets', trade_tbl) {
 
       trade <- copy(trade_tbl)
@@ -248,7 +248,7 @@ MyAssets <- R6Class(
       return(bs_pl)
     },
 
-    ## 5.(장부금액) 장부금액 자료 산출 ====
+## 5.(장부금액) 장부금액 자료 산출 ====
     run_book = function() {
 
       # DB 원자료 캐싱
@@ -304,7 +304,7 @@ MyAssets <- R6Class(
                   실현손익 = sum(실현손익))
     },
 
-    ## 6.(평가및손익) 가격 업데이트 ====
+## 6.(평가및손익) 가격 업데이트 ====
     update_new_price = function() {
 
       # 1) 환율
@@ -380,7 +380,7 @@ MyAssets <- R6Class(
         bind_rows(closing_prices, gold, fund_prices)
     },
 
-    ## 7.(평가및손익) 투자자산 평가반영 잔액-손익 테이블 생성 ====
+## 7.(평가및손익) 투자자산 평가반영 잔액-손익 테이블 생성 ====
     evaluate_bs_pl_assets = function() {
 
       price <- self$assets %>%
@@ -422,7 +422,7 @@ MyAssets <- R6Class(
       return(as_tibble(bs_pl))
     },
 
-    ## 8.(평가및손익) 연금 평가반영 잔액-손익 테이블 생성 ====
+## 8.(평가및손익) 연금 평가반영 잔액-손익 테이블 생성 ====
     evaluate_bs_pl_pension = function() {
 
       price <- self$pension %>%
@@ -455,7 +455,7 @@ MyAssets <- R6Class(
       return(as_tibble(bs_pl))
     },
 
-    ## 9.(평가및손익) 자산군별/상품별 보유현황 생성 ====
+## 9.(평가및손익) 자산군별/상품별 보유현황 생성 ====
     compute_total = function() {
       df <- self$bs_pl_mkt_a
       usd_bs   <- round(filter(df, 통화 == '달러')$장부금액 * self$ex_usd, 0)
@@ -623,7 +623,7 @@ MyAssets <- R6Class(
         arrange(자산군, 세부자산군, 세부자산군2, 계좌)
     },
 
-    ## 10.(평가및손익) 자산배분 생성 ====
+## 10.(평가및손익) 자산배분 생성 ====
     compute_total_allocation = function() {
 
       self$account_allocation <- self$read('groups') %>%
@@ -644,7 +644,7 @@ MyAssets <- R6Class(
         mutate(비중 = 합계 / last(합계) * 100)
     },
 
-    ## 11.(평가및손익) 자산군별/계좌별 손익현황 생성 ====
+## 11.(평가및손익) 자산군별/계좌별 손익현황 생성 ====
     compute_asset_profit = function() {
 
       df1 <- self$bs_pl_mkt_a %>%
@@ -740,7 +740,7 @@ MyAssets <- R6Class(
         arrange(계좌, 자산군)
     },
 
-    ## 12.(평가및손익) 상품별 손익현황 계산 ====
+## 12.(평가및손익) 상품별 손익현황 계산 ====
     compute_comm_profit = function() {
 
       df_a <- self$bs_pl_mkt_a
@@ -781,7 +781,7 @@ MyAssets <- R6Class(
                총손익, 비용률, 실현수익률, 평가증감률, 총수익률)
     },
 
-    ## 13.(평가및손익) 평가금액 계산 ====
+## 13.(평가및손익) 평가금액 계산 ====
     run_valuation = function() {
       self$update_new_price()
       self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
@@ -792,7 +792,7 @@ MyAssets <- R6Class(
       self$compute_comm_profit()
     },
 
-    ## 14.(연초갱신) 기초평가손익 갱신 ====
+## 14.(연초갱신) 기초평가손익 갱신 ====
     renew_last_eval_profit = function() {
       self$assets %>%
         select(-기초평가손익) %>%

@@ -11,7 +11,7 @@ library(flextable)
 # 1. Utils List ====
 qs_utils <- list(
   
-  ## 1)포트폴리오 구성====
+## 1)포트폴리오 구성====
   add_portfolio = function(tickers, weights, 
                            name = "Portfolio", rebalance_on = "months") {
     if (length(tickers) != length(weights)) stop("Error: 티커와 비중의 개수가 일치해야 합니다.")
@@ -43,11 +43,11 @@ qs_utils <- list(
     message(glue("  [Utils] '{name}' 포트폴리오가 생성되었습니다."))
   },
   
-  ## 2) 분석대상 설정====
+## 2) 분석대상 설정====
   set_targets = function(target_symbols, bm_symbol = NULL, 
                          start_date=NULL, end_date=NULL) {
     
-    # 1. 타겟과 BM 데이터 임시 추출
+# 1. 타겟과 BM 데이터 임시 추출 ----
     temp_returns <- self$base_returns %>% filter(symbol %in% target_symbols)
     temp_bm <- if(!is.null(bm_symbol)) self$base_returns %>% filter(symbol == bm_symbol) else NULL
     
@@ -86,7 +86,7 @@ qs_utils <- list(
 
 qs_stats <- list(
   calc_stats_table = function() {
-    # 1. 분석 대상과 벤치마크 통합 데이터 준비
+# 1. 분석 대상과 벤치마크 통합 데이터 준비 ----
     # 타겟 자산들과 BM을 합쳐서 계산 루프에 넣음 (BM도 기초 통계 산출 대상)
     assets_to_analyze <- self$returns
     if (!is.null(self$bm)) {
@@ -103,7 +103,7 @@ qs_stats <- list(
       data_merged <- data_merged %>% left_join(bm_series, by = "date")
     }
     
-    # 2. 그룹별 지표 산출
+# 2. 그룹별 지표 산출 ----
     stats_df <- data_merged %>%
       group_by(symbol) %>%
       group_modify(~ {
@@ -165,7 +165,7 @@ qs_stats <- list(
         return(res)
       }) %>% ungroup()
     
-    # 3. 테이블 정리 (Long -> Wide)
+# 3. 테이블 정리 (Long -> Wide) ----
     final_table <- stats_df %>%
       pivot_longer(cols = -symbol, names_to = "Metric", values_to = "Value") %>%
       mutate(Value = round(Value, 2)) %>%
@@ -274,17 +274,17 @@ qs_plots <- list(
   },
   
   plot_yearly_returns = function() {
-    # 1. 분석 대상(Targets)과 벤치마크(BM) 통합 데이터 준비
+# 1. 분석 대상(Targets)과 벤치마크(BM) 통합 데이터 준비 ----
     plot_data <- self$returns
     if (!is.null(self$bm)) plot_data <- bind_rows(plot_data, self$bm)
     
-    # 2. 연도별 수익률 계산
+# 2. 연도별 수익률 계산 ----
     plot_data %>%
       group_by(symbol, year = year(date)) %>%
       summarise(ret = prod(1 + returns) - 1, .groups = "drop") %>%
       mutate(year = factor(year)) %>%
       
-      # 3. 시각화: x축은 연도, fill은 자산별 구분
+# 3. 시각화: x축은 연도, fill은 자산별 구분 ----
       ggplot(aes(x = year, y = ret, fill = symbol)) +
       # position_dodge를 통해 막대를 나란히 배치
       geom_col(position = position_dodge(width = 0.8)) +
@@ -302,7 +302,7 @@ qs_plots <- list(
       theme(legend.position = "bottom")
   },
   
-  # --- [추가] 롤링 변동성 (이동 표준편차) ---
+# --- [추가] 롤링 변동성 (이동 표준편차) ----
   plot_rolling_volatility = function(width = 252 * 3, 
                                      title = "Rolling Volatility (Annualized)") {
     # width: 252(1년), 504(2년), 756(3년)
@@ -333,7 +333,7 @@ qs_plots <- list(
            y = "Annualized Volatility", x = "")
   },
   
-  # --- [추가] 롤링 샤프지수 (위험 대비 수익 효율성) ---
+# --- [추가] 롤링 샤프지수 (위험 대비 수익 효율성) ----
   plot_rolling_sharpe = function(width = 252 * 3, rf = 0) {
     
     if (length(unique(self$returns$date)) < width) {
@@ -381,7 +381,7 @@ qs_reports <- list(
     library(flextable)
     library(ggplot2)
     
-    # 1. 성과 요약 통계 (flextable)
+# 1. 성과 요약 통계 (flextable) ----
     stats_df <- self$calc_stats_table()
     ft_stats <- stats_df %>%
       flextable() %>%
@@ -416,7 +416,7 @@ QuantStatsR <- R6Class(
       tickers = NULL, base_returns = NULL, returns = NULL, 
       bm = NULL, rf_data = NULL,
       
-      #1. 초기화 ====
+#1. 초기화 ====
       initialize = function(tickers, rf_ticker=NULL, rf_type = c("etf", "yield"), start_date, end_date = Sys.Date()) {
         self$tickers <- tickers
         self$fetch_data(start_date, end_date, rf_ticker, rf_type)
@@ -461,7 +461,7 @@ QuantStatsR <- R6Class(
         message("Data fetch & Rf preparation complete.")
       }
     ),
-    #2. 기능별 리스트 추가====
+#2. 기능별 리스트 추가====
     qs_utils, qs_stats, qs_plots, qs_reports
   )
 )

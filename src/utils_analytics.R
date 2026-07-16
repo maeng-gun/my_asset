@@ -341,7 +341,7 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
   s_ytd       <- floor_date(t_date, "year") - days(1)
   fetch_start <- s_ytd - days(7)
 
-  # 1. 내 포트폴리오
+# 1. 내 포트폴리오 ----
   pf_return <- return_tbl %>%
     filter(자산군 == '<합계>', 기준일 >= s_ytd, 기준일 <= t_date) %>%
     select(기준일, 평가금액, 총손익) %>%
@@ -353,7 +353,7 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
     transmute(기준일, MyPF = 일간손익 / lag(평가금액) * 100) %>%
     filter(!is.na(MyPF))
 
-  # 2. 야후 파이낸스 벤치마크
+# 2. 야후 파이낸스 벤치마크 ----
   tickers <- c("360200.KS", "278530.KS", "411060.KS", "329200.KS", "356540.KS")
   prices <- suppressWarnings(
     tidyquant::tq_get(tickers, get = "stock.prices", from = fetch_start, to = t_date)
@@ -364,15 +364,15 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
     pivot_wider(names_from = symbol, values_from = adjusted) %>%
     arrange(date)
 
-  # 3. 네이버 회사채 크롤링
+# 3. 네이버 회사채 크롤링 ----
   bond_yields <- get_naver_bond_yield(fetch_start, t_date)
 
-  # 4. 결측치 보간
+# 4. 결측치 보간 ----
   merged_prices <- prices %>%
     left_join(bond_yields, by = "date") %>%
     fill(everything(), .direction = "downup")
 
-  # 5. 주식/실물 자산군 일별 수익률
+# 5. 주식/실물 자산군 일별 수익률 ----
   bm_returns_long <- merged_prices %>%
     select(date, `360200.KS`, `278530.KS`, `411060.KS`, `329200.KS`, `356540.KS`) %>%
     pivot_longer(cols = -date, names_to = "symbol", values_to = "price") %>%
@@ -390,7 +390,7 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
                           "356540.KS" = "시장형채권")) %>%
     select(date, Asset, daily.returns)
 
-  # 6. 회사채 및 현금성 자산 생성
+# 6. 회사채 및 현금성 자산 생성 ----
   bond_returns_long <- merged_prices %>% filter(date >= fetch_start) %>%
     mutate(Asset = "만기보유채권",
            daily.returns = ((1 + (rate + 2.0) / 100)^(1 / 252) - 1) * 100) %>%
@@ -411,7 +411,7 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
   ret_xts    <- timetk::tk_xts(all_bm_returns_wide, date_var = date)
   asset_cols <- colnames(ret_xts)
 
-  # 7. SAA, TAA1, TAA2 포트폴리오 수익률 계산
+# 7. SAA, TAA1, TAA2 포트폴리오 수익률 계산 ----
   weight_df <- allo_table_df %>%
     mutate(배분일자 = as.Date(배분일자),
            현금성 = 1 - (국내주식 + 해외주식 + 만기보유채권 + 시장형채권 + 실물자산 + 인컴자산))

@@ -6,125 +6,87 @@
 # =============================================================================
 
 # 명시적으로 global.R을 로드하여 패키지 및 모듈 인식 오류 방지
+library(shiny)
 source("global.R", encoding = "UTF-8")
+options(shiny.autoreload.legacy_warning = FALSE)
 
 
 # <User Interface> ====
 
-## 1. 대쉬보드 헤더 ====
-header <- dashboardHeader(
-  title = dashboardBrand(
-    title = div("포트폴리오 관리", align = "center"),
-    color = "info"
-  )
-)
-
-## 2. 대쉬보드 사이드바(메뉴) ====
-sidebar <- dashboardSidebar(
-  sidebarMenu(
-    id = "menu_tabs",
-    actionButton("reval", "평가금액 재계산"),
-    br(),
-    sidebarHeader("포트폴리오 관리"),
-    menuItem(
-      text = "자산운용 내역 기록", icon = icon("receipt"),
-      tabName = "trading_record"
+ui <- page_navbar(
+  id = "menu_tabs",
+  selected = "pf_bs_pl",
+  title = "포트폴리오 관리",
+  window_title = "가족자산관리",
+  theme = bs_theme(version = 5, bootswatch = "zephyr"),
+  header = tagList(
+    pwa(
+      domain = "https://hailey-family.shinyapps.io/my_asset/",
+      title = "가족자산관리",
+      output = "www",
+      icon = "www/3890929_chart_growth_invest_market_stock_icon.png"
     ),
-    menuItem(
-      text = "보유자산 현황", icon = icon("sack-dollar"),
-      tabName = "pf_total"
+    tags$head(tags$link(rel = "stylesheet", href = "custom.css")),
+    useShinyjs(),
+    extendShinyjs(
+      text = "
+        shinyjs.closeWindow = function() { window.close(); }
+        shinyjs.enterToClick = function(params) {
+          var inputId = params.inputId;
+          var buttonId = params.buttonId;
+          $(document).on('keydown', '#' + inputId, function (e) {
+            if (e.keyCode == 13) {
+              e.preventDefault();
+              $('#' + buttonId).click();
+            }
+          });
+        }
+      ",
+      functions = c("closeWindow", "enterToClick")
     ),
-    menuItem(
-      text = "손익현황", icon = icon("sack-dollar"),
-      tabName = "pf_bs_pl", selected = TRUE
-    ),
-    menuItem(
-      text = "배분전략 및 성과분석", icon = icon("chess-board"),
-      tabName = "pf_strategy"
-    ),
-    menuItem(
-      text = "유동성 관리", icon = icon("chart-line"),
-      tabName = "pf_liquid"
+    useSweetAlert(),
+    useWaiter()
+  ),
+  nav_panel(
+    title = "자산운용 내역 기록",
+    value = "trading_record",
+    icon = icon("receipt"),
+    navset_card_tab(
+      id = "trading_box",
+      mod_trade_history_ui("trading"),
+      mod_trade_ticker_ui("ticker"),
+      mod_trade_category_ui("category"),
+      mod_trade_total_ui("total_trade")
     )
   ),
-  br(),
-  actionButton("renew_last_eval_profit",
-    label = "기초평가손익갱신",
-    width = "90%", status = "primary"
+  nav_panel(
+    title = "보유자산 현황", value = "pf_total", icon = icon("sack-dollar"),
+    mod_holdings_ui("holdings")
   ),
-  actionButton("close_win",
-    label = "프로그램 종료",
-    width = "90%", status = "primary"
-  )
+  nav_panel(
+    title = "손익현황", value = "pf_bs_pl", icon = icon("sack-dollar"),
+    mod_profit_ui("profit")
+  ),
+  nav_panel(
+    title = "배분전략 및 성과분석", value = "pf_strategy", icon = icon("chess-board"),
+    mod_strategy_ui("strategy")
+  ),
+  nav_panel(
+    title = "유동성 관리", value = "pf_liquid", icon = icon("chart-line"),
+    mod_liquidity_ui("liquidity")
+  ),
+  nav_spacer(),
+  nav_item(actionButton("reval", "평가금액 재계산", class = "btn-info btn-sm", style = "margin-top: 8px; margin-right: 5px;")),
+  nav_item(actionButton("renew_last_eval_profit", "기초평가손익갱신", class = "btn-primary btn-sm", style = "margin-top: 8px; margin-right: 5px;")),
+  nav_item(actionButton("close_win", "프로그램 종료", class = "btn-primary btn-sm", style = "margin-top: 8px; margin-right: 5px;")),
+  nav_item(tags$div("developed by H.M. Choi", style = "font-size: 0.8em; color: gray; margin-top: 15px; margin-right: 15px; margin-left: 10px;"))
 )
-
-## 3. 대쉬보드 본문 ====
-body <- dashboardBody(
-  pwa(
-    domain = "https://hailey-family.shinyapps.io/my_asset/",
-    title = "가족자산관리",
-    output = "www",
-    icon = "www/3890929_chart_growth_invest_market_stock_icon.png"
-  ),
-  tags$head(tags$link(rel = "stylesheet", href = "custom.css")),
-  useShinyjs(),
-  extendShinyjs(
-    text = "
-      shinyjs.closeWindow = function() { window.close(); }
-      shinyjs.enterToClick = function(params) {
-        var inputId = params.inputId;
-        var buttonId = params.buttonId;
-        $(document).on('keydown', '#' + inputId, function (e) {
-          if (e.keyCode == 13) {
-            e.preventDefault();
-            $('#' + buttonId).click();
-          }
-        });
-      }
-    ",
-    functions = c("closeWindow", "enterToClick")
-  ),
-  useSweetAlert(),
-  useWaiter(),
-  tabItems(
-
-    ## 자산운용 내역 기록 (4개 서브탭 모듈) ====
-    tabItem(
-      tabName = "trading_record",
-      tabBox(
-        id = "trading_box", width = 12, status = "primary", type = "tabs",
-        mod_trade_history_ui("trading"),
-        mod_trade_ticker_ui("ticker"),
-        mod_trade_category_ui("category"),
-        mod_trade_total_ui("total_trade")
-      )
-    ),
-
-    ## 보유자산 현황 ====
-    tabItem(tabName = "pf_total", mod_holdings_ui("holdings")),
-
-    ## 손익현황 ====
-    tabItem(tabName = "pf_bs_pl", mod_profit_ui("profit")),
-
-    ## 배분전략 및 성과분석 ====
-    tabItem(tabName = "pf_strategy", mod_strategy_ui("strategy")),
-
-    ## 유동성 관리 ====
-    tabItem(tabName = "pf_liquid", mod_liquidity_ui("liquidity"))
-  )
-)
-
-## 4. 바닥글 ====
-footer <- dashboardFooter(right = "developed by H.M. Choi")
-
-## 5. 대쉬보드 페이지 조립 ====
-ui <- dashboardPage(header, sidebar, body, footer = footer)
 
 
 # <Server> ====
 
 server <- function(input, output, session) {
-  # --- Waiter 초기화 ---
+# --- Waiter 초기화 ----
   w1 <- Waiter$new(
     html = tagList(spin_loader(), "로딩중..."),
     color = transparent(.5)
@@ -134,18 +96,18 @@ server <- function(input, output, session) {
     show_alert(title = text, type = type)
   }
 
-  # --- 인증 모듈 호출 ---
+# --- 인증 모듈 호출 ----
   auth_rv <- mod_auth_server("auth", is_local = IS_LOCAL)
 
-  # --- 인증 성공 후 메인 로직 초기화 ---
+# --- 인증 성공 후 메인 로직 초기화 ----
   observeEvent(auth_rv$authenticated,
     {
       req(auth_rv$authenticated == TRUE)
 
       show_delay("앱 구동중...", "info")
 
-      # --- DB Pool 생성 (외부 관리) ---
-      cfg <- yaml::read_yaml(file = 'ccc.yaml', readLines.warn = FALSE)
+# --- DB Pool 생성 (외부 관리) ----
+      cfg <- yaml::read_yaml(file = "ccc.yaml", readLines.warn = FALSE)
       db_pool <- dbPool(
         drv = RPostgres::Postgres(),
         host = cfg$c,
@@ -189,18 +151,24 @@ server <- function(input, output, session) {
         split(df$value, df$key)
       })
 
-      # --- 모듈 서버 호출 (pool 주입) ---
+# --- 모듈 서버 호출 (pool 주입) ----
       mod_trade_history_server("trading",
         pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b,
-        menu_tabs = reactive(input$menu_tabs))
+        menu_tabs = reactive(input$menu_tabs)
+      )
       mod_trade_ticker_server("ticker",
-        pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b, ctg = ctg)
+        pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b, ctg = ctg
+      )
       mod_trade_category_server("category",
-        pool = db_pool, ma = ma, sk_c = sk_c, ctg = ctg)
+        pool = db_pool, ma = ma, sk_c = sk_c, ctg = ctg
+      )
       mod_trade_total_server("total_trade",
-        pool = db_pool, ma_b = ma_b)
-      mod_holdings_server("holdings", ma_v = ma_v,
-        menu_tabs = reactive(input$menu_tabs))
+        pool = db_pool, ma_b = ma_b
+      )
+      mod_holdings_server("holdings",
+        ma_v = ma_v,
+        menu_tabs = reactive(input$menu_tabs)
+      )
       mod_profit_server("profit",
         ma_v = ma_v,
         menu_tabs = reactive(input$menu_tabs),
@@ -208,38 +176,43 @@ server <- function(input, output, session) {
       )
       mod_strategy_server("strategy",
         pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b,
-        menu_tabs = reactive(input$menu_tabs))
+        menu_tabs = reactive(input$menu_tabs)
+      )
       mod_liquidity_server("liquidity",
         pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b,
-        menu_tabs = reactive(input$menu_tabs))
+        menu_tabs = reactive(input$menu_tabs)
+      )
 
-      # --- 프로그램 종료 ---
+# --- 프로그램 종료 ----
       observeEvent(input$close_win, {
         js$closeWindow()
         stopApp()
       })
 
-      # --- 기초평가손익 갱신 ---
+# --- 기초평가손익 갱신 ----
       observeEvent(input$renew_last_eval_profit, {
         ma$renew_last_eval_profit()
       })
 
-      # --- 세션 종료 시 pool 안전 종료 ---
+# --- 세션 종료 시 pool 안전 종료 ----
       session$onSessionEnded(function() {
-        tryCatch({
-          if (pool::dbIsValid(db_pool)) {
-            pool::poolClose(db_pool)
-            message("[INFO] 세션 종료 — pool 연결 해제 완료")
+        tryCatch(
+          {
+            if (pool::dbIsValid(db_pool)) {
+              pool::poolClose(db_pool)
+              message("[INFO] 세션 종료 — pool 연결 해제 완료")
+            }
+          },
+          error = function(e) {
+            message("[WARN] pool 종료 중 오류: ", e$message)
           }
-        }, error = function(e) {
-          message("[WARN] pool 종료 중 오류: ", e$message)
-        })
+        )
       })
     },
     ignoreInit = FALSE
   )
 
-  # --- 앱 전체 종료 시 안전장치 ---
+# --- 앱 전체 종료 시 안전장치 ----
   onStop(function() {
     message("[INFO] 앱 종료 — 자원 정리 완료")
   })

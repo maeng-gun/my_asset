@@ -12,12 +12,12 @@ AutoInvest <- R6Class(
   inherit = MyData,
   public = list(
 
-    ## 속성 선언 ====
+## 속성 선언 ====
     token_tmp = NULL, APP_KEY = NULL, APP_SECRET = NULL, ACCT = NULL,
     URL_BASE = NULL, MY_AGENT = NULL, base_headers = NULL,
     token_headers = NULL,
 
-    ## 속성 초기화 ====
+## 속성 초기화 ====
     initialize = function(pool, account = "my") {
       super$initialize(pool)
       cfg <- split(self$config$value, self$config$token)
@@ -43,7 +43,7 @@ AutoInvest <- R6Class(
       )
     },
 
-    ## 메서드(1) — 토큰 저장하기 ====
+## 메서드(1) — 토큰 저장하기 ====
     save_token = function(my_token, my_expired) {
       valid_date <-
         as.POSIXct(my_expired, format = '%Y-%m-%d %H:%M:%S', tz = 'Asia/Seoul')
@@ -54,7 +54,7 @@ AutoInvest <- R6Class(
                    overwrite = TRUE)
     },
 
-    ## 메서드(2) — 토큰 불러오기 ====
+## 메서드(2) — 토큰 불러오기 ====
     read_token = function() {
       tryCatch({
         tkg_tmp <- self$read(self$token_tmp)
@@ -77,7 +77,7 @@ AutoInvest <- R6Class(
       })
     },
 
-    ## 메서드(3) — 인증하기 ====
+## 메서드(3) — 인증하기 ====
     auth = function() {
       data <- c("grant_type" = "client_credentials",
                 "appkey"     = self$APP_KEY,
@@ -105,7 +105,7 @@ AutoInvest <- R6Class(
       return(my_token)
     },
 
-    ## 메서드(4) — 해시키 얻기 ====
+## 메서드(4) — 해시키 얻기 ====
     hashkey = function(data) {
       path <- "uapi/hashkey"
       headers <- c(appKey = self$APP_KEY,
@@ -113,7 +113,7 @@ AutoInvest <- R6Class(
       self$POST_json(path, data, headers)$HASH
     },
 
-    ## 메서드(5-1) — GET 명령 ====
+## 메서드(5-1) — GET 명령 ====
     GET_tbl = function(path, data, headers) {
       URL <- glue("{self$URL_BASE}/{path}")
       headers2 <- c(self$token_headers, headers)
@@ -123,7 +123,7 @@ AutoInvest <- R6Class(
         fromJSON()
     },
 
-    ## 메서드(5-2) — POST 명령 ====
+## 메서드(5-2) — POST 명령 ====
     POST_json = function(path, data, headers = NULL) {
 
       URL <- glue("{self$URL_BASE}/{path}")
@@ -142,7 +142,7 @@ AutoInvest <- R6Class(
       }
     },
 
-    ## 메서드(6) — 자산별 잔고 ====
+## 메서드(6) — 자산별 잔고 ====
     inquire_account_balance = function() {
       path <- "uapi/domestic-stock/v1/trading/inquire-account-balance"
       data <- list(
@@ -168,7 +168,7 @@ AutoInvest <- R6Class(
         filter(비중 != 0)
     },
 
-    ## 메서드(7) — 국내주식 잔고 ====
+## 메서드(7) — 국내주식 잔고 ====
     inquire_balance = function() {
       path <- "/uapi/domestic-stock/v1/trading/inquire-balance"
 
@@ -196,7 +196,7 @@ AutoInvest <- R6Class(
         mutate(평가금액 = as.numeric(평가금액))
     },
 
-    ## 메서드(8) — 해외주식 잔고 ====
+## 메서드(8) — 해외주식 잔고 ====
     inquire_balance_ovs = function(cur = 'USD') {
       path <- "uapi/overseas-stock/v1/trading/inquire-balance"
       exc <- list(USD = "NASD", JPY = "TKSE")
@@ -218,7 +218,7 @@ AutoInvest <- R6Class(
         mutate(평가금액 = as.numeric(평가금액))
     },
 
-    ## 메서드(9) — 개별종목 현재가 ====
+## 메서드(9) — 개별종목 현재가 ====
     get_current_price = function(sym_cd) {
       path <- "/uapi/domestic-stock/v1/quotations/inquire-price"
       headers <- c("tr_id" = "FHKST01010100", "custtype" = "P")

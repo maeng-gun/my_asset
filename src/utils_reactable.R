@@ -13,11 +13,11 @@ fmt_number <- function(digits = 0) {
   colFormat(separators = TRUE, digits = digits)
 }
 
-#' 퍼센트 컬럼 포매터 생성 헬퍼
+#' 퍼센트 컬럼 포매터 생성 헬퍼 (퍼센트 형식 대신 단순 소수점 표기 유지)
 #' @param digits 소수점 자리수
 #' @return reactable::colFormat
 fmt_percent <- function(digits = 2) {
-  colFormat(digits = digits)
+  colFormat(separators = TRUE, digits = digits)
 }
 
 #' 텍스트 말줄임 + 호버 툴팁 셀 렌더러 생성
@@ -58,87 +58,120 @@ render_rt <- function(df,
                       align = "center",
                       sortable = FALSE,
                       searchable = FALSE,
-                      height = "calc(100vh - 200px)") {
-
+                      height = NULL,
+                      dynamic_height = TRUE) {
   # 인덱스로 지정된 경우 컬럼 이름으로 변환
   to_names <- function(cols) if (is.numeric(cols)) names(df)[cols] else cols
-  int_cols      <- to_names(int_cols)
-  dec_cols      <- to_names(dec_cols)
-  pct_cols      <- to_names(pct_cols)
-  sticky_cols   <- to_names(sticky_cols)
+  int_cols <- to_names(int_cols)
+  dec_cols <- to_names(dec_cols)
+  pct_cols <- to_names(pct_cols)
+  sticky_cols <- to_names(sticky_cols)
   long_str_cols <- to_names(long_str_cols)
 
-  # 컬럼 정의 리스트 초기화
+  # 컬럼 정의 리스트 초기화 및 동적 너비 계산
   col_defs <- list()
-
-  # 정수 컬럼 적용 (천단위 쉼표, 소수점 0자리)
-  for (col in int_cols) {
-    col_defs[[col]] <- colDef(format = fmt_number(0))
-  }
-
-  # 외화 소수점 2자리 컬럼 적용
-  for (col in dec_cols) {
-    col_defs[[col]] <- colDef(format = fmt_number(2))
-  }
-
-  # 퍼센트(소수) 컬럼 적용
-  for (col in pct_cols) {
-    col_defs[[col]] <- colDef(format = fmt_percent(2))
-  }
-
-  # 좌측 고정(sticky) 컬럼 적용 — 기존 colDef가 있으면 덮어쓰지 않고 sticky 속성만 추가
-  for (col in sticky_cols) {
-    existing <- col_defs[[col]]
-    if (is.null(existing)) {
-      col_defs[[col]] <- colDef(sticky = "left")
-    } else {
-      # 기존 정의에 sticky 추가: 리스트 병합 방식
-      col_defs[[col]] <- modifyList(existing, list(sticky = "left"))
+  for (col in names(df)) {
+    col_args <- list()
+    
+    # 특정 컬럼만 동적 너비 계산
+    if (col %in% c("상품명", "종목명", "계좌")) {
+      vals <- as.character(df[[col]])
+      max_len <- max(c(0, nchar(vals)), na.rm = TRUE)
+      col_name_len <- nchar(col)
+      # 한글 등 폭 넉넉히 계산 (글자수 * 14px + 여백 40px)
+      calculated_width <- max(max_len * 14, col_name_len * 16) + 40
+      col_args$minWidth <- min(max(calculated_width, 80), 500)
     }
-  }
-
-  # 긴 문자열 컬럼 — CSS 말줄임 + 호버 툴팁
-  # html = TRUE: cell 함수가 HTML 문자열을 반환하며, reactable이 HTML로 해석하도록 설정
-  for (col in long_str_cols) {
-    existing <- col_defs[[col]]
-    cell_fn  <- ellipsis_cell()
-    if (is.null(existing)) {
-      col_defs[[col]] <- colDef(
-        html     = TRUE,
-        minWidth = 150,
-        cell     = cell_fn,
-        style    = list(maxWidth = "200px", overflow = "hidden",
-                        textOverflow = "ellipsis", whiteSpace = "nowrap")
+    
+    # 포맷 적용
+    if (col %in% int_cols) {
+      col_args$format <- fmt_number(0)
+    } else if (col %in% dec_cols) {
+      col_args$format <- fmt_number(2)
+    } else if (col %in% pct_cols) {
+      col_args$format <- fmt_percent(2)
+    }
+    
+    # 좌측 고정(sticky) 컬럼 적용
+    if (col %in% sticky_cols) {
+      col_args$sticky <- "left"
+    }
+    
+    # 긴 문자열 컬럼 — CSS 말줄임 + 호버 툴팁
+    # html = TRUE: cell 함수가 HTML 문자열을 반환하며, reactable이 HTML로 해석하도록 설정
+    if (col %in% long_str_cols) {
+      col_args$html <- TRUE
+      if (is.null(col_args$minWidth)) {
+        col_args$minWidth <- 150
+      } else {
+        col_args$minWidth <- max(col_args$minWidth, 150)
+      }
+      col_args$cell <- ellipsis_cell()
+      col_args$style <- list(
+        maxWidth = "200px", overflow = "hidden",
+        textOverflow = "ellipsis", whiteSpace = "nowrap"
       )
-    } else {
-      col_defs[[col]] <- modifyList(existing, list(
-        html     = TRUE,
-        minWidth = 150,
-        cell     = cell_fn,
-        style    = list(maxWidth = "200px", overflow = "hidden",
-                        textOverflow = "ellipsis", whiteSpace = "nowrap")
-      ))
+    }
+    
+    if (length(col_args) > 0) {
+      col_defs[[col]] <- do.call(colDef, col_args)
     }
   }
 
   # 테이블 렌더링
-  reactable(
+  rt <- reactable(
     data = df,
     groupBy = groupBy,
     columns = col_defs,
     defaultColDef = colDef(
       align = align,
-      minWidth = 100,
       style = list(whiteSpace = "nowrap")
     ),
-    pagination = FALSE,      # 한 화면에 모두 표시
+    pagination = FALSE, # 한 화면에 모두 표시
     resizable = TRUE,
-    height = height,         # 세로 스크롤 고정 높이 (헤더 고정)
-    wrap = FALSE,            # 텍스트 줄바꿈 방지
-    sortable = sortable,     # 정렬 기능
+    height = height, # 세로 스크롤 고정 높이 (기본 NULL)
+    wrap = FALSE, # 텍스트 줄바꿈 방지
+    sortable = sortable, # 정렬 기능
     searchable = searchable, # 검색 기능
-    striped = TRUE,          # 짝수행 배경색 다르게
-    highlight = TRUE,        # 마우스 호버 시 강조
-    compact = TRUE           # 패딩을 줄여 컴팩트하게
+    striped = TRUE, # 짝수행 배경색 다르게
+    highlight = TRUE, # 마우스 호버 시 강조
+    compact = TRUE # 패딩을 줄여 컴팩트하게
   )
+
+  # 브라우저 창 크기에 맞춰 동적으로 테이블 높이 재계산 (JS 주입)
+  if (dynamic_height) {
+    htmlwidgets::onRender(rt, "
+      function(el, x) {
+        function resize() {
+          // 화면에 숨겨진 상태면 계산하지 않음
+          if (el.offsetWidth === 0 && el.offsetHeight === 0) return;
+          var rect = el.getBoundingClientRect();
+          if (rect.top <= 0) return;
+          
+          // 창 높이에서 테이블 윗부분의 위치와 여유 공간(30px)을 뺌
+          var remaining = window.innerHeight - rect.top - 30;
+          if (remaining > 200) {
+            el.style.height = remaining + 'px';
+          }
+        }
+        setTimeout(resize, 100); // 렌더링 직후 높이 조정
+        window.addEventListener('resize', resize); // 창 크기 조절 시 대응
+        
+        // 탭 전환 이벤트 감지 (Bootstrap 5)
+        if (window.jQuery) {
+          $('a[data-bs-toggle=\"tab\"], a[data-toggle=\"tab\"]').on('shown.bs.tab', function (e) {
+            setTimeout(resize, 50);
+          });
+        }
+        
+        // 혹시 UI가 동적으로 변해 위치가 바뀌면 대응하도록 Observer 추가
+        var observer = new MutationObserver(function() {
+          resize();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    ")
+  } else {
+    rt
+  }
 }

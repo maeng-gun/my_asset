@@ -7,24 +7,27 @@
 
 mod_trade_category_ui <- function(id) {
   ns <- NS(id)
-  tabPanel(
+  nav_panel(
     title = "구분항목 관리",
-    box(
-      id = ns('list_box'), width = 12, status = 'info',
-      solidHeader = TRUE, title = "입력사항", collapsible = FALSE,
-      fluidRow(
-        column(width = 2, class = "col-12 col-md-4 col-lg-2",
-               uiOutput(ns('ass_account_list'))),
-        column(width = 2, class = "col-12 col-md-4 col-lg-2",
-               uiOutput(ns('pen_account_list'))),
-        column(width = 2, class = "col-12 col-md-4 col-lg-2",
-               uiOutput(ns('ass_cur_list'))),
-        column(width = 2, class = "col-12 col-md-4 col-lg-2",
-               uiOutput(ns('ass_class_list'))),
-        column(width = 2, class = "col-12 col-md-4 col-lg-2",
-               uiOutput(ns('ass_class1_list'))),
-        column(width = 2, class = "col-12 col-md-4 col-lg-2",
-               uiOutput(ns('ass_class2_list')))
+    card(
+      id = ns('list_box'),
+      class = "mb-3 border-info",
+      card_header("입력사항", class = "bg-info text-white"),
+      card_body(
+        fluidRow(
+          column(width = 2, class = "col-12 col-md-4 col-lg-2",
+                 uiOutput(ns('ass_account_list'))),
+          column(width = 2, class = "col-12 col-md-4 col-lg-2",
+                 uiOutput(ns('pen_account_list'))),
+          column(width = 2, class = "col-12 col-md-4 col-lg-2",
+                 uiOutput(ns('ass_cur_list'))),
+          column(width = 2, class = "col-12 col-md-4 col-lg-2",
+                 uiOutput(ns('ass_class_list'))),
+          column(width = 2, class = "col-12 col-md-4 col-lg-2",
+                 uiOutput(ns('ass_class1_list'))),
+          column(width = 2, class = "col-12 col-md-4 col-lg-2",
+                 uiOutput(ns('ass_class2_list')))
+        )
       )
     )
   )
@@ -46,9 +49,9 @@ mod_trade_category_server <- function(id, pool, ma, sk_c, ctg) {
           selectInput(ns(paste0('select_', i)), NULL, ctg()[[i]]),
           div(
             actionButton(ns(glue("add_{i}_btn")), label = "추가",
-                         width = '45%', status = "info"),
+                         width = '45%', class = "btn btn-info"),
             actionButton(ns(glue("del_{i}_btn")), label = "삭제",
-                         width = '45%', status = "primary"),
+                         width = '45%', class = "btn btn-primary"),
             align = 'center'
           )
         )

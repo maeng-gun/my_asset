@@ -13,34 +13,34 @@ MyData <- R6Class(
 
     con = NULL, config = NULL,
 
-    ## 1. 속성 초기화 ====
+## 1. 속성 초기화 ====
     initialize = function(pool) {
 
       self$con <- pool
       self$config <- self$read('config')
     },
 
-    ## 2.(메서드) 테이블 추가 ====
+## 2.(메서드) 테이블 추가 ====
     add_table = function(table, name) {
       dbWriteTable(self$con, name, table, overwrite = TRUE)
     },
 
-    ## 3.(메서드) 테이블 읽기 ====
+## 3.(메서드) 테이블 읽기 ====
     read = function(name) {
       dbReadTable(self$con, name) %>% tibble()
     },
 
-    ## 4.(메서드) 테이블 읽기(dbplyr 객체) ====
+## 4.(메서드) 테이블 읽기(dbplyr 객체) ====
     read_obj = function(name) {
       tbl(self$con, name)
     },
 
-    ## 5.(메서드) 테이블 목록 ====
+## 5.(메서드) 테이블 목록 ====
     table_list = function() {
       dbListTables(self$con)
     },
 
-    ## 6.(메서드) 추가/갱신하기 ====
+## 6.(메서드) 추가/갱신하기 ====
     upsert = function(df, name, cols) {
       dbxUpsert(conn = self$con, table = name, records = df,
                 where_cols = cols)
