@@ -18,7 +18,10 @@ ui <- page_navbar(
   selected = "pf_bs_pl",
   title = "포트폴리오 관리",
   window_title = "가족자산관리",
-  theme = bs_theme(version = 5, bootswatch = "zephyr"),
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "minty"
+  ),
   header = tagList(
     pwa(
       domain = "https://hailey-family.shinyapps.io/my_asset/",
@@ -44,6 +47,34 @@ ui <- page_navbar(
       ",
       functions = c("closeWindow", "enterToClick")
     ),
+    tags$script(HTML("
+      window.fallbackCopyTextToClipboard = function(text) {
+        var textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.top = '0';
+        textArea.style.left = '0';
+        textArea.style.position = 'fixed';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          var successful = document.execCommand('copy');
+          if(successful) {
+            if (typeof Swal !== 'undefined' && typeof Swal.fire === 'function') {
+              Swal.fire('성공', '표 내용이 클립보드에 복사되었습니다.\\n엑셀에 붙여넣기 하세요.', 'success');
+            } else {
+              alert('표 내용이 클립보드에 복사되었습니다.\\n엑셀에 붙여넣기 하세요.');
+            }
+          } else {
+            alert('클립보드 복사에 실패했습니다.');
+          }
+        } catch (err) {
+          console.error('Fallback: Oops, unable to copy', err);
+          alert('클립보드 복사 중 오류가 발생했습니다.');
+        }
+        document.body.removeChild(textArea);
+      };
+    ")),
     useSweetAlert(),
     useWaiter()
   ),
@@ -86,7 +117,7 @@ ui <- page_navbar(
 # <Server> ====
 
 server <- function(input, output, session) {
-# --- Waiter 초기화 ----
+  # --- Waiter 초기화 ----
   w1 <- Waiter$new(
     html = tagList(spin_loader(), "로딩중..."),
     color = transparent(.5)
@@ -96,17 +127,17 @@ server <- function(input, output, session) {
     show_alert(title = text, type = type)
   }
 
-# --- 인증 모듈 호출 ----
+  # --- 인증 모듈 호출 ----
   auth_rv <- mod_auth_server("auth", is_local = IS_LOCAL)
 
-# --- 인증 성공 후 메인 로직 초기화 ----
+  # --- 인증 성공 후 메인 로직 초기화 ----
   observeEvent(auth_rv$authenticated,
     {
       req(auth_rv$authenticated == TRUE)
 
       show_delay("앱 구동중...", "info")
 
-# --- DB Pool 생성 (외부 관리) ----
+      # --- DB Pool 생성 (외부 관리) ----
       cfg <- yaml::read_yaml(file = "ccc.yaml", readLines.warn = FALSE)
       db_pool <- dbPool(
         drv = RPostgres::Postgres(),
@@ -151,7 +182,7 @@ server <- function(input, output, session) {
         split(df$value, df$key)
       })
 
-# --- 모듈 서버 호출 (pool 주입) ----
+      # --- 모듈 서버 호출 (pool 주입) ----
       mod_trade_history_server("trading",
         pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b,
         menu_tabs = reactive(input$menu_tabs)
@@ -183,18 +214,18 @@ server <- function(input, output, session) {
         menu_tabs = reactive(input$menu_tabs)
       )
 
-# --- 프로그램 종료 ----
+      # --- 프로그램 종료 ----
       observeEvent(input$close_win, {
         js$closeWindow()
         stopApp()
       })
 
-# --- 기초평가손익 갱신 ----
+      # --- 기초평가손익 갱신 ----
       observeEvent(input$renew_last_eval_profit, {
         ma$renew_last_eval_profit()
       })
 
-# --- 세션 종료 시 pool 안전 종료 ----
+      # --- 세션 종료 시 pool 안전 종료 ----
       session$onSessionEnded(function() {
         tryCatch(
           {
@@ -212,7 +243,7 @@ server <- function(input, output, session) {
     ignoreInit = FALSE
   )
 
-# --- 앱 전체 종료 시 안전장치 ----
+  # --- 앱 전체 종료 시 안전장치 ----
   onStop(function() {
     message("[INFO] 앱 종료 — 자원 정리 완료")
   })

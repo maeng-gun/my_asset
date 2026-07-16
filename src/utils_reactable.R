@@ -135,7 +135,14 @@ render_rt <- function(df,
     searchable = searchable, # 검색 기능
     striped = TRUE, # 짝수행 배경색 다르게
     highlight = TRUE, # 마우스 호버 시 강조
-    compact = TRUE # 패딩을 줄여 컴팩트하게
+    compact = TRUE, # 패딩을 줄여 컴팩트하게
+    theme = reactableTheme(
+      style = list(
+        overflowX = "auto",
+        WebkitOverflowScrolling = "touch",
+        fontSize = "clamp(12px, 3vw, 14px)"
+      )
+    )
   )
 
   # 브라우저 창 크기에 맞춰 동적으로 테이블 높이 재계산 (JS 주입)

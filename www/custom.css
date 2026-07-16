@@ -1,40 +1,9 @@
 /* custom.css - Mobile optimization for Shiny Dashboard */
 
-/* Ensure reactable does not wrap and has horizontal scrolling */
-.reactable {
-  white-space: nowrap !important;
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Make sure container boxes have overflow auto */
-.box-body {
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Adjust font size for mobile devices */
-@media (max-width: 768px) {
-  .reactable {
-    font-size: 12px !important;
-  }
-
-  /* Make echarts responsive */
-  .echarts4r {
-    width: 100% !important;
-    min-height: 300px;
-  }
-}
-
-/* 탭(Card Header) 높이 축소 */
-.card-header {
-  padding-top: 0.2rem !important;
-  padding-bottom: 0rem !important;
-}
-
-.card-header .nav-link {
-  padding-top: 0.1rem !important;
-  padding-bottom: 0.1rem !important;
-  font-size: 0.95rem;
-  /* 글꼴 크기를 살짝 줄이면 여백이 더 슬림해 보입니다 */
-}
+/* 
+ * 참고: 기존에 이곳에서 관리하던 CSS(reactable, echarts4r, nav-tabs 폰트 및 패딩 등)는
+ * 모두 R 스크립트 내부의 자체 옵션(bslib::bs_theme SASS 변수 및 reactableTheme 스타일)으로 이관되었습니다.
+ * 
+ * 도저히 R 내부 패키지 옵션으로 처리할 수 없는 특수한 전역 스타일이 생길 경우에만
+ * 이 파일에 추가하세요.
+ */
