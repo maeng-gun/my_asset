@@ -291,91 +291,59 @@ MyAssets <- R6Class(
 
     ## 5.(장부금액) 장부금액 자료 산출 ====
     run_book = function() {
-      # DB 원자료 캐싱
-      self$assets <- self$read("assets")
-      self$pension <- self$read("pension")
-      self$inflow <- self$read("inflow")
+      # DB 원자료 캐싱 (data.table 형식 변환)
+      self$assets <- as.data.table(self$read("assets"))
+      self$pension <- as.data.table(self$read("pension"))
+      self$inflow <- as.data.table(self$read("inflow"))
 
-      # DB 행번호
-      self$assets_last_num <- self$read_obj("assets") %>%
-        arrange(desc(행번호)) %>%
-        head(1) %>%
-        pull(행번호)
-      self$assets_daily_last_num <- self$read_obj("assets_daily") %>%
-        arrange(desc(행번호)) %>%
-        head(1) %>%
-        pull(행번호)
+      assets_daily_raw <- as.data.table(self$read("assets_daily"))
+      pension_daily_raw <- as.data.table(self$read("pension_daily"))
 
-      self$pension_last_num <- self$read_obj("pension") %>%
-        arrange(desc(행번호)) %>%
-        head(1) %>%
-        pull(행번호)
-      self$pension_daily_last_num <- self$read_obj("pension_daily") %>%
-        arrange(desc(행번호)) %>%
-        head(1) %>%
-        pull(행번호)
+      # DB 행번호 (DB 쿼리 중복 제거, 메모리상의 데이터에서 max 활용)
+      self$assets_last_num <- if (nrow(self$assets) > 0) max(self$assets$행번호, na.rm = TRUE) else 0
+      self$assets_daily_last_num <- if (nrow(assets_daily_raw) > 0) max(assets_daily_raw$행번호, na.rm = TRUE) else 0
 
-      self$inflow_last_num <- self$read_obj("inflow") %>%
-        arrange(desc(행번호)) %>%
-        head(1) %>%
-        pull(행번호)
+      self$pension_last_num <- if (nrow(self$pension) > 0) max(self$pension$행번호, na.rm = TRUE) else 0
+      self$pension_daily_last_num <- if (nrow(pension_daily_raw) > 0) max(pension_daily_raw$행번호, na.rm = TRUE) else 0
 
-      assets_daily <-
-        self$get_daily_trading(self$assets, self$read("assets_daily"))
+      self$inflow_last_num <- if (nrow(self$inflow) > 0) max(self$inflow$행번호, na.rm = TRUE) else 0
+
+      assets_daily <- self$get_daily_trading(self$assets, assets_daily_raw)
       bs_pl_book_a <- self$get_bs_pl("assets", assets_daily)
 
-      pension_daily <-
-        self$get_daily_trading(self$pension, self$read("pension_daily"))
+      pension_daily <- self$get_daily_trading(self$pension, pension_daily_raw)
       bs_pl_book_p <- self$get_bs_pl("pension", pension_daily)
 
-      self$cash_in_out <- pension_daily %>%
-        as_tibble() %>%
-        bind_rows(
-          assets_daily %>% as_tibble()
-        ) %>%
-        filter(통화 == "원화") %>%
-        group_by(거래일자) %>%
-        summarise(입출금 = sum(입출금)) %>%
-        rename(기준일 = 거래일자)
+      # cash_in_out (현금 입출금) 산출 최적화 - data.table의 rbindlist 활용
+      dt_comb <- rbindlist(list(pension_daily, assets_daily), use.names = TRUE, fill = TRUE)
+      self$cash_in_out <- dt_comb[통화 == "원화", .(입출금 = sum(입출금, na.rm = TRUE)), by = .(기준일 = 거래일자)]
+      self$cash_in_out <- as_tibble(self$cash_in_out[order(기준일)])
 
       self$bs_pl_a <- bs_pl_book_a[거래일자 == self$today]
       self$bs_pl_p <- bs_pl_book_p[거래일자 == self$today]
 
-      self$book_info <- bs_pl_book_a %>%
-        as_tibble() %>%
-        filter(통화 == "원화") %>%
-        filter((month(거래일자) == 12 & day(거래일자) == 31) |
-          거래일자 == self$today) %>%
-        bind_rows(
-          bs_pl_book_p %>% as_tibble() %>%
-            filter((month(거래일자) == 12 & day(거래일자) == 31) |
-              거래일자 == self$today)
-        ) %>%
-        group_by(연도 = year(거래일자)) %>%
-        summarise(
-          장부금액 = sum(장부금액), 평잔 = sum(평잔),
-          실현손익 = sum(실현손익)
-        )
+      # book_info (장부금액) 산출 최적화 - data.table 기반 필터링 및 집계
+      dt_b_a <- bs_pl_book_a[통화 == "원화" & ((month(거래일자) == 12 & day(거래일자) == 31) | 거래일자 == self$today)]
+      dt_b_p <- bs_pl_book_p[(month(거래일자) == 12 & day(거래일자) == 31) | 거래일자 == self$today]
+      
+      dt_b_comb <- rbindlist(list(dt_b_a, dt_b_p), use.names = TRUE, fill = TRUE)
+      
+      self$book_info <- dt_b_comb[, .(장부금액 = sum(장부금액, na.rm = TRUE),
+                                      평잔 = sum(평잔, na.rm = TRUE),
+                                      실현손익 = sum(실현손익, na.rm = TRUE)),
+                                  by = .(연도 = year(거래일자))] %>%
+        as_tibble()
     },
 
     ## 6.(평가및손익) 가격 업데이트 ====
     update_new_price = function() {
-      # 1) 환율
-      get_exchange_rate <- function(cur = "달러") {
-        num <- c("달러" = 1, "엔" = 2, "유로" = 3, "위안" = 4)
-        suppressWarnings({
-          (read_html("http://finance.naver.com/marketindex/") %>%
-            html_nodes("div.head_info > span.value")
-          )[num[cur]] %>%
-            html_text() %>%
-            readr::parse_number()
-        })
-      }
 
-      self$ex_usd <- get_exchange_rate("달러")
-      self$ex_jpy <- get_exchange_rate("엔") / 100
+      # 1) 환율 (AutoInvest에서 병렬 수집)
+      rates <- self$bl$get_exchange_rate()
+      self$ex_usd <- rates$USD
+      self$ex_jpy <- rates$JPY
 
-      # 2) 국내주식 종목/ETF 종가
+      # 2) 국내주식 종목/ETF 종가 (AutoInvest에서 병렬 수집)
       all_codes <- tibble(self$bs_pl_a) %>%
         bind_rows(
           tibble(self$bs_pl_p)
@@ -394,45 +362,13 @@ MyAssets <- R6Class(
           종가 = self$bl$get_current_price(target_codes)
         )
 
-      # 3) 금가격 종가
-      url <- "https://api.stock.naver.com/marketindex/metals/M04020000"
+      # 3) 금가격 종가 (AutoInvest 수집)
+      gold <- self$bl$get_gold_price()
 
-      tryCatch(
-        {
-          resp <- GET(url = url)
-          json_data <- content(resp, as = "text", encoding = "UTF-8") %>%
-            jsonlite::fromJSON()
-          price <- json_data$closePrice %>%
-            readr::parse_number()
-          gold <- tibble(종목코드 = "04020000", 종가 = price)
-        },
-        error = function(e) {
-          message("금 시세 조회 실패")
-          gold <<- tibble()
-        }
-      )
-
-      # 4) 펀드 기준가
-      get_fund_price <- function(code) {
-        map_dbl(code, function(x) {
-          x %>%
-            {
-              paste0("https://www.funddoctor.co.kr/afn/fund/fprofile2.jsp?fund_cd=", .)
-            } %>%
-            read_html() %>%
-            html_element(xpath = "/html/body/div[1]/div/div[3]/div[2]/div[1]/div[1]") %>%
-            html_text() %>%
-            stringr::str_remove(",") %>%
-            as.numeric()
-        })
-      }
-
+      # 4) 펀드 기준가 (AutoInvest에서 병렬 수집)
       fund_codes <- all_codes[(str_sub(all_codes, 1, 2) == "K5")]
       if (length(fund_codes) > 0) {
-        fund_prices <- tibble(
-          종목코드 = fund_codes,
-          종가 = get_fund_price(fund_codes) / 1000
-        )
+        fund_prices <- self$bl$get_fund_price(fund_codes)
       } else {
         fund_prices <- tibble()
       }
@@ -713,24 +649,30 @@ MyAssets <- R6Class(
 
     ## 10.(평가및손익) 자산배분 생성 ====
     compute_total_allocation = function() {
+      # 1. 대상 데이터 집계 및 피벗
+      df_pivoted <- self$t_comm2 %>%
+        select(계좌, 자산군, 세부자산군, 세부자산군2, 평가금액) %>%
+        mutate(자산군 = if_else(자산군 == "" | is.na(자산군), "합계", as.character(자산군))) %>%
+        group_by(계좌, 자산군, 세부자산군, 세부자산군2) %>%
+        summarise(평가금액 = sum(평가금액), .groups = "drop") %>%
+        pivot_wider(names_from = 계좌, values_from = 평가금액)
+
+      # 2. UI단에서 고정 인덱스(4:15)로 접근하므로, 누락된 계좌가 있더라도 더미(NA) 컬럼을 생성하여 개수 보장
+      accts <- c("한투연금저축", "엔투저축연금", "미래DC", "엔투IRP", "농협IRP",
+                 "엔투ISA", "한투ISA", "엔투하영", "불리오", "금현물", "한투")
+      
+      for (a in accts) {
+        if (!a %in% names(df_pivoted)) df_pivoted[[a]] <- NA_real_
+      }
+
+      # 3. 지정된 순서로 컬럼 정렬 후 합계 산출
+      df_pivoted <- df_pivoted %>%
+        select(자산군, 세부자산군, 세부자산군2, all_of(accts)) %>%
+        mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE))
+
+      # 4. groups 메타데이터와 조인하여 최종 데이터 생성
       self$account_allocation <- self$read("groups") %>%
-        left_join(
-          self$t_comm2 %>%
-            select(계좌, 자산군, 세부자산군, 세부자산군2, 평가금액) %>%
-            mutate(자산군 = if_else(자산군 == "" | is.na(자산군),
-              "합계", as.character(자산군)
-            )) %>%
-            group_by(계좌, 자산군, 세부자산군, 세부자산군2) %>%
-            summarise(평가금액 = sum(평가금액), .groups = "drop") %>%
-            pivot_wider(names_from = 계좌, values_from = 평가금액) %>%
-            select(
-              자산군, 세부자산군, 세부자산군2,
-              한투연금저축, 엔투저축연금, 미래DC, 엔투IRP, 농협IRP,
-              엔투ISA, 한투ISA, 엔투하영, 불리오, 금현물, 한투
-            ) %>%
-            mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE)),
-          by = c("자산군", "세부자산군", "세부자산군2")
-        ) %>%
+        left_join(df_pivoted, by = c("자산군", "세부자산군", "세부자산군2")) %>%
         mutate(비중 = 합계 / last(합계) * 100)
     },
 
