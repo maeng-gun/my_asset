@@ -9,7 +9,7 @@ mod_strategy_ui <- function(id) {
   navset_card_tab(
     id = ns("bm_box"),
 
-## a. 자산배분====
+    ## a. 자산배분====
     nav_panel(
       title = "자산배분",
       fluidRow(
@@ -37,7 +37,7 @@ mod_strategy_ui <- function(id) {
       )
     ),
 
-## b. 성과분석====
+    ## b. 성과분석====
     nav_panel(
       title = "성과분석",
       fluidRow(
@@ -64,7 +64,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
 
     # === a. 자산배분 CRUD ===
 
-## 신규/수정 선택 옵션 동적 생성 ----
+    ## 신규/수정 선택 옵션 동적 생성 ----
     observe({
       sk_b()
       df <- ma_b()$read("allo_table") %>% arrange(행번호)
@@ -79,7 +79,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       })
     })
 
-## 신규/수정 선택 시 기존 데이터 불러오기 ----
+    ## 신규/수정 선택 시 기존 데이터 불러오기 ----
     observeEvent(input$allo_new, {
       req(input$allo_new)
       if (input$allo_new != "신규") {
@@ -98,7 +98,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       }
     })
 
-## 추가 ----
+    ## 추가 ----
     observeEvent(input$allo_add, {
       df_current <- ma_b()$read("allo_table")
       next_id <- ifelse(nrow(df_current) == 0, 1,
@@ -121,7 +121,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       show_delay("자산배분 내역이 추가되었습니다.", "success")
     })
 
-## 수정 ----
+    ## 수정 ----
     observeEvent(input$allo_modi, {
       if (input$allo_new == "신규") {
         return(show_delay("수정할 행을 선택해주세요.", "warning"))
@@ -146,7 +146,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       show_delay("성공적으로 수정되었습니다.", "success")
     })
 
-## 삭제 ----
+    ## 삭제 ----
     observeEvent(input$allo_del, {
       if (input$allo_new == "신규") {
         return(show_delay("삭제할 행을 선택해주세요.", "error"))
@@ -160,7 +160,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       show_delay("자산배분 내역이 삭제되었습니다.", "success")
     })
 
-## 입력 UI ----
+    ## 입력 UI ----
     output$allo_input <- renderUI({
       column(
         width = 12,
@@ -225,7 +225,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       )
     })
 
-## 연도 선택 ----
+    ## 연도 선택 ----
     output$allo_year <- renderUI({
       sk_b()
       df <- ma_b()$read("allo_table")
@@ -243,7 +243,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       )
     })
 
-## 배분 테이블 ----
+    ## 배분 테이블 ----
     output$allo_table_ui <- renderReactable({
       sk_b()
       req(menu_tabs() == "pf_strategy")
@@ -340,7 +340,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
         ) |>
         e_datazoom() |>
         e_legend(right = 0, top = "center", orient = "vertical") |>
-        e_grid(right = "20%")
+        e_grid(right = "20%", left = "3%")
     }
 
 

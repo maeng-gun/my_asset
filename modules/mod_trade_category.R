@@ -10,23 +10,35 @@ mod_trade_category_ui <- function(id) {
   nav_panel(
     title = "구분항목 관리",
     card(
-      id = ns('list_box'),
+      id = ns("list_box"),
       class = "mb-3 border-info",
-      card_header("입력사항", class = "bg-info text-white"),
+      card_header("입력사항", class = "bg-info text-white py-2"),
       card_body(
         fluidRow(
-          column(width = 2, class = "col-12 col-md-4 col-lg-2",
-                 uiOutput(ns('ass_account_list'))),
-          column(width = 2, class = "col-12 col-md-4 col-lg-2",
-                 uiOutput(ns('pen_account_list'))),
-          column(width = 2, class = "col-12 col-md-4 col-lg-2",
-                 uiOutput(ns('ass_cur_list'))),
-          column(width = 2, class = "col-12 col-md-4 col-lg-2",
-                 uiOutput(ns('ass_class_list'))),
-          column(width = 2, class = "col-12 col-md-4 col-lg-2",
-                 uiOutput(ns('ass_class1_list'))),
-          column(width = 2, class = "col-12 col-md-4 col-lg-2",
-                 uiOutput(ns('ass_class2_list')))
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            uiOutput(ns("ass_account_list"))
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            uiOutput(ns("pen_account_list"))
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            uiOutput(ns("ass_cur_list"))
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            uiOutput(ns("ass_class_list"))
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            uiOutput(ns("ass_class1_list"))
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            uiOutput(ns("ass_class2_list"))
+          )
         )
       )
     )
@@ -37,22 +49,30 @@ mod_trade_category_server <- function(id, pool, ma, sk_c, ctg) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    ass_ctg <- list('ass_account', 'pen_account', 'ass_cur',
-                    'ass_class', 'ass_class1', 'ass_class2')
-    ctg_kor <- list('투자계좌', '연금계좌', '통화',
-                    '자산군', '세부자산군', '세부자산군2')
+    ass_ctg <- list(
+      "ass_account", "pen_account", "ass_cur",
+      "ass_class", "ass_class1", "ass_class2"
+    )
+    ctg_kor <- list(
+      "투자계좌", "연금계좌", "통화",
+      "자산군", "세부자산군", "세부자산군2"
+    )
 
     purrr::map2(ass_ctg, ctg_kor, function(i, j) {
-      output[[paste0(i, '_list')]] <<- renderUI({
+      output[[paste0(i, "_list")]] <<- renderUI({
         tagList(
-          textInput(ns(paste0('add_', i)), label = j, value = ""),
-          selectInput(ns(paste0('select_', i)), NULL, ctg()[[i]]),
+          textInput(ns(paste0("add_", i)), label = j, value = ""),
+          selectInput(ns(paste0("select_", i)), NULL, ctg()[[i]]),
           div(
-            actionButton(ns(glue("add_{i}_btn")), label = "추가",
-                         width = '45%', class = "btn btn-info"),
-            actionButton(ns(glue("del_{i}_btn")), label = "삭제",
-                         width = '45%', class = "btn btn-primary"),
-            align = 'center'
+            actionButton(ns(glue("add_{i}_btn")),
+              label = "추가",
+              width = "45%", class = "btn btn-info"
+            ),
+            actionButton(ns(glue("del_{i}_btn")),
+              label = "삭제",
+              width = "45%", class = "btn btn-primary"
+            ),
+            align = "center"
           )
         )
       })
@@ -62,9 +82,11 @@ mod_trade_category_server <- function(id, pool, ma, sk_c, ctg) {
           key = i,
           value = input[[glue("add_{i}")]]
         )
-        ma$upsert(df = new_category_item,
-                  name = 'categories',
-                  cols = c('key', 'value'))
+        ma$upsert(
+          df = new_category_item,
+          name = "categories",
+          cols = c("key", "value")
+        )
         sk_c(!sk_c())
       })
 
@@ -73,7 +95,7 @@ mod_trade_category_server <- function(id, pool, ma, sk_c, ctg) {
           key = i,
           value = input[[glue("select_{i}")]]
         )
-        dbxDelete(pool, 'categories', item_to_delete)
+        dbxDelete(pool, "categories", item_to_delete)
         sk_c(!sk_c())
       })
     })

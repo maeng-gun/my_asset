@@ -9,27 +9,23 @@ mod_trade_ticker_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
     title = "투자종목 관리",
-    fluidRow(
-      card(
-        id = ns("ticker_box"),
-        class = "mb-3 border-info",
-        card_header("입력사항", class = "bg-info text-white"),
-        card_body(
-          uiOutput(ns("manage_ticker")),
-          div(
-            actionButton(ns("ticker_new"), label = "추가", class = "btn-info", style = "width: 30%;"),
-            actionButton(ns("ticker_mod"), label = "수정", class = "btn-success", style = "width: 30%;"),
-            actionButton(ns("ticker_del"), label = "삭제", class = "btn-primary", style = "width: 30%;"),
-            style = "text-align: center"
-          )
+    card(
+      id = ns("ticker_box"),
+      class = "mb-3 border-info",
+      card_header("입력사항", class = "bg-info text-white py-2"),
+      card_body(
+        uiOutput(ns("manage_ticker")),
+        div(
+          actionButton(ns("ticker_new"), label = "추가", class = "btn-info", style = "width: 30%;"),
+          actionButton(ns("ticker_mod"), label = "수정", class = "btn-success", style = "width: 30%;"),
+          actionButton(ns("ticker_del"), label = "삭제", class = "btn-primary", style = "width: 30%;"),
+          style = "text-align: center"
         )
       )
     ),
-    fluidRow(
-      card(
-        card_body(
-          reactableOutput(ns("ticker_table"))
-        )
+    card(
+      card_body(
+        reactableOutput(ns("ticker_table"))
       )
     )
   )
@@ -40,7 +36,7 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
     ns <- session$ns
     rv <- reactiveValues(tickers = NULL, ticker_new = NULL)
 
-# --- 메뉴 설정 ----
+    # --- 메뉴 설정 ----
     output$manage_ticker <- renderUI({
       fluidRow(
         column(
@@ -82,7 +78,7 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
       )
     })
 
-# --- 테이블 렌더링 ----
+    # --- 테이블 렌더링 ----
     output$ticker_table <- renderReactable({
       if (!is.null(rv$tickers)) {
         render_rt(rv$tickers |> arrange(desc(행번호)))
@@ -114,7 +110,7 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
       updateSelectInput(session, "ass_cur", choices = ctg()$ass_cur)
     })
 
-# --- 운용구분 변경 ----
+    # --- 운용구분 변경 ----
     observeEvent(input$type1, {
       mode <- if (input$type1 == "투자자산") "ass_account" else "pen_account"
       updateSelectInput(session, "ass_account", choices = ctg()[[mode]])
@@ -129,7 +125,7 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
       update_categories()
     })
 
-# --- 신규/수정 선택 ----
+    # --- 신규/수정 선택 ----
     observeEvent(input$new1, {
       if (input$new1 != "신규") {
         t_rows <- filter(rv$tickers, 행번호 == input$new1)
@@ -157,7 +153,7 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
       }
     })
 
-# --- 레코드 조립 ----
+    # --- 레코드 조립 ----
     observe({
       rv$ticker_new <- tibble::tibble_row(
         행번호 = 0, 계좌 = input$ass_account,

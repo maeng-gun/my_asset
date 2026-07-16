@@ -11,78 +11,74 @@ mod_trade_history_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
     title = "거래내역",
-    fluidRow(
-      card(
-        id = ns("trading_input_box"),
-        class = "mb-3",
-        card_header("입력사항", class = "bg-info text-white"),
-        card_body(
-          fluidRow(
-            column(
-              width = 1, class = "col-12 col-md-2 col-lg-1",
-              selectInput(ns("type2"),
-                label = "운용구분",
-                choices = c("투자자산", "연금자산")
-              ),
-              selectInput(ns("ass_account2"), label = "계좌", choices = NULL)
+    card(
+      id = ns("trading_input_box"),
+      class = "mb-3 border-info",
+      card_header("입력사항", class = "bg-info text-white py-2"),
+      card_body(
+        fluidRow(
+          column(
+            width = 1, class = "col-12 col-md-2 col-lg-1",
+            selectInput(ns("type2"),
+              label = "운용구분",
+              choices = c("투자자산", "연금자산")
             ),
-            column(
-              width = 1, class = "col-12 col-md-2 col-lg-1",
-              selectInput(ns("ass_cur2"), label = "통화", choices = NULL),
-              selectInput(ns("new2"), label = "신규/수정", choices = "신규")
-            ),
-            column(
-              width = 1, class = "col-12 col-md-2 col-lg-1",
-              airDatepickerInput(ns("trading_date"),
-                label = "거래일자",
-                addon = "none", value = Sys.Date()
-              ),
-              selectInput(ns("ass_name2"), label = "종목명", choices = NULL)
-            ),
-            column(
-              width = 1, class = "col-12 col-md-2 col-lg-1",
-              numericInput(ns("buy_q"), label = "매입수량", value = 0),
-              numericInput(ns("sell_q"), label = "매도수량", value = 0)
-            ),
-            column(
-              width = 2, class = "col-12 col-md-4 col-lg-2",
-              autonumericInput(ns("buy_p"), label = "매입액", value = 0),
-              autonumericInput(ns("sell_b"), label = "매도원금", value = 0)
-            ),
-            column(
-              width = 2, class = "col-12 col-md-4 col-lg-2",
-              autonumericInput(ns("buy_c"), label = "현금지출", value = 0),
-              autonumericInput(ns("sell_p"), label = "매도액", value = 0)
-            ),
-            column(
-              width = 2, class = "col-12 col-md-4 col-lg-2",
-              autonumericInput(ns("int_dev"), label = "이자배당액", value = 0),
-              autonumericInput(ns("sell_c"), label = "현금수입", value = 0)
-            ),
-            column(
-              width = 2, class = "col-12 col-md-4 col-lg-2",
-              autonumericInput(ns("in_out_c"), label = "입출금", value = 0),
-              searchInput(ns("trade_limit"),
-                label = "조회건수",
-                placeholder = "20", value = 20,
-                btnSearch = icon("search"), btnReset = NULL, width = "100%"
-              )
-            )
+            selectInput(ns("ass_account2"), label = "계좌", choices = NULL)
           ),
-          div(
-            actionButton(ns("ass_trade_new"), label = "추가", class = "btn-info", style = "width: 30%;"),
-            actionButton(ns("ass_trade_mod"), label = "수정", class = "btn-success", style = "width: 30%;"),
-            actionButton(ns("ass_trade_del"), label = "삭제", class = "btn-primary", style = "width: 30%;"),
-            style = "text-align: center"
+          column(
+            width = 1, class = "col-12 col-md-2 col-lg-1",
+            selectInput(ns("ass_cur2"), label = "통화", choices = NULL),
+            selectInput(ns("new2"), label = "신규/수정", choices = "신규")
+          ),
+          column(
+            width = 1, class = "col-12 col-md-2 col-lg-1",
+            airDatepickerInput(ns("trading_date"),
+              label = "거래일자",
+              addon = "none", value = Sys.Date()
+            ),
+            selectInput(ns("ass_name2"), label = "종목명", choices = NULL)
+          ),
+          column(
+            width = 1, class = "col-12 col-md-2 col-lg-1",
+            numericInput(ns("buy_q"), label = "매입수량", value = 0),
+            numericInput(ns("sell_q"), label = "매도수량", value = 0)
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            autonumericInput(ns("buy_p"), label = "매입액", value = 0),
+            autonumericInput(ns("sell_b"), label = "매도원금", value = 0)
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            autonumericInput(ns("buy_c"), label = "현금지출", value = 0),
+            autonumericInput(ns("sell_p"), label = "매도액", value = 0)
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            autonumericInput(ns("int_dev"), label = "이자배당액", value = 0),
+            autonumericInput(ns("sell_c"), label = "현금수입", value = 0)
+          ),
+          column(
+            width = 2, class = "col-12 col-md-4 col-lg-2",
+            autonumericInput(ns("in_out_c"), label = "입출금", value = 0),
+            searchInput(ns("trade_limit"),
+              label = "조회건수",
+              placeholder = "20", value = 20,
+              btnSearch = icon("search"), btnReset = NULL, width = "100%"
+            )
           )
+        ),
+        div(
+          actionButton(ns("ass_trade_new"), label = "추가", class = "btn-info", style = "width: 30%;"),
+          actionButton(ns("ass_trade_mod"), label = "수정", class = "btn-success", style = "width: 30%;"),
+          actionButton(ns("ass_trade_del"), label = "삭제", class = "btn-primary", style = "width: 30%;"),
+          style = "text-align: center"
         )
       )
     ),
-    fluidRow(
-      card(
-        card_body(
-          reactableOutput(ns("trade_table"))
-        )
+    card(
+      card_body(
+        reactableOutput(ns("trade_table"))
       )
     )
   )
@@ -104,7 +100,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       trade_new = NULL
     )
 
-# --- 통화별 숫자 컬럼 포맷 결정 헬퍼 ----
+    # --- 통화별 숫자 컬럼 포맷 결정 헬퍼 ----
     # USD/JPY는 소수점 2자리, 원화는 정수(0자리)
     build_trade_col_defs <- function(cur) {
       # 수량 컬럼은 항상 정수(또는 소수 2자리)
@@ -126,7 +122,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       list(int_cols = int_cols_use, dec_cols = dec_cols_use)
     }
 
-# --- 테이블 렌더링 ----
+    # --- 테이블 렌더링 ----
     output$trade_table <- renderReactable({
       req(menu_tabs() == "trading_record")
       if (!is.null(rv$trade) && nrow(rv$trade) > 0) {
@@ -144,7 +140,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       }
     })
 
-# --- 거래내역 조회 ----
+    # --- 거래내역 조회 ----
     reset_trade <- reactive({
       input$ass_trade_new
       input$ass_trade_mod
@@ -174,7 +170,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       )
     })
 
-# --- 운용구분 변경 ----
+    # --- 운용구분 변경 ----
     observeEvent(input$type2, {
       if (input$type2 == "투자자산") {
         rv$type2 <- "assets"
@@ -208,7 +204,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       update_new_trade()
     })
 
-# --- 신규/수정 선택 ----
+    # --- 신규/수정 선택 ----
     observeEvent(input$new2, {
       if (input$new2 != "신규") {
         t_rows2 <- filter(rv$trade, 행번호 == input$new2)
@@ -237,7 +233,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       }
     })
 
-# --- 거래 레코드 조립 ----
+    # --- 거래 레코드 조립 ----
     observe({
       if (!is.null(input$ass_name2)) {
         trade_ticker <-
@@ -264,7 +260,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       }
     })
 
-# --- 추가 ----
+    # --- 추가 ----
     observeEvent(input$ass_trade_new, {
       if (input$type2 == "투자자산") {
         rv$trade_new$행번호 <- ma$assets_daily_last_num + 1
@@ -278,7 +274,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       update_new_trade()
     })
 
-# --- 수정 ----
+    # --- 수정 ----
     observeEvent(input$ass_trade_mod, {
       rv$trade_new$행번호 <- input$new2
       if (input$type2 == "투자자산") {
@@ -295,7 +291,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       update_new_trade()
     })
 
-# --- 삭제 ----
+    # --- 삭제 ----
     observeEvent(input$ass_trade_del, {
       rv$trade_new$행번호 <- input$new2
       if (input$type2 == "투자자산") {
