@@ -87,6 +87,27 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       )
     })
 
+    output$profit_var <- renderReactable({
+      req(menu_tabs() == "pf_bs_pl")
+      ma_obj <- ma_v()
+
+      df <- ma_obj$profit_variation
+
+      # 최초 로딩 완료 콜백
+      isolate({
+        if (!initial_done()) {
+          on_initial_load()
+          initial_done(TRUE)
+        }
+      })
+
+      render_rt(df,
+        int_cols    = c(4:6, 8, 10, 12, 14),
+        pct_cols    = c(7, 9, 11, 13, 15),
+        sticky_cols = names(df)[1:3]
+      )
+    })
+
     ## 손익 그래프 데이터 (일간손익 + 손익누계) ----
     df_graph <- reactive({
       input$total_s_date
@@ -95,13 +116,12 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
 
       build_profit_trend_data(
         return_tbl  = ma_obj$read_obj("return"),
-        cash_in_out = ma_obj$cash_in_out,
         start       = input$total_s_date,
         end         = input$total_e_date
       )
     })
 
-
+    ## b. 손익변동 ----
     ## [위] 손익 콤보 차트 — 일간손익(막대) + 손익누계(꺾은선) ----
     output$total_profit_bar <- renderEcharts4r({
       req(menu_tabs() == "pf_bs_pl")
@@ -137,27 +157,8 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
         e_legend(right = 0, top = "center", orient = "vertical")
     })
 
-    ## b. 손익변동 ----
-    output$profit_var <- renderReactable({
-      req(menu_tabs() == "pf_bs_pl")
-      ma_obj <- ma_v()
 
-      df <- ma_obj$profit_variation
 
-      # 최초 로딩 완료 콜백
-      isolate({
-        if (!initial_done()) {
-          on_initial_load()
-          initial_done(TRUE)
-        }
-      })
-
-      render_rt(df,
-        int_cols    = c(4:6, 8, 10, 12, 14),
-        pct_cols    = c(7, 9, 11, 13, 15),
-        sticky_cols = names(df)[1:3]
-      )
-    })
 
     ## c. 자산군별 손익현황 ----
     output$total_accounts1 <- renderReactable({

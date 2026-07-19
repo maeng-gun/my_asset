@@ -71,34 +71,30 @@ calc_total_trading <- function(assets_df, pension_df,
 # 2.종합손익 그래프용 데이터 생성====
 #'
 #' @param return_tbl return dbplyr tbl
-#' @param cash_in_out 입출금 tibble (기준일, 입출금)
 #' @param start 시작일 (Date)
 #' @param end 종료일 (Date)
 #' @return tibble
-build_profit_trend_data <- function(return_tbl, cash_in_out, start, end) {
+build_profit_trend_data <- function(return_tbl, start, end) {
   df <- return_tbl %>%
-    filter(자산군 == "<합계>") %>%
+    filter(자산군 == "주식", 세부자산군 == "국내", 세부자산군2 == "") %>%
     collect() %>%
     transmute(기준일 = as.Date(기준일), 평가금액, 총손익) %>%
     filter(기준일 >= start, 기준일 <= end) %>%
-    arrange(기준일)
-
-  df %>%
-    full_join(
-      cash_in_out %>%
-        filter(기준일 %>% between(first(df$기준일), last(df$기준일))),
-      by = "기준일"
-    ) %>%
     arrange(기준일) %>%
-    fill(평가금액, 총손익, .direction = "down") %>%
-    mutate(입출금 = na.fill(입출금, 0)) %>%
     group_by(연도 = year(기준일)) %>%
     mutate(
       총손익_1 = lag(총손익, default = 0),
       일간손익 = if_else(기준일 == start, 0, 총손익 - 총손익_1) / 10000
     ) %>%
     ungroup() %>%
-    mutate(손익누계 = cumsum(일간손익))
+    mutate(
+      손익누계 = cumsum(일간손익),
+      일간수익률 = 일간손익 * 10000 / lag(평가금액, default = 0) * 100
+    ) %>%
+    slice(-1) %>%
+    mutate(누적수익률 = (cumprod(1 + 일간수익률 / 100) - 1) * 100)
+
+  return(df)
 }
 
 

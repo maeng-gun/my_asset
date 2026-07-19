@@ -128,7 +128,7 @@ server <- function(input, output, session) {
   }
 
   # --- 인증 모듈 호출 ----
-  auth_rv <- mod_auth_server("auth", is_local = IS_LOCAL)
+  auth_rv <- mod_auth_server("auth", is_local = is_local)
 
   # --- 인증 성공 후 메인 로직 초기화 ----
   observeEvent(auth_rv$authenticated,

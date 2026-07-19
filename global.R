@@ -31,7 +31,7 @@ library(PerformanceAnalytics)
 
 # --- 2. 환경 감지 ----
 # SHINY_PORT가 비어있으면 로컬 환경, 값이 있으면 shinyapps.io 배포 환경
-IS_LOCAL <- nchar(Sys.getenv("SHINY_PORT")) == 0
+is_local <- nchar(Sys.getenv("SHINY_PORT")) == 0
 
 
 # --- 3. src/ 디렉토리 소싱 (도메인 로직) ----
