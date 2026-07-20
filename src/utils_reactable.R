@@ -54,6 +54,7 @@ render_rt <- function(df,
                       pct_cols = NULL,
                       sticky_cols = NULL,
                       long_str_cols = NULL,
+                      border_cols = NULL,
                       groupBy = NULL,
                       align = "center",
                       sortable = FALSE,
@@ -67,6 +68,7 @@ render_rt <- function(df,
   pct_cols <- to_names(pct_cols)
   sticky_cols <- to_names(sticky_cols)
   long_str_cols <- to_names(long_str_cols)
+  border_cols <- to_names(border_cols)
 
   # 컬럼 정의 리스트 초기화 및 동적 너비 계산
   col_defs <- list()
@@ -107,10 +109,22 @@ render_rt <- function(df,
         col_args$minWidth <- max(col_args$minWidth, 150)
       }
       col_args$cell <- ellipsis_cell()
-      col_args$style <- list(
-        maxWidth = "200px", overflow = "hidden",
-        textOverflow = "ellipsis", whiteSpace = "nowrap"
-      )
+      if (is.null(col_args$style)) col_args$style <- list()
+      col_args$style$maxWidth <- "200px"
+      col_args$style$overflow <- "hidden"
+      col_args$style$textOverflow <- "ellipsis"
+      col_args$style$whiteSpace <- "nowrap"
+    }
+    
+    if (col %in% border_cols) {
+      if (is.null(col_args$style)) col_args$style <- list()
+      col_args$style$borderLeft <- "2px solid #444"
+      col_args$style$borderRight <- "2px solid #444"
+      
+      if (is.null(col_args$headerStyle)) col_args$headerStyle <- list()
+      col_args$headerStyle$borderLeft <- "2px solid #444"
+      col_args$headerStyle$borderRight <- "2px solid #444"
+      col_args$headerStyle$borderTop <- "2px solid #444"
     }
     
     if (length(col_args) > 0) {

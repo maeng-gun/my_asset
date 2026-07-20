@@ -14,7 +14,6 @@ AutoInvest <- R6Class(
   classname = "AutoInvest",
   inherit = MyData,
   public = list(
-
     ## 속성 선언 ====
     token_tmp = NULL, APP_KEY = NULL, APP_SECRET = NULL, ACCT = NULL,
     URL_BASE = NULL, MY_AGENT = NULL, base_headers = NULL,
@@ -274,7 +273,7 @@ AutoInvest <- R6Class(
       headers <- list("tr_id" = "FHKST01010100", "custtype" = "P")
 
       # 18~19개 단위로 청크(Chunk)를 나누어 1초당 20건 트래픽 제한(Rate Limit)을 꽉 채워 병렬 처리
-      chunks <- split(sym_cd, ceiling(seq_along(sym_cd) / 19))
+      chunks <- split(sym_cd, ceiling(seq_along(sym_cd) / 18))
       result_prices <- numeric(length(sym_cd))
       idx <- 1
 
@@ -291,8 +290,8 @@ AutoInvest <- R6Class(
             req_retry(max_tries = 3, backoff = ~1)
         })
 
-        # host_con을 18로 늘려 비동기 풀의 동시 처리량을 극대화
-        resps <- req_perform_parallel(reqs, pool = curl::new_pool(host_con = 18), on_error = "continue")
+        # host_con을 18로 늘려 비동기 풀의 동시 처리량을 극대화 (httr2 1.0.0 이상에서는 pool 인자가 삭제되었습니다)
+        resps <- req_perform_parallel(reqs, on_error = "continue")
 
         chunk_prices <- purrr::map_dbl(resps, function(resp) {
           if (!inherits(resp, "httr2_response") || resp_status(resp) != 200) {
@@ -378,7 +377,7 @@ AutoInvest <- R6Class(
           request(url) %>% req_retry(max_tries = 3)
         })
 
-        resps <- req_perform_parallel(reqs, pool = curl::new_pool(host_con = 5), on_error = "continue")
+        resps <- req_perform_parallel(reqs, on_error = "continue")
 
         chunk_prices <- purrr::map_dbl(resps, function(resp) {
           if (!inherits(resp, "httr2_response") || resp_status(resp) != 200) {

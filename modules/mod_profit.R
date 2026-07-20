@@ -82,6 +82,7 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
         int_cols = 2:8,
         pct_cols = 9:11,
         sticky_cols = names(df)[1],
+        border_cols = "총손익",
         height = NULL,
         dynamic_height = FALSE
       )

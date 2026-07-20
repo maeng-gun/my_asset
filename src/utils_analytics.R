@@ -76,7 +76,7 @@ calc_total_trading <- function(assets_df, pension_df,
 #' @return tibble
 build_profit_trend_data <- function(return_tbl, start, end) {
   df <- return_tbl %>%
-    filter(자산군 == "주식", 세부자산군 == "국내", 세부자산군2 == "") %>%
+    filter(자산군 == "<합계>") %>%
     collect() %>%
     transmute(기준일 = as.Date(기준일), 평가금액, 총손익) %>%
     filter(기준일 >= start, 기준일 <= end) %>%
@@ -91,14 +91,10 @@ build_profit_trend_data <- function(return_tbl, start, end) {
       손익누계 = cumsum(일간손익),
       일간수익률 = 일간손익 * 10000 / lag(평가금액, default = 0) * 100
     ) %>%
-    slice(-1) %>%
-    mutate(누적수익률 = (cumprod(1 + 일간수익률 / 100) - 1) * 100)
+    slice(-1)
 
   return(df)
 }
-
-
-
 
 
 # 3. 벤치마크 타겟 일자 반환====
