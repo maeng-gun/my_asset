@@ -97,6 +97,85 @@ build_profit_trend_data <- function(return_tbl, start, end) {
 }
 
 
+# 2-1. 자산군별 손익누계 그래프용 데이터 생성====
+#'
+#' @param return_tbl return dbplyr tbl
+#' @param start 시작일 (Date)
+#' @param end 종료일 (Date)
+#' @return list(선진국, 신흥국, 실물자산, 인컴자산, 채권, 현금성) — 각 tibble
+build_asset_profit_data <- function(return_tbl, start, end) {
+
+  # [헬퍼] 필터된 df_raw(기준일, 총손익)로 손익누계 산출
+  calc_cumprofit <- function(df_raw, label) {
+    df_raw %>%
+      arrange(기준일) %>%
+      group_by(연도 = year(기준일)) %>%
+      mutate(
+        총손익_1 = lag(총손익, default = 0),
+        일간손익  = if_else(기준일 == start, 0, 총손익 - 총손익_1) / 10000
+      ) %>%
+      ungroup() %>%
+      mutate(손익누계 = cumsum(일간손익)) %>%
+      slice(-1) %>%
+      transmute(기준일, 손익누계, 구분 = label)
+  }
+
+  # DB에서 해당 기간 전체 수집 (한 번만 collect)
+  base <- return_tbl %>%
+    filter(기준일 >= start, 기준일 <= end) %>%
+    collect() %>%
+    mutate(기준일 = as.Date(기준일))
+
+  # 선진국: 자산군=주식, 세부자산군=선진국, 세부자산군2=""
+  df_선진국 <- base %>%
+    filter(자산군 == "주식", 세부자산군 == "선진국", 세부자산군2 == "") %>%
+    transmute(기준일, 총손익) %>%
+    calc_cumprofit("선진국")
+
+  # 신흥국: 자산군=주식, 세부자산군 in(국내, 신흥국), 세부자산군2="" → 기준일별 합산
+  df_신흥국 <- base %>%
+    filter(자산군 == "주식",
+           세부자산군 %in% c("국내", "신흥국"),
+           세부자산군2 == "") %>%
+    group_by(기준일) %>%
+    summarise(총손익 = sum(총손익, na.rm = TRUE), .groups = "drop") %>%
+    calc_cumprofit("신흥국")
+
+  # 실물자산: 자산군=대체자산, 세부자산군=실물자산, 세부자산군2=""
+  df_실물 <- base %>%
+    filter(자산군 == "대체자산", 세부자산군 == "실물자산", 세부자산군2 == "") %>%
+    transmute(기준일, 총손익) %>%
+    calc_cumprofit("실물자산")
+
+  # 인컴자산: 자산군=대체자산, 세부자산군=인컴자산, 세부자산군2=""
+  df_인컴 <- base %>%
+    filter(자산군 == "대체자산", 세부자산군 == "인컴자산", 세부자산군2 == "") %>%
+    transmute(기준일, 총손익) %>%
+    calc_cumprofit("인컴자산")
+
+  # 채권: 자산군=채권, 세부자산군="", 세부자산군2=""
+  df_채권 <- base %>%
+    filter(자산군 == "채권", 세부자산군 == "", 세부자산군2 == "") %>%
+    transmute(기준일, 총손익) %>%
+    calc_cumprofit("채권")
+
+  # 현금성: 자산군=현금성, 세부자산군="", 세부자산군2=""
+  df_현금성 <- base %>%
+    filter(자산군 == "현금성", 세부자산군 == "", 세부자산군2 == "") %>%
+    transmute(기준일, 총손익) %>%
+    calc_cumprofit("현금성")
+
+  list(
+    선진국  = df_선진국,
+    신흥국  = df_신흥국,
+    실물자산 = df_실물,
+    인컴자산 = df_인컴,
+    채권    = df_채권,
+    현금성  = df_현금성
+  )
+}
+
+
 # 3. 벤치마크 타겟 일자 반환====
 ## 1) ㅇㅇ ====
 #'

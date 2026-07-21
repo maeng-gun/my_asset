@@ -35,9 +35,29 @@ mod_profit_ui <- function(id) {
         ),
         column(
           width = 10, class = "col-12 col-md-8 col-lg-10",
-          # 손익 차트(콤보 막대+꺾은선)를 위에, 평가금액 꺾은선을 아래에 배치
-          echarts4rOutput(ns("total_profit_bar"), height = "400px"),
-          echarts4rOutput(ns("total_profit_trend"), height = "400px")
+          # [Row 1] 총손익 콤보 차트 (일간손익 막대 + 손익누계 꺾은선)
+          fluidRow(
+            column(12, echarts4rOutput(ns("total_profit_bar"), height = "360px"))
+          ),
+          # [Row 2] 선진국 | 신흥국
+          fluidRow(
+            column(6, echarts4rOutput(ns("chart_선진국"), height = "300px")),
+            column(6, echarts4rOutput(ns("chart_신흥국"), height = "300px"))
+          ),
+          # [Row 3] 실물자산 | 인컴자산
+          fluidRow(
+            column(6, echarts4rOutput(ns("chart_실물자산"), height = "300px")),
+            column(6, echarts4rOutput(ns("chart_인컴자산"), height = "300px"))
+          ),
+          # [Row 4] 채권 | 현금성
+          fluidRow(
+            column(6, echarts4rOutput(ns("chart_채권"), height = "300px")),
+            column(6, echarts4rOutput(ns("chart_현금성"), height = "300px"))
+          ),
+          # [Row 5] 평가금액 추이 차트
+          fluidRow(
+            column(12, echarts4rOutput(ns("total_profit_trend"), height = "360px"))
+          )
         )
       )
     ),
@@ -122,6 +142,19 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       )
     })
 
+    ## 자산군별 손익누계 그래프 데이터 ----
+    df_asset_graph <- reactive({
+      input$total_s_date
+      input$total_e_date
+      ma_obj <- ma_v()
+
+      build_asset_profit_data(
+        return_tbl = ma_obj$read_obj("return"),
+        start      = input$total_s_date,
+        end        = input$total_e_date
+      )
+    })
+
     ## b. 손익변동 ----
     ## [위] 손익 콤보 차트 — 일간손익(막대) + 손익누계(꺾은선) ----
     output$total_profit_bar <- renderEcharts4r({
@@ -159,6 +192,54 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
     })
 
 
+    ## b-1. 자산군별 손익누계 차트 (선진국, 신흥국, 실물자산, 인컴자산, 채권, 현금성) ----
+    make_asset_chart <- function(df, title) {
+      if (nrow(df) == 0) {
+        return(
+          echarts4r::e_charts() |>
+            echarts4r::e_title(text = title)
+        )
+      }
+      df |>
+        e_charts(기준일) |>
+        e_line(손익누계, name = title, symbol = "none") |>
+        e_title(text = title, left = "center", textStyle = list(fontSize = 13)) |>
+        e_tooltip(trigger = "axis") |>
+        e_datazoom(x_index = 0, type = "slider") |>
+        e_y_axis(position = "right") |>
+        e_grid(right = "15%", left = "3%", top = "40px", bottom = "50px") |>
+        e_legend(show = FALSE)
+    }
+
+    output$chart_선진국 <- renderEcharts4r({
+      req(menu_tabs() == "pf_bs_pl")
+      make_asset_chart(df_asset_graph()$선진국, "선진국 주식")
+    })
+
+    output$chart_신흥국 <- renderEcharts4r({
+      req(menu_tabs() == "pf_bs_pl")
+      make_asset_chart(df_asset_graph()$신흥국, "신흥국(한국 포함) 주식")
+    })
+
+    output$chart_실물자산 <- renderEcharts4r({
+      req(menu_tabs() == "pf_bs_pl")
+      make_asset_chart(df_asset_graph()$실물자산, "실물자산")
+    })
+
+    output$chart_인컴자산 <- renderEcharts4r({
+      req(menu_tabs() == "pf_bs_pl")
+      make_asset_chart(df_asset_graph()$인컴자산, "인컴자산")
+    })
+
+    output$chart_채권 <- renderEcharts4r({
+      req(menu_tabs() == "pf_bs_pl")
+      make_asset_chart(df_asset_graph()$채권, "채권")
+    })
+
+    output$chart_현금성 <- renderEcharts4r({
+      req(menu_tabs() == "pf_bs_pl")
+      make_asset_chart(df_asset_graph()$현금성, "현금성")
+    })
 
 
     ## c. 자산군별 손익현황 ----
