@@ -262,7 +262,7 @@ AutoInvest <- R6Class(
         mutate(평가금액 = as.numeric(평가금액))
     },
 
-    ## 메서드(9) — 개별종목 현재가 (httr2 비동기 병렬 - 청크 단위) ====
+    ## 메서드(9) — 개별종목 현재가 (순차 처리 + 개별 재시도 로직 추가) ====
     get_current_price = function(sym_cd) {
       if (length(sym_cd) == 0) {
         return(numeric(0))
@@ -272,47 +272,50 @@ AutoInvest <- R6Class(
       URL <- glue("{self$URL_BASE}{path}")
       headers <- list("tr_id" = "FHKST01010100", "custtype" = "P")
 
-      # 18~19개 단위로 청크(Chunk)를 나누어 1초당 20건 트래픽 제한(Rate Limit)을 꽉 채워 병렬 처리
-      chunks <- split(sym_cd, ceiling(seq_along(sym_cd) / 18))
       result_prices <- numeric(length(sym_cd))
-      idx <- 1
 
-      for (chunk in chunks) {
-        reqs <- purrr::map(chunk, function(code) {
-          data <- list(
-            FID_COND_MRKT_DIV_CODE = "J",
-            FID_INPUT_ISCD = code
-          )
-          request(URL) %>%
-            req_headers(!!!self$token_headers) %>%
-            req_headers(!!!headers) %>%
-            req_url_query(!!!data) %>%
-            req_retry(max_tries = 3, backoff = ~1)
-        })
+      for (i in seq_along(sym_cd)) {
+        code <- sym_cd[i]
+        data <- list(
+          FID_COND_MRKT_DIV_CODE = "J",
+          FID_INPUT_ISCD = code
+        )
 
-        # host_con을 18로 늘려 비동기 풀의 동시 처리량을 극대화 (httr2 1.0.0 이상에서는 pool 인자가 삭제되었습니다)
-        resps <- req_perform_parallel(reqs, on_error = "continue")
+        req <- request(URL) %>%
+          req_headers(!!!self$token_headers) %>%
+          req_headers(!!!headers) %>%
+          req_url_query(!!!data)
 
-        chunk_prices <- purrr::map_dbl(resps, function(resp) {
-          if (!inherits(resp, "httr2_response") || resp_status(resp) != 200) {
-            return(NA_real_)
-          }
-
-          parsed <- tryCatch(resp %>% resp_body_string(encoding = "UTF-8") %>% fromJSON(),
+        # 응답 지연이나 HTTP 200으로 반환되는 한투 API 내부 에러(트래픽 초과 메시지 등) 방어
+        price_val <- NA_real_
+        for (attempt in 1:3) {
+          parsed <- tryCatch(
+            {
+              resp <- req_perform(req)
+              if (resp_status(resp) == 200) {
+                resp %>%
+                  resp_body_string(encoding = "UTF-8") %>%
+                  fromJSON()
+              } else {
+                NULL
+              }
+            },
             error = function(e) NULL
           )
-          if (!is.null(parsed$output$stck_prpr)) {
-            as.numeric(parsed$output$stck_prpr)
-          } else {
-            NA_real_
+
+          if (!is.null(parsed) && !is.null(parsed$output$stck_prpr)) {
+            price_val <- as.numeric(parsed$output$stck_prpr)
+            break # 정상 응답 시 재시도 루프 탈출
           }
-        })
 
-        result_prices[idx:(idx + length(chunk) - 1)] <- chunk_prices
-        idx <- idx + length(chunk)
+          # 값 누락 발생 시 0.5초 대기 후 재시도 (서버가 진정할 시간을 줌)
+          Sys.sleep(0.1)
+        }
 
-        # 청크 호출 후 1초 대기하여 한투 API Rate Limit(1초당 20건) 완벽 준수
-        Sys.sleep(1)
+        result_prices[i] <- price_val
+
+        # 다음 종목 조회 전 넉넉하게 0.07초 대기
+        Sys.sleep(0.05)
       }
 
       return(result_prices)
