@@ -132,8 +132,17 @@ AutoInvest <- R6Class(
     GET_tbl = function(path, data, headers) {
       URL <- glue("{self$URL_BASE}/{path}")
 
+      token_hdrs <- c(
+        self$base_headers,
+        list(
+          "authorization" = paste0("Bearer ", self$auth()),
+          "appkey"        = self$APP_KEY,
+          "appsecret"     = self$APP_SECRET
+        )
+      )
+
       req <- request(URL) %>%
-        req_headers(!!!self$token_headers) %>%
+        req_headers(!!!token_hdrs) %>%
         req_headers(!!!headers) %>%
         req_url_query(!!!data) %>%
         req_retry(max_tries = 3, backoff = ~1)

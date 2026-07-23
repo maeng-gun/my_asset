@@ -863,14 +863,15 @@ MyAssets <- R6Class(
         ) %>%
         fill(기록일)
 
-      d1 <- self$today - days(1)
-      d7 <- self$today - weeks(1)
-      dm <- self$today %m-% months(1)
-      dy <- self$today %m-% years(1)
-      ly <- make_date(self$year - 1, 12, 31)
+      d1  <- self$today - days(1)
+      dm  <- self$today %m-% months(1)
+      d3m <- self$today %m-% months(3)
+      d6m <- self$today %m-% months(6)
+      dy  <- self$today %m-% years(1)
+      ly  <- make_date(self$year - 1, 12, 31)
 
       filtered <- dates_list %>%
-        filter(기준일 %in% c(d1, d7, dm, dy, ly))
+        filter(기준일 %in% c(d1, dm, d3m, d6m, dy, ly))
 
       past_value <- self$read_obj("return") %>%
         filter(기준일 %in% filtered$기록일) %>%
@@ -884,11 +885,12 @@ MyAssets <- R6Class(
         mutate(
           전년도 = if_else(year(기준일) < self$year, TRUE, FALSE),
           기준일 = case_when(
-            기준일 == d1 ~ "1d",
-            기준일 == d7 ~ "7d",
-            기준일 == dm ~ "1m",
-            기준일 == dy ~ "1y",
-            기준일 == ly ~ "ly",
+            기준일 == d1  ~ "1d",
+            기준일 == dm  ~ "1m",
+            기준일 == d3m ~ "3m",
+            기준일 == d6m ~ "6m",
+            기준일 == dy  ~ "1y",
+            기준일 == ly  ~ "ly",
             TRUE ~ as.character(기준일)
           )
         )
@@ -906,9 +908,9 @@ MyAssets <- R6Class(
       past_value2 <- past_value %>%
         select(-전년도, -총손익) %>%
         pivot_wider(names_from = 기준일, values_from = 총수익률) %>%
-        rename(`ly_` = `ly`, `1d_` = `1d`, `7d_` = `7d`, `1m_` = `1m`, `1y_` = `1y`)
+        rename(`ly_` = `ly`, `1d_` = `1d`, `1m_` = `1m`, `3m_` = `3m`, `6m_` = `6m`, `1y_` = `1y`)
 
-      if (ly %in% c(d1, d7, dm, dy)) {
+      if (ly %in% c(d1, dm, d3m, d6m, dy)) {
         past_value1 <-
           past_value1 %>%
           left_join(
@@ -939,7 +941,7 @@ MyAssets <- R6Class(
           by = c("자산군", "세부자산군", "세부자산군2")
         ) %>%
         mutate(across(any_of(ldays), ~ ly - .x + 총손익)) %>%
-        mutate(across(any_of(setdiff(c("1d", "7d", "1m", "1y"), ldays)), ~ 총손익 - .x)) %>%
+        mutate(across(any_of(setdiff(c("1d", "1m", "3m", "6m", "1y"), ldays)), ~ 총손익 - .x)) %>%
         select(-ly) %>%
         left_join(
           past_value2,
@@ -947,11 +949,11 @@ MyAssets <- R6Class(
         ) %>%
         mutate(across(any_of(ldays2), ~ ly_ - .x + 총수익률)) %>%
         mutate(across(
-          any_of(setdiff(c("1d_", "7d_", "1m_", "1y_"), ldays2)),
+          any_of(setdiff(c("1d_", "1m_", "3m_", "6m_", "1y_"), ldays2)),
           ~ 총수익률 - .x
         )) %>%
         select(-ly_) %>%
-        select(자산군:총수익률, "1d", "1d_", "7d", "7d_", "1m", "1m_", "1y", "1y_")
+        select(자산군:총수익률, "1d", "1d_", "1m", "1m_", "3m", "3m_", "6m", "6m_", "1y", "1y_")
     },
 
     ## 15.(평가및손익) 상품별 손익현황 계산 ====

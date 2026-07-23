@@ -104,7 +104,6 @@ build_profit_trend_data <- function(return_tbl, start, end) {
 #' @param end 종료일 (Date)
 #' @return list(선진국, 신흥국, 실물자산, 인컴자산, 채권, 현금성) — 각 tibble
 build_asset_profit_data <- function(return_tbl, start, end) {
-
   # [헬퍼] 필터된 df_raw(기준일, 총손익)로 손익누계 산출
   calc_cumprofit <- function(df_raw, label) {
     df_raw %>%
@@ -134,9 +133,11 @@ build_asset_profit_data <- function(return_tbl, start, end) {
 
   # 신흥국: 자산군=주식, 세부자산군 in(국내, 신흥국), 세부자산군2="" → 기준일별 합산
   df_신흥국 <- base %>%
-    filter(자산군 == "주식",
-           세부자산군 %in% c("국내", "신흥국"),
-           세부자산군2 == "") %>%
+    filter(
+      자산군 == "주식",
+      세부자산군 %in% c("국내", "신흥국"),
+      세부자산군2 == ""
+    ) %>%
     group_by(기준일) %>%
     summarise(총손익 = sum(총손익, na.rm = TRUE), .groups = "drop") %>%
     calc_cumprofit("신흥국")
@@ -166,12 +167,12 @@ build_asset_profit_data <- function(return_tbl, start, end) {
     calc_cumprofit("현금성")
 
   list(
-    선진국  = df_선진국,
-    신흥국  = df_신흥국,
+    선진국 = df_선진국,
+    신흥국 = df_신흥국,
     실물자산 = df_실물,
     인컴자산 = df_인컴,
-    채권    = df_채권,
-    현금성  = df_현금성
+    채권 = df_채권,
+    현금성 = df_현금성
   )
 }
 
@@ -202,7 +203,7 @@ get_target_date <- function(base_month, today) {
 #' @return tibble (wide format)
 calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
                                    base_month, today) {
-  # [지역 헬퍼 함수] 네이버 회사채 금리 크롤링
+  # [지역 헬퍼 함수] 네이버 회사채 금리 크롤링====
   get_naver_bond_yield <- function(start_date, end_date) {
     base_url <- "https://finance.naver.com/marketindex/interestDailyQuote.naver?marketindexCd=IRR_CORP03Y&page="
     page <- 1
@@ -524,3 +525,202 @@ calc_liquidity_analysis <- function(t_comm2, inflow_df, maturity_df,
     cash_projection  = cash_projection
   ))
 }
+
+
+# 7. 자산군별 수익률 vs BM 데이터 생성 ====
+#'
+#' @param return_tbl return dbplyr tbl
+#' @param start 시작일 (Date) — 누적수익률 기준점(0%)
+#' @param end   종료일 (Date)
+#' @return list(선진국, 국내, 실물자산, 인컴자산, 채권)
+#'         각 요소: tibble(기준일, MyPF, BM, DD)
+build_asset_bm_data <- function(return_tbl, start, end) {
+  start <- as.Date(start)
+  end   <- as.Date(end)
+
+  # [헬퍼] 네이버 회사채 금리 크롤링 ----
+  get_bond_yield_local <- function(start_date, end_date) {
+    base_url <- paste0(
+      "https://finance.naver.com/marketindex/",
+      "interestDailyQuote.naver?marketindexCd=IRR_CORP03Y&page="
+    )
+    page <- 1
+    results <- list()
+    repeat {
+      url <- paste0(base_url, page)
+      req <- httr::GET(url, httr::user_agent("Mozilla/5.0"))
+      html <- rvest::read_html(req)
+      tbls <- rvest::html_table(html)
+      if (length(tbls) == 0) break
+      df <- tbls[[1]][, 1:2]
+      names(df) <- c("date", "rate")
+      df <- df %>% filter(!is.na(date), date != "")
+      if (nrow(df) == 0) break
+      df$date <- as.Date(gsub("\\.", "-", df$date))
+      df$rate <- as.numeric(df$rate)
+      results[[page]] <- df
+      if (min(df$date, na.rm = TRUE) <= as.Date(start_date)) break
+      page <- page + 1
+      Sys.sleep(0.1)
+    }
+    bind_rows(results) %>%
+      filter(date >= as.Date(start_date), date <= as.Date(end_date)) %>%
+      arrange(date) %>%
+      distinct(date, .keep_all = TRUE)
+  }
+
+  # [헬퍼] 자산군별 MyPF 일간수익률 반환 ----
+  # DB return 테이블: 총손익은 연도 내 누적값(연초 리셋)
+  # → group_by(연도) + lag(default=0) 로 일간손익 추출
+  # ※ 누적수익률은 BM과 inner join 후 공통 시작일 기준으로 계산
+  calc_mypf_daily <- function(df_asset) {
+    if (nrow(df_asset) == 0) {
+      return(tibble(기준일 = as.Date(character()), r_mypf = numeric()))
+    }
+
+    df_asset %>%
+      arrange(기준일) %>%
+      group_by(연도 = year(기준일)) %>%
+      mutate(총손익_1 = lag(총손익, default = 0)) %>%
+      ungroup() %>%
+      mutate(
+        일간손익 = if_else(
+          기준일 == min(기준일, na.rm = TRUE), 0.0, as.numeric(총손익 - 총손익_1)
+        ),
+        r_mypf = if_else(
+          기준일 == min(기준일, na.rm = TRUE) | is.na(lag(평가금액)) | lag(평가금액) == 0,
+          0.0,
+          as.numeric(일간손익 / lag(평가금액) * 100)
+        )
+      ) %>%
+      slice(-1) %>% # 앵커 행(시작일) 제거
+      select(기준일, r_mypf)
+  }
+
+  # 1) MyPF 일간수익률 수집 (DB) ----
+  base <- return_tbl %>%
+    filter(기준일 >= start, 기준일 <= end) %>%
+    collect() %>%
+    mutate(기준일 = as.Date(기준일))
+
+  mypf_선진국 <- base %>%
+    filter(자산군 == "주식", 세부자산군 == "선진국", 세부자산군2 == "") %>%
+    select(기준일, 총손익, 평가금액) %>%
+    calc_mypf_daily()
+
+  mypf_국내 <- base %>%
+    filter(자산군 == "주식", 세부자산군 == "국내", 세부자산군2 == "") %>%
+    select(기준일, 총손익, 평가금액) %>%
+    calc_mypf_daily()
+
+  mypf_실물 <- base %>%
+    filter(자산군 == "대체자산", 세부자산군 == "실물자산", 세부자산군2 == "") %>%
+    select(기준일, 총손익, 평가금액) %>%
+    calc_mypf_daily()
+
+  mypf_인컴 <- base %>%
+    filter(자산군 == "대체자산", 세부자산군 == "인컴자산", 세부자산군2 == "") %>%
+    select(기준일, 총손익, 평가금액) %>%
+    calc_mypf_daily()
+
+  mypf_채권 <- base %>%
+    filter(자산군 == "채권", 세부자산군 == "", 세부자산군2 == "") %>%
+    select(기준일, 총손익, 평가금액) %>%
+    calc_mypf_daily()
+
+  # 2) BM 가격 수집 (야후 파이낸스) ----
+  # start 이전 7일 추가 fetch → lag 계산 정확도 확보
+  bm_fetch_start <- start - days(7)
+  tickers <- c("360200.KS", "305050.KS", "411060.KS", "329200.KS")
+
+  prices <- suppressWarnings(
+    tidyquant::tq_get(tickers,
+      get = "stock.prices",
+      from = bm_fetch_start, to = end
+    )
+  ) %>%
+    select(date, symbol, adjusted) %>%
+    filter(!is.na(adjusted)) %>%
+    distinct(symbol, date, .keep_all = TRUE) %>%
+    pivot_wider(names_from = symbol, values_from = adjusted) %>%
+    arrange(date)
+
+  # 3) 네이버 회사채 금리 ----
+  bond_yields <- get_bond_yield_local(bm_fetch_start, end)
+
+  # 4) 병합 및 결측 보간 ----
+  all_data <- prices %>%
+    left_join(bond_yields, by = "date") %>%
+    fill(everything(), .direction = "downup") %>%
+    arrange(date)
+
+  # 5) BM 일별 수익률 (lag는 filter 전 계산 → start일 수익률 정확 반영) ----
+  bm_daily <- all_data %>%
+    mutate(
+      r_선진국 = (`360200.KS` / lag(`360200.KS`) - 1) * 100,
+      r_국내   = (`305050.KS` / lag(`305050.KS`) - 1) * 100,
+      r_실물   = (`411060.KS` / lag(`411060.KS`) - 1) * 100,
+      r_인컴   = (`329200.KS` / lag(`329200.KS`) - 1) * 100,
+      # 채권 BM: 회사채 3년 → 일별 복리 환산
+      r_채권   = ((1 + replace_na(rate, 0) / 100)^(1 / 252) - 1) * 100
+    ) %>%
+    filter(date >= start) %>%
+    mutate(across(starts_with("r_"), ~ replace_na(.x, 0))) %>%
+    rename(기준일 = date) %>%
+    select(기준일, starts_with("r_"))
+
+  # 6) MyPF 일간수익률 + BM 일간수익률 inner join → 공통 시작일 기준 누적수익률·DD 계산 ----
+  # inner join 으로 두 데이터 모두 존재하는 날짜만 남김
+  # → 공통 시작일(첫 행)을 0%로 앵커한 뒤 cumprod 누적
+  # → DD는 BM 누적수익률 기준으로 계산
+  calc_cum <- function(r) (cumprod(1 + r / 100) - 1) * 100
+  calc_dd  <- function(cum_r) {
+    cr   <- 1 + cum_r / 100
+    peak <- cummax(cr)
+    (cr - peak) / peak * 100
+  }
+
+  join_asset <- function(mypf_daily_df, bm_r_col) {
+    if (nrow(mypf_daily_df) == 0) {
+      return(tibble(기준일 = as.Date(character()),
+                    MyPF = numeric(), BM = numeric(), DD = numeric()))
+    }
+
+    bm_r <- bm_daily %>% select(기준일, r_bm = !!sym(bm_r_col))
+
+    # inner join: 두 데이터 모두 있는 날짜만
+    joined <- mypf_daily_df %>%
+      inner_join(bm_r, by = "기준일") %>%
+      arrange(기준일)
+
+    if (nrow(joined) == 0) {
+      return(tibble(기준일 = as.Date(character()),
+                    MyPF = numeric(), BM = numeric(), DD = numeric()))
+    }
+
+    # 공통 시작일(첫 행) 재앵커 → 두 시리즈 모두 0%에서 출발
+    joined <- joined %>%
+      mutate(
+        r_mypf = if_else(row_number() == 1L, 0.0, as.numeric(r_mypf)),
+        r_bm   = if_else(row_number() == 1L, 0.0, as.numeric(r_bm))
+      )
+
+    # 누적수익률 + DD
+    joined %>%
+      mutate(
+        MyPF = calc_cum(r_mypf),
+        BM   = calc_cum(r_bm),
+        DD   = calc_dd(BM)
+      ) %>%
+      select(기준일, MyPF, BM, DD)
+  }
+
+  list(
+    선진국   = join_asset(mypf_선진국, "r_선진국"),
+    국내     = join_asset(mypf_국내,   "r_국내"),
+    실물자산 = join_asset(mypf_실물,   "r_실물"),
+    인컴자산 = join_asset(mypf_인컴,   "r_인컴"),
+    채권     = join_asset(mypf_채권,   "r_채권")
+  )
+}
+

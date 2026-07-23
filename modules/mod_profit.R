@@ -129,6 +129,7 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       )
     })
 
+    ## b. 손익변동 ----
     ## 손익 그래프 데이터 (일간손익 + 손익누계) ----
     df_graph <- reactive({
       input$total_s_date
@@ -155,7 +156,6 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       )
     })
 
-    ## b. 손익변동 ----
     ## [위] 손익 콤보 차트 — 일간손익(막대) + 손익누계(꺾은선) ----
     output$total_profit_bar <- renderEcharts4r({
       req(menu_tabs() == "pf_bs_pl")

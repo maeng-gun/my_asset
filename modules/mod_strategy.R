@@ -9,6 +9,47 @@ mod_strategy_ui <- function(id) {
   navset_card_tab(
     id = ns("bm_box"),
 
+    ## 투자성과 탭 ====
+    nav_panel(
+      title = "투자성과",
+      fluidRow(
+        column(
+          width = 2, class = "col-12 col-md-4 col-lg-2",
+          airDatepickerInput(ns("perf_s_date"),
+            label = "시작일", addon = "none",
+            value = Sys.Date() %m-% years(1)
+          ),
+          airDatepickerInput(ns("perf_e_date"),
+            label = "종료일", addon = "none",
+            value = Sys.Date()
+          )
+        ),
+        column(
+          width = 10, class = "col-12 col-md-8 col-lg-10",
+          h6(class = "text-muted mt-2 mb-0",
+             "선진국 주식 (BM: KODEX 선진국MSCI World, 360200)"),
+          echarts4rOutput(ns("perf_line_선진국"), height = "400px"),
+          echarts4rOutput(ns("perf_dd_선진국"),   height = "100px"),
+          h6(class = "text-muted mt-3 mb-0",
+             "국내 주식 (BM: KODEX 코스피, 305050)"),
+          echarts4rOutput(ns("perf_line_국내"),   height = "400px"),
+          echarts4rOutput(ns("perf_dd_국내"),     height = "100px"),
+          h6(class = "text-muted mt-3 mb-0",
+             "실물자산 (BM: KODEX 골드선물(H), 411060)"),
+          echarts4rOutput(ns("perf_line_실물"),   height = "400px"),
+          echarts4rOutput(ns("perf_dd_실물"),     height = "100px"),
+          h6(class = "text-muted mt-3 mb-0",
+             "인컴자산 (BM: TIGER 리츠부동산인프라, 329200)"),
+          echarts4rOutput(ns("perf_line_인컴"),   height = "400px"),
+          echarts4rOutput(ns("perf_dd_인컴"),     height = "100px"),
+          h6(class = "text-muted mt-3 mb-0",
+             "채권 (BM: 회사채 3년)"),
+          echarts4rOutput(ns("perf_line_채권"),   height = "400px"),
+          echarts4rOutput(ns("perf_dd_채권"),     height = "100px")
+        )
+      )
+    ),
+
     ## a. 자산배분====
     nav_panel(
       title = "자산배분",
@@ -37,9 +78,9 @@ mod_strategy_ui <- function(id) {
       )
     ),
 
-    ## b. 성과분석====
+    ## b. 배분성과====
     nav_panel(
-      title = "성과분석",
+      title = "배분성과",
       fluidRow(
         column(
           width = 12,
@@ -62,7 +103,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
 
     show_delay <- function(text, type) show_alert(title = text, type = type)
 
-    # === a. 자산배분 CRUD ===
+    # === a. 자산배분 CRUD ====
 
     ## 신규/수정 선택 옵션 동적 생성 ----
     observe({
@@ -266,7 +307,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       render_rt(df, pct_cols = 4:10)
     })
 
-    # === b. 성과분석 ===
+    # === b. 배분성과 ====
 
     raw_bm_data <- reactive({
       req(input$base_month)
@@ -367,6 +408,111 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
     output$plot_ytd_pf <- renderEcharts4r({
       req(menu_tabs() == "pf_strategy")
       render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
+    })
+
+    # === 투자성과 ====
+    # 해당 탭에 실제 진입했을 때만 데이터 산출/렌더링
+    # req(menu_tabs() == "pf_strategy") 조건으로 제어
+
+    ## BM 데이터 reactive ----
+    raw_perf_data <- reactive({
+      req(menu_tabs() == "pf_strategy")
+      req(input$perf_s_date, input$perf_e_date)
+      ma_obj <- ma_v()
+      build_asset_bm_data(
+        return_tbl = ma_obj$read_obj("return"),
+        start      = input$perf_s_date,
+        end        = input$perf_e_date
+      )
+    })
+
+    ## 그래프 헬퍼 ----
+    render_perf_line <- function(df, group_id) {
+      req(nrow(df) > 0)
+      df %>%
+        select(기준일, MyPF, BM) %>%
+        pivot_longer(-기준일, names_to = "구분", values_to = "value") %>%
+        group_by(구분) %>%
+        e_charts(기준일) %>%
+        e_line(value, symbol = "none") %>%
+        e_connect_group(group_id) %>%
+        e_y_axis(
+          position = "right",
+          axisLabel = list(
+            formatter = htmlwidgets::JS("function(v){return v.toFixed(1)+'%';}")
+          )
+        ) %>%
+        e_tooltip(trigger = "axis") %>%
+        e_legend(right = 0, top = "center", orient = "vertical") %>%
+        e_grid(right = "20%", left = "3%")
+    }
+
+    render_perf_dd <- function(df, group_id) {
+      req(nrow(df) > 0)
+      df %>%
+        select(기준일, DD) %>%
+        e_charts(기준일) %>%
+        e_area(DD, name = "Drawdown", symbol = "none", color = "#dc3545") %>%
+        e_connect_group(group_id) %>%
+        e_y_axis(
+          max = 0,
+          position = "right",
+          axisLabel = list(
+            formatter = htmlwidgets::JS("function(v){return v.toFixed(1)+'%';}")
+          )
+        ) %>%
+        e_tooltip(trigger = "axis") %>%
+        e_grid(right = "20%", left = "3%")
+    }
+
+    ## 렌더링 (선진국) ----
+    output$perf_line_선진국 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_line(raw_perf_data()$선진국, "perf_선진국")
+    })
+    output$perf_dd_선진국 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_dd(raw_perf_data()$선진국, "perf_선진국")
+    })
+
+    ## 렌더링 (국내) ----
+    output$perf_line_국내 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_line(raw_perf_data()$국내, "perf_국내")
+    })
+    output$perf_dd_국내 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_dd(raw_perf_data()$국내, "perf_국내")
+    })
+
+    ## 렌더링 (실물자산) ----
+    output$perf_line_실물 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_line(raw_perf_data()$실물자산, "perf_실물")
+    })
+    output$perf_dd_실물 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_dd(raw_perf_data()$실물자산, "perf_실물")
+    })
+
+    ## 렌더링 (인컴자산) ----
+    output$perf_line_인컴 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_line(raw_perf_data()$인컴자산, "perf_인컴")
+    })
+    output$perf_dd_인컴 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_dd(raw_perf_data()$인컴자산, "perf_인컴")
+    })
+
+    ## 렌더링 (채권) ----
+    output$perf_line_채권 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_line(raw_perf_data()$채권, "perf_채권")
+    })
+    output$perf_dd_채권 <- renderEcharts4r({
+      req(menu_tabs() == "pf_strategy")
+      render_perf_dd(raw_perf_data()$채권, "perf_채권")
     })
   })
 }
