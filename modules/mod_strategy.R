@@ -22,6 +22,21 @@ mod_strategy_ui <- function(id) {
           airDatepickerInput(ns("perf_e_date"),
             label = "종료일", addon = "none",
             value = Sys.Date()
+          ),
+          actionButton(
+            ns("perf_query"), "조회",
+            class = "btn btn-primary w-100 mt-2"
+          ),
+          fluidRow(
+            class = "mt-2 g-1",
+            column(6, actionButton(ns("perf_1m"),  "1M",
+              class = "btn btn-outline-secondary w-100 btn-sm")),
+            column(6, actionButton(ns("perf_3m"),  "3M",
+              class = "btn btn-outline-secondary w-100 btn-sm")),
+            column(6, actionButton(ns("perf_6m"),  "6M",
+              class = "btn btn-outline-secondary w-100 btn-sm mt-1")),
+            column(6, actionButton(ns("perf_12m"), "12M",
+              class = "btn btn-outline-secondary w-100 btn-sm mt-1"))
           )
         ),
         column(
@@ -411,20 +426,45 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
     })
 
     # === 투자성과 ====
-    # 해당 탭에 실제 진입했을 때만 데이터 산출/렌더링
-    # req(menu_tabs() == "pf_strategy") 조건으로 제어
+    # 조회 버튼 클릭 시에만 데이터 산출/렌더링
+    # reactiveVal 트리거 방식: 날짜를 rv에 직접 저장 후 트리거 증가 → 타이밍 문제 없음
 
-    ## BM 데이터 reactive ----
-    raw_perf_data <- reactive({
-      req(menu_tabs() == "pf_strategy")
-      req(input$perf_s_date, input$perf_e_date)
+    perf_trigger <- reactiveVal(0)   # 조회 실행 트리거
+    perf_s_rv    <- reactiveVal(Sys.Date() %m-% years(1))  # 실제 조회에 쓸 시작일
+    perf_e_rv    <- reactiveVal(Sys.Date())                 # 실제 조회에 쓸 종료일
+
+    ## 조회 버튼 핸들러 ----
+    observeEvent(input$perf_query, {
+      perf_s_rv(input$perf_s_date)
+      perf_e_rv(input$perf_e_date)
+      perf_trigger(perf_trigger() + 1)
+    }, ignoreInit = TRUE)
+
+    ## 단축 기간 버튼 핸들러 ----
+    perf_set_period <- function(months_back) {
+      today  <- Sys.Date()
+      s_date <- today %m-% months(months_back)
+      updateAirDateInput(session, "perf_e_date", value = today)
+      updateAirDateInput(session, "perf_s_date", value = s_date)
+      perf_e_rv(today)
+      perf_s_rv(s_date)
+      perf_trigger(perf_trigger() + 1)
+    }
+    observeEvent(input$perf_1m,  perf_set_period(1),  ignoreInit = TRUE)
+    observeEvent(input$perf_3m,  perf_set_period(3),  ignoreInit = TRUE)
+    observeEvent(input$perf_6m,  perf_set_period(6),  ignoreInit = TRUE)
+    observeEvent(input$perf_12m, perf_set_period(12), ignoreInit = TRUE)
+
+    ## BM 데이터 (트리거 발화 시에만 실행) ----
+    raw_perf_data <- eventReactive(perf_trigger(), {
+      req(perf_s_rv(), perf_e_rv())
       ma_obj <- ma_v()
       build_asset_bm_data(
         return_tbl = ma_obj$read_obj("return"),
-        start      = input$perf_s_date,
-        end        = input$perf_e_date
+        start      = perf_s_rv(),
+        end        = perf_e_rv()
       )
-    })
+    }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
     ## 그래프 헬퍼 ----
     render_perf_line <- function(df, group_id) {
@@ -467,51 +507,41 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
 
     ## 렌더링 (선진국) ----
     output$perf_line_선진국 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_line(raw_perf_data()$선진국, "perf_선진국")
     })
     output$perf_dd_선진국 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_dd(raw_perf_data()$선진국, "perf_선진국")
     })
 
     ## 렌더링 (국내) ----
     output$perf_line_국내 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_line(raw_perf_data()$국내, "perf_국내")
     })
     output$perf_dd_국내 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_dd(raw_perf_data()$국내, "perf_국내")
     })
 
     ## 렌더링 (실물자산) ----
     output$perf_line_실물 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_line(raw_perf_data()$실물자산, "perf_실물")
     })
     output$perf_dd_실물 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_dd(raw_perf_data()$실물자산, "perf_실물")
     })
 
     ## 렌더링 (인컴자산) ----
     output$perf_line_인컴 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_line(raw_perf_data()$인컴자산, "perf_인컴")
     })
     output$perf_dd_인컴 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_dd(raw_perf_data()$인컴자산, "perf_인컴")
     })
 
     ## 렌더링 (채권) ----
     output$perf_line_채권 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_line(raw_perf_data()$채권, "perf_채권")
     })
     output$perf_dd_채권 <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
       render_perf_dd(raw_perf_data()$채권, "perf_채권")
     })
   })
