@@ -317,7 +317,7 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
     arrange(date) %>%
     replace(is.na(.), 0)
 
-  ret_xts <- timetk::tk_xts(all_bm_returns_wide, date_var = date)
+  ret_xts <- suppressWarnings(timetk::tk_xts(all_bm_returns_wide, date_var = date, silent = TRUE))
   asset_cols <- colnames(ret_xts)
 
   ## _7) SAA, TAA1, TAA2 포트폴리오 수익률 계산 ----
@@ -570,9 +570,6 @@ build_asset_bm_data <- function(return_tbl, start, end) {
   }
 
   # [헬퍼] 자산군별 MyPF 일간수익률 반환 ----
-  # DB return 테이블: 총손익은 연도 내 누적값(연초 리셋)
-  # → group_by(연도) + lag(default=0) 로 일간손익 추출
-  # ※ 누적수익률은 BM과 inner join 후 공통 시작일 기준으로 계산
   calc_mypf_daily <- function(df_asset) {
     if (nrow(df_asset) == 0) {
       return(tibble(기준일 = as.Date(character()), r_mypf = numeric()))
@@ -593,7 +590,7 @@ build_asset_bm_data <- function(return_tbl, start, end) {
           as.numeric(일간손익 / lag(평가금액) * 100)
         )
       ) %>%
-      slice(-1) %>% # 앵커 행(시작일) 제거
+      slice(-1) %>%
       select(기준일, r_mypf)
   }
 
@@ -629,7 +626,6 @@ build_asset_bm_data <- function(return_tbl, start, end) {
     calc_mypf_daily()
 
   # 2) BM 가격 수집 (야후 파이낸스) ----
-  # start 이전 7일 추가 fetch → lag 계산 정확도 확보
   bm_fetch_start <- start - days(7)
   tickers <- c("360200.KS", "305050.KS", "411060.KS", "329200.KS")
 
@@ -654,14 +650,13 @@ build_asset_bm_data <- function(return_tbl, start, end) {
     fill(everything(), .direction = "downup") %>%
     arrange(date)
 
-  # 5) BM 일별 수익률 (lag는 filter 전 계산 → start일 수익률 정확 반영) ----
+  # 5) BM 일별 수익률 ----
   bm_daily <- all_data %>%
     mutate(
       r_선진국 = (`360200.KS` / lag(`360200.KS`) - 1) * 100,
       r_국내   = (`305050.KS` / lag(`305050.KS`) - 1) * 100,
       r_실물   = (`411060.KS` / lag(`411060.KS`) - 1) * 100,
       r_인컴   = (`329200.KS` / lag(`329200.KS`) - 1) * 100,
-      # 채권 BM: 회사채 3년 → 일별 복리 환산
       r_채권   = ((1 + replace_na(rate, 0) / 100)^(1 / 252) - 1) * 100
     ) %>%
     filter(date >= start) %>%
@@ -669,10 +664,7 @@ build_asset_bm_data <- function(return_tbl, start, end) {
     rename(기준일 = date) %>%
     select(기준일, starts_with("r_"))
 
-  # 6) MyPF 일간수익률 + BM 일간수익률 inner join → 공통 시작일 기준 누적수익률·DD 계산 ----
-  # inner join 으로 두 데이터 모두 존재하는 날짜만 남김
-  # → 공통 시작일(첫 행)을 0%로 앵커한 뒤 cumprod 누적
-  # → DD는 BM 누적수익률 기준으로 계산
+  # 6) MyPF 일간수익률 + BM 일간수익률 inner join ----
   calc_cum <- function(r) (cumprod(1 + r / 100) - 1) * 100
   calc_dd  <- function(cum_r) {
     cr   <- 1 + cum_r / 100
@@ -688,7 +680,6 @@ build_asset_bm_data <- function(return_tbl, start, end) {
 
     bm_r <- bm_daily %>% select(기준일, r_bm = !!sym(bm_r_col))
 
-    # inner join: 두 데이터 모두 있는 날짜만
     joined <- mypf_daily_df %>%
       inner_join(bm_r, by = "기준일") %>%
       arrange(기준일)
@@ -698,14 +689,12 @@ build_asset_bm_data <- function(return_tbl, start, end) {
                     MyPF = numeric(), BM = numeric(), DD = numeric()))
     }
 
-    # 공통 시작일(첫 행) 재앵커 → 두 시리즈 모두 0%에서 출발
     joined <- joined %>%
       mutate(
         r_mypf = if_else(row_number() == 1L, 0.0, as.numeric(r_mypf)),
         r_bm   = if_else(row_number() == 1L, 0.0, as.numeric(r_bm))
       )
 
-    # 누적수익률 + DD
     joined %>%
       mutate(
         MyPF = calc_cum(r_mypf),
@@ -724,3 +713,236 @@ build_asset_bm_data <- function(return_tbl, start, end) {
   )
 }
 
+
+# 8. 개별 종목 분석 데이터 생성 ====
+#'
+#' @param ticker 분석 대상 티커 (한국: "005930", 미국: "SPY")
+#' @param bm_ticker 벤치마크 티커 ("226490.KS" or "SPY")
+#' @param today 기준일 (Date). 기본값 Sys.Date()
+#' @param ticker_name 한국어 종목명
+#' @param bm_name 한국어 벤치마크명
+#' @return list(cum_df, dd_df, monthly_ret, yearly_ret,
+#'              rolling_vol, rolling_sharpe, stats_df,
+#'              ticker_label, bm_label)
+build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ticker_name = NULL, bm_name = NULL) {
+  today <- as.Date(today)
+
+  to_yf <- function(t) if (grepl("^[0-9]{6}$", t)) paste0(t, ".KS") else t
+
+  yf_ticker <- to_yf(ticker)
+  yf_bm     <- to_yf(bm_ticker)
+  t_label   <- if (!is.null(ticker_name) && !is.na(ticker_name) && nchar(as.character(ticker_name)) > 0) as.character(ticker_name) else yf_ticker
+  b_label   <- if (!is.null(bm_name) && !is.na(bm_name) && nchar(as.character(bm_name)) > 0) as.character(bm_name) else yf_bm
+
+  analysis_start <- as.Date(paste0(year(today) - 10, "-01-01"))
+  rolling_window <- 756L
+  fetch_start    <- analysis_start - days(rolling_window + 90)
+
+  raw <- tryCatch(
+    suppressWarnings(
+      tidyquant::tq_get(
+        c(yf_ticker, yf_bm),
+        get  = "stock.prices",
+        from = fetch_start,
+        to   = today
+      )
+    ),
+    error = function(e) NULL
+  )
+
+  if (is.null(raw) || nrow(raw) == 0) return(NULL)
+
+  returns_all <- raw %>%
+    select(date, symbol, adjusted) %>%
+    filter(!is.na(adjusted)) %>%
+    group_by(symbol) %>%
+    tq_transmute(
+      select     = adjusted,
+      mutate_fun = periodReturn,
+      period     = "daily",
+      col_rename = "returns"
+    ) %>%
+    ungroup()
+
+  target_ret <- returns_all %>% filter(symbol == yf_ticker) %>% arrange(date)
+  bm_ret     <- returns_all %>% filter(symbol == yf_bm)     %>% arrange(date)
+
+  if (nrow(target_ret) < 10 || nrow(bm_ret) < 10) return(NULL)
+
+  data_span      <- nrow(target_ret)
+  actual_window  <- as.integer(max(20L, min(756L, floor(data_span * 0.5))))
+
+  target_analysis <- target_ret %>% filter(date >= analysis_start)
+  bm_analysis     <- bm_ret     %>% filter(date >= analysis_start)
+
+  joined <- target_analysis %>%
+    select(date, ret_t = returns) %>%
+    inner_join(bm_analysis %>% select(date, ret_b = returns), by = "date") %>%
+    mutate(
+      ret_t = replace_na(ret_t, 0),
+      ret_b = replace_na(ret_b, 0)
+    ) %>%
+    arrange(date)
+
+  if (nrow(joined) < 2) return(NULL)
+
+  # 1) 누적수익률
+  cum_df <- joined %>%
+    mutate(
+      ticker = (cumprod(1 + ret_t) - 1) * 100,
+      bm     = (cumprod(1 + ret_b) - 1) * 100
+    ) %>%
+    mutate(
+      ticker = ifelse(!is.finite(ticker), 0, ticker),
+      bm     = ifelse(!is.finite(bm), 0, bm)
+    ) %>%
+    select(date, ticker, bm)
+
+  # 2) DrawDown
+  dd_df <- joined %>%
+    mutate(
+      wealth = cumprod(1 + ret_t),
+      peak   = cummax(wealth),
+      dd     = (wealth - peak) / peak * 100
+    ) %>%
+    mutate(dd = ifelse(!is.finite(dd), 0, dd)) %>%
+    select(date, dd)
+
+  # 3) 월별 수익률 히트맵용
+  monthly_ret <- target_analysis %>%
+    tq_transmute(
+      select     = returns,
+      mutate_fun = apply.monthly,
+      FUN        = function(x) (prod(1 + x, na.rm = TRUE) - 1) * 100,
+      col_rename = "ret"
+    ) %>%
+    mutate(year = year(date), month = month(date))
+
+  # 4) 연도별 수익률
+  yearly_ret <- joined %>%
+    group_by(year = year(date)) %>%
+    summarise(
+      ticker = (prod(1 + ret_t, na.rm = TRUE) - 1) * 100,
+      bm     = (prod(1 + ret_b, na.rm = TRUE) - 1) * 100,
+      .groups = "drop"
+    )
+
+  # 5) 롤링 변동성
+  rolling_vol_df <- target_ret %>%
+    mutate(
+      rolling_sd  = as.numeric(zoo::rollapplyr(returns, width = actual_window, FUN = sd, fill = NA, na.rm = TRUE)),
+      rolling_vol = rolling_sd * sqrt(252) * 100
+    ) %>%
+    filter(!is.na(rolling_vol), date >= analysis_start) %>%
+    select(date, rolling_vol)
+
+  # 6) 롤링 샤프
+  rolling_sharpe_fn <- function(x) {
+    x <- x[!is.na(x)]
+    if (length(x) < 2) return(NA_real_)
+    vol_ann <- sd(x) * sqrt(252)
+    if (is.na(vol_ann) || vol_ann == 0) return(NA_real_)
+    ret_ann <- mean(x) * 252
+    ret_ann / vol_ann
+  }
+
+  rolling_sharpe_df <- target_ret %>%
+    mutate(
+      rolling_sharpe = as.numeric(zoo::rollapplyr(returns, width = actual_window, FUN = rolling_sharpe_fn, fill = NA))
+    ) %>%
+    filter(!is.na(rolling_sharpe), date >= analysis_start) %>%
+    select(date, rolling_sharpe)
+
+  # 7) 성과 통계 테이블
+  stats_df <- calc_single_stats(joined, t_label, b_label)
+
+  list(
+    cum_df         = cum_df,
+    dd_df          = dd_df,
+    monthly_ret    = monthly_ret,
+    yearly_ret     = yearly_ret,
+    rolling_vol    = rolling_vol_df,
+    rolling_sharpe = rolling_sharpe_df,
+    stats_df       = stats_df,
+    ticker_label   = t_label,
+    bm_label       = b_label
+  )
+}
+
+
+# 8-1. 단일 종목 성과통계 계산 ====
+#'
+#' @param joined_df inner_join된 일별수익률 tibble (date, ret_t, ret_b)
+#' @param ticker_label 종목 레이블 (열 이름에 사용)
+#' @param bm_label BM 레이블 (열 이름에 사용)
+#' @return tibble(지표, <ticker_label>, <bm_label>)
+calc_single_stats <- function(joined_df, ticker_label, bm_label) {
+  if (nrow(joined_df) < 10) {
+    return(tibble(지표 = character(), .rows = 0))
+  }
+
+  if (ticker_label == bm_label) {
+    bm_label <- paste0(bm_label, " (BM)")
+  }
+
+  ra_xts <- suppressWarnings(joined_df %>%
+    select(date, ret_t) %>%
+    timetk::tk_xts(select = ret_t, date_var = date, silent = TRUE))
+
+  rb_xts <- suppressWarnings(joined_df %>%
+    select(date, ret_b) %>%
+    timetk::tk_xts(select = ret_b, date_var = date, silent = TRUE))
+
+  rf_xts <- xts::xts(rep(0, nrow(ra_xts)), order.by = zoo::index(ra_xts))
+
+  safe_calc <- function(expr) {
+    tryCatch(as.numeric(expr), error = function(e) NA_real_)
+  }
+
+  ann_ret  <- safe_calc(Return.annualized(ra_xts, scale = 252)) * 100
+  ann_vol  <- safe_calc(StdDev.annualized(ra_xts, scale = 252)) * 100
+  mdd_val  <- safe_calc(maxDrawdown(ra_xts)) * 100
+  calmar   <- if (!is.na(mdd_val) && mdd_val != 0 && !is.na(ann_ret)) round(ann_ret / mdd_val, 2) else NA_real_
+  win_rate <- safe_calc(sum(joined_df$ret_t > 0, na.rm = TRUE) / sum(!is.na(joined_df$ret_t)) * 100)
+  var95    <- safe_calc(VaR(ra_xts, p = 0.95, method = "historical")) * 100
+  sharpe   <- safe_calc(SharpeRatio.annualized(ra_xts, Rf = rf_xts, scale = 252))
+  sortino  <- safe_calc(SortinoRatio(ra_xts, MAR = rf_xts))
+
+  capm_res <- tryCatch(
+    table.CAPM(ra_xts, rb_xts, Rf = rf_xts, scale = 252),
+    error = function(e) NULL
+  )
+  alpha_v <- if (!is.null(capm_res)) safe_calc(capm_res["Alpha", 1]) * 100 else NA_real_
+  beta_v  <- if (!is.null(capm_res)) safe_calc(capm_res["Beta",  1])         else NA_real_
+  ir_v    <- tryCatch(safe_calc(InformationRatio(ra_xts, rb_xts)), error = function(e) NA_real_)
+
+  bm_ann_ret <- safe_calc(Return.annualized(rb_xts, scale = 252)) * 100
+  bm_ann_vol <- safe_calc(StdDev.annualized(rb_xts, scale = 252)) * 100
+  bm_mdd     <- safe_calc(maxDrawdown(rb_xts)) * 100
+  bm_sharpe  <- safe_calc(SharpeRatio.annualized(rb_xts, Rf = rf_xts, scale = 252))
+
+  metrics <- c(
+    "연환산수익률(%)", "연환산변동성(%)", "Sharpe", "Sortino",
+    "Calmar", "MDD(%)", "승률(%)", "VaR.95(%)",
+    "Alpha(%)", "Beta", "IR"
+  )
+  t_vals <- c(ann_ret, ann_vol, sharpe, sortino, calmar, mdd_val,
+              win_rate, var95, alpha_v, beta_v, ir_v)
+  b_vals <- c(bm_ann_ret, bm_ann_vol, bm_sharpe, NA, NA, bm_mdd,
+              NA, NA, NA, NA, NA)
+
+  clean_val <- function(v) {
+    res <- suppressWarnings(as.numeric(v))
+    ifelse(is.na(res) | is.nan(res) | is.infinite(res), NA_real_, round(res, 2))
+  }
+
+  df <- tibble(
+    지표  = metrics,
+    t_col = clean_val(t_vals),
+    b_col = clean_val(b_vals)
+  )
+  names(df)[2] <- ticker_label
+  names(df)[3] <- bm_label
+
+  df
+}

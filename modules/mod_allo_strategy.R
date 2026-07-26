@@ -1,69 +1,11 @@
 # =============================================================================
-# mod_strategy — 배분전략 및 성과분석 모듈
-# =============================================================================
-# DB CRUD는 pool 객체 직접 주입, 성과분석은 순수 함수 호출
+# mod_allo_strategy — 배분전략 모듈
 # =============================================================================
 
-mod_strategy_ui <- function(id) {
+mod_allo_strategy_ui <- function(id) {
   ns <- NS(id)
   navset_card_tab(
-    id = ns("bm_box"),
-
-    ## 투자성과 탭 ====
-    nav_panel(
-      title = "투자성과",
-      fluidRow(
-        column(
-          width = 2, class = "col-12 col-md-4 col-lg-2",
-          airDatepickerInput(ns("perf_s_date"),
-            label = "시작일", addon = "none",
-            value = Sys.Date() %m-% years(1)
-          ),
-          airDatepickerInput(ns("perf_e_date"),
-            label = "종료일", addon = "none",
-            value = Sys.Date()
-          ),
-          actionButton(
-            ns("perf_query"), "조회",
-            class = "btn btn-primary w-100 mt-2"
-          ),
-          fluidRow(
-            class = "mt-2 g-1",
-            column(6, actionButton(ns("perf_1m"),  "1M",
-              class = "btn btn-outline-secondary w-100 btn-sm")),
-            column(6, actionButton(ns("perf_3m"),  "3M",
-              class = "btn btn-outline-secondary w-100 btn-sm")),
-            column(6, actionButton(ns("perf_6m"),  "6M",
-              class = "btn btn-outline-secondary w-100 btn-sm mt-1")),
-            column(6, actionButton(ns("perf_12m"), "12M",
-              class = "btn btn-outline-secondary w-100 btn-sm mt-1"))
-          )
-        ),
-        column(
-          width = 10, class = "col-12 col-md-8 col-lg-10",
-          h6(class = "text-muted mt-2 mb-0",
-             "선진국 주식 (BM: KODEX 선진국MSCI World, 360200)"),
-          echarts4rOutput(ns("perf_line_선진국"), height = "400px"),
-          echarts4rOutput(ns("perf_dd_선진국"),   height = "100px"),
-          h6(class = "text-muted mt-3 mb-0",
-             "국내 주식 (BM: KODEX 코스피, 305050)"),
-          echarts4rOutput(ns("perf_line_국내"),   height = "400px"),
-          echarts4rOutput(ns("perf_dd_국내"),     height = "100px"),
-          h6(class = "text-muted mt-3 mb-0",
-             "실물자산 (BM: KODEX 골드선물(H), 411060)"),
-          echarts4rOutput(ns("perf_line_실물"),   height = "400px"),
-          echarts4rOutput(ns("perf_dd_실물"),     height = "100px"),
-          h6(class = "text-muted mt-3 mb-0",
-             "인컴자산 (BM: TIGER 리츠부동산인프라, 329200)"),
-          echarts4rOutput(ns("perf_line_인컴"),   height = "400px"),
-          echarts4rOutput(ns("perf_dd_인컴"),     height = "100px"),
-          h6(class = "text-muted mt-3 mb-0",
-             "채권 (BM: 회사채 3년)"),
-          echarts4rOutput(ns("perf_line_채권"),   height = "400px"),
-          echarts4rOutput(ns("perf_dd_채권"),     height = "100px")
-        )
-      )
-    ),
+    id = ns("allo_box"),
 
     ## a. 자산배분====
     nav_panel(
@@ -99,11 +41,23 @@ mod_strategy_ui <- function(id) {
       fluidRow(
         column(
           width = 12,
-          airDatepickerInput(ns("base_month"),
-            label = "기준 연월 선택",
-            value = Sys.Date(), view = "months",
-            minView = "months", dateFormat = "yyyy-MM",
-            width = "300px", addon = "right"
+          div(
+            class = "d-flex align-items-end gap-2 mb-3",
+            div(
+              airDatepickerInput(
+                ns("base_month"),
+                label = "기준 연월 선택",
+                value = Sys.Date(), view = "months",
+                minView = "months", dateFormat = "yyyy-MM",
+                width = "250px", addon = "right"
+              )
+            ),
+            div(
+              actionButton(
+                ns("allo_query"), "조회",
+                class = "btn btn-primary"
+              )
+            )
           )
         )
       ),
@@ -112,7 +66,7 @@ mod_strategy_ui <- function(id) {
   )
 }
 
-mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
+mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -302,7 +256,7 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
     ## 배분 테이블 ----
     output$allo_table_ui <- renderReactable({
       sk_b()
-      req(menu_tabs() == "pf_strategy")
+      req(menu_tabs() == "pf_allo_strategy")
       req(input$allo_year_select)
       df <- ma_b()$read("allo_table")
       if (nrow(df) == 0) {
@@ -323,23 +277,59 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
     })
 
     # === b. 배분성과 ====
+    allo_trigger <- reactiveVal(0)
+    sel_base_month_rv <- reactiveVal(NULL)
 
-    raw_bm_data <- reactive({
+    observeEvent(input$allo_query, {
       req(input$base_month)
+      sel_base_month_rv(input$base_month)
+      showModal(modalDialog(
+        title = NULL,
+        div(
+          class = "text-center my-4",
+          tags$i(class = "fa fa-spinner fa-spin fa-3x text-primary mb-3"),
+          h5("배분성과 데이터 산출 중...", class = "mb-2"),
+          p("벤치마크 및 포트폴리오 성과를 비교 계산하고 있습니다. 잠시만 기다려주세요.", class = "text-muted small mb-0")
+        ),
+        footer = NULL,
+        easyClose = FALSE,
+        size = "m"
+      ))
+      next_trig <- allo_trigger() + 1
+      later::later(function() {
+        allo_trigger(next_trig)
+      }, delay = 0.1)
+    }, ignoreInit = TRUE)
+
+    raw_bm_data <- eventReactive(allo_trigger(), {
+      req(sel_base_month_rv())
       ma_obj <- ma_v()
 
       # calc_benchmark_returns 순수 함수 호출
-      calc_benchmark_returns(
+      res <- calc_benchmark_returns(
         return_tbl    = ma_obj$read_obj("return"),
         cash_in_out   = ma_obj$cash_in_out,
         allo_table_df = ma_obj$read("allo_table"),
-        base_month    = input$base_month,
+        base_month    = sel_base_month_rv(),
         today         = ma_obj$today
       )
-    })
+      removeModal()
+      res
+    }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
     output$dynamic_boxes <- renderUI({
-      t_date <- get_target_date(input$base_month, ma_v()$today)
+      if (allo_trigger() == 0) {
+        return(
+          div(
+            class = "text-center mt-5 text-muted",
+            tags$i(class = "fa fa-chart-pie fa-3x mb-3"),
+            h5("기준 연월을 선택하고 조회 버튼을 누르세요."),
+            p("선택한 연월 기준 MTD, QTD, YTD 배분성과를 BM과 비교 분석합니다.", class = "small")
+          )
+        )
+      }
+      req(sel_base_month_rv())
+      t_date <- get_target_date(sel_base_month_rv(), ma_v()$today)
       fluidRow(
         column(width = 6, card(
           class = "mb-3 border-primary",
@@ -401,148 +391,28 @@ mod_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
 
 
     output$plot_mtd_bm <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
-      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(input$base_month, ma_v()$today), "month") - days(1))
+      req(menu_tabs() == "pf_allo_strategy")
+      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(sel_base_month_rv(), ma_v()$today), "month") - days(1))
     })
     output$plot_mtd_pf <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
-      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(input$base_month, ma_v()$today), "month") - days(1))
+      req(menu_tabs() == "pf_allo_strategy")
+      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(sel_base_month_rv(), ma_v()$today), "month") - days(1))
     })
     output$plot_qtd_bm <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
-      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(input$base_month, ma_v()$today), "quarter") - days(1))
+      req(menu_tabs() == "pf_allo_strategy")
+      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(sel_base_month_rv(), ma_v()$today), "quarter") - days(1))
     })
     output$plot_qtd_pf <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
-      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(input$base_month, ma_v()$today), "quarter") - days(1))
+      req(menu_tabs() == "pf_allo_strategy")
+      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(sel_base_month_rv(), ma_v()$today), "quarter") - days(1))
     })
     output$plot_ytd_bm <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
-      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
+      req(menu_tabs() == "pf_allo_strategy")
+      render_pf_echart(raw_bm_data(), cols_bm, floor_date(get_target_date(sel_base_month_rv(), ma_v()$today), "year") - days(1))
     })
     output$plot_ytd_pf <- renderEcharts4r({
-      req(menu_tabs() == "pf_strategy")
-      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(input$base_month, ma_v()$today), "year") - days(1))
-    })
-
-    # === 투자성과 ====
-    # 조회 버튼 클릭 시에만 데이터 산출/렌더링
-    # reactiveVal 트리거 방식: 날짜를 rv에 직접 저장 후 트리거 증가 → 타이밍 문제 없음
-
-    perf_trigger <- reactiveVal(0)   # 조회 실행 트리거
-    perf_s_rv    <- reactiveVal(Sys.Date() %m-% years(1))  # 실제 조회에 쓸 시작일
-    perf_e_rv    <- reactiveVal(Sys.Date())                 # 실제 조회에 쓸 종료일
-
-    ## 조회 버튼 핸들러 ----
-    observeEvent(input$perf_query, {
-      perf_s_rv(input$perf_s_date)
-      perf_e_rv(input$perf_e_date)
-      perf_trigger(perf_trigger() + 1)
-    }, ignoreInit = TRUE)
-
-    ## 단축 기간 버튼 핸들러 ----
-    perf_set_period <- function(months_back) {
-      today  <- Sys.Date()
-      s_date <- today %m-% months(months_back)
-      updateAirDateInput(session, "perf_e_date", value = today)
-      updateAirDateInput(session, "perf_s_date", value = s_date)
-      perf_e_rv(today)
-      perf_s_rv(s_date)
-      perf_trigger(perf_trigger() + 1)
-    }
-    observeEvent(input$perf_1m,  perf_set_period(1),  ignoreInit = TRUE)
-    observeEvent(input$perf_3m,  perf_set_period(3),  ignoreInit = TRUE)
-    observeEvent(input$perf_6m,  perf_set_period(6),  ignoreInit = TRUE)
-    observeEvent(input$perf_12m, perf_set_period(12), ignoreInit = TRUE)
-
-    ## BM 데이터 (트리거 발화 시에만 실행) ----
-    raw_perf_data <- eventReactive(perf_trigger(), {
-      req(perf_s_rv(), perf_e_rv())
-      ma_obj <- ma_v()
-      build_asset_bm_data(
-        return_tbl = ma_obj$read_obj("return"),
-        start      = perf_s_rv(),
-        end        = perf_e_rv()
-      )
-    }, ignoreNULL = TRUE, ignoreInit = TRUE)
-
-    ## 그래프 헬퍼 ----
-    render_perf_line <- function(df, group_id) {
-      req(nrow(df) > 0)
-      df %>%
-        select(기준일, MyPF, BM) %>%
-        pivot_longer(-기준일, names_to = "구분", values_to = "value") %>%
-        group_by(구분) %>%
-        e_charts(기준일) %>%
-        e_line(value, symbol = "none") %>%
-        e_connect_group(group_id) %>%
-        e_y_axis(
-          position = "right",
-          axisLabel = list(
-            formatter = htmlwidgets::JS("function(v){return v.toFixed(1)+'%';}")
-          )
-        ) %>%
-        e_tooltip(trigger = "axis") %>%
-        e_legend(right = 0, top = "center", orient = "vertical") %>%
-        e_grid(right = "20%", left = "3%")
-    }
-
-    render_perf_dd <- function(df, group_id) {
-      req(nrow(df) > 0)
-      df %>%
-        select(기준일, DD) %>%
-        e_charts(기준일) %>%
-        e_area(DD, name = "Drawdown", symbol = "none", color = "#dc3545") %>%
-        e_connect_group(group_id) %>%
-        e_y_axis(
-          max = 0,
-          position = "right",
-          axisLabel = list(
-            formatter = htmlwidgets::JS("function(v){return v.toFixed(1)+'%';}")
-          )
-        ) %>%
-        e_tooltip(trigger = "axis") %>%
-        e_grid(right = "20%", left = "3%")
-    }
-
-    ## 렌더링 (선진국) ----
-    output$perf_line_선진국 <- renderEcharts4r({
-      render_perf_line(raw_perf_data()$선진국, "perf_선진국")
-    })
-    output$perf_dd_선진국 <- renderEcharts4r({
-      render_perf_dd(raw_perf_data()$선진국, "perf_선진국")
-    })
-
-    ## 렌더링 (국내) ----
-    output$perf_line_국내 <- renderEcharts4r({
-      render_perf_line(raw_perf_data()$국내, "perf_국내")
-    })
-    output$perf_dd_국내 <- renderEcharts4r({
-      render_perf_dd(raw_perf_data()$국내, "perf_국내")
-    })
-
-    ## 렌더링 (실물자산) ----
-    output$perf_line_실물 <- renderEcharts4r({
-      render_perf_line(raw_perf_data()$실물자산, "perf_실물")
-    })
-    output$perf_dd_실물 <- renderEcharts4r({
-      render_perf_dd(raw_perf_data()$실물자산, "perf_실물")
-    })
-
-    ## 렌더링 (인컴자산) ----
-    output$perf_line_인컴 <- renderEcharts4r({
-      render_perf_line(raw_perf_data()$인컴자산, "perf_인컴")
-    })
-    output$perf_dd_인컴 <- renderEcharts4r({
-      render_perf_dd(raw_perf_data()$인컴자산, "perf_인컴")
-    })
-
-    ## 렌더링 (채권) ----
-    output$perf_line_채권 <- renderEcharts4r({
-      render_perf_line(raw_perf_data()$채권, "perf_채권")
-    })
-    output$perf_dd_채권 <- renderEcharts4r({
-      render_perf_dd(raw_perf_data()$채권, "perf_채권")
+      req(menu_tabs() == "pf_allo_strategy")
+      render_pf_echart(raw_bm_data(), cols_pf, floor_date(get_target_date(sel_base_month_rv(), ma_v()$today), "year") - days(1))
     })
   })
 }

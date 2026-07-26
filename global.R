@@ -29,9 +29,13 @@ library(scales)
 library(PerformanceAnalytics)
 
 
-# --- 2. 환경 감지 ----
+# --- 2. 환경 감지 및 전역 옵션 ----
 # SHINY_PORT가 비어있으면 로컬 환경, 값이 있으면 shinyapps.io 배포 환경
 is_local <- nchar(Sys.getenv("SHINY_PORT")) == 0
+options(
+  shiny.autoreload.legacy_warning = FALSE,
+  shiny.selectize.threshold = 100000L # 대규모 종목 목록 로드 시 selectizeInput 경고 방지
+)
 
 
 # --- 3. src/ 디렉토리 소싱 (도메인 로직) ----
