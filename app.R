@@ -99,8 +99,12 @@ ui <- page_navbar(
     mod_profit_ui("profit")
   ),
   nav_panel(
-    title = "배분전략 및 성과분석", value = "pf_strategy", icon = icon("chess-board"),
-    mod_strategy_ui("strategy")
+    title = "투자전략", value = "pf_inv_strategy", icon = icon("lightbulb"),
+    mod_inv_strategy_ui("inv_strategy")
+  ),
+  nav_panel(
+    title = "배분전략", value = "pf_allo_strategy", icon = icon("chess-board"),
+    mod_allo_strategy_ui("allo_strategy")
   ),
   nav_panel(
     title = "유동성 관리", value = "pf_liquid", icon = icon("chart-line"),
@@ -205,7 +209,11 @@ server <- function(input, output, session) {
         menu_tabs = reactive(input$menu_tabs),
         on_initial_load = function() show_delay("완료!", "success")
       )
-      mod_strategy_server("strategy",
+      mod_inv_strategy_server("inv_strategy",
+        ma_v = ma_v,
+        pool = db_pool
+      )
+      mod_allo_strategy_server("allo_strategy",
         pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b,
         menu_tabs = reactive(input$menu_tabs)
       )
