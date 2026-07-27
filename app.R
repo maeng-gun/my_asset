@@ -79,7 +79,7 @@ ui <- page_navbar(
     useWaiter()
   ),
   nav_panel(
-    title = "자산운용 내역 기록",
+    title = "운용기록",
     value = "trading_record",
     icon = icon("receipt"),
     navset_card_tab(
@@ -91,7 +91,7 @@ ui <- page_navbar(
     )
   ),
   nav_panel(
-    title = "보유자산 현황", value = "pf_total", icon = icon("sack-dollar"),
+    title = "보유현황", value = "pf_total", icon = icon("sack-dollar"),
     mod_holdings_ui("holdings")
   ),
   nav_panel(

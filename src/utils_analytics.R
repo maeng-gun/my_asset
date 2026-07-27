@@ -538,6 +538,8 @@ build_asset_bm_data <- function(return_tbl, start, end) {
   start <- as.Date(start)
   end   <- as.Date(end)
 
+  all_dates_df <- tibble(기준일 = seq.Date(start, end, by = "day"))
+
   # [헬퍼] 네이버 회사채 금리 크롤링 ----
   get_bond_yield_local <- function(start_date, end_date) {
     base_url <- paste0(
@@ -572,10 +574,10 @@ build_asset_bm_data <- function(return_tbl, start, end) {
   # [헬퍼] 자산군별 MyPF 일간수익률 반환 ----
   calc_mypf_daily <- function(df_asset) {
     if (nrow(df_asset) == 0) {
-      return(tibble(기준일 = as.Date(character()), r_mypf = numeric()))
+      return(all_dates_df %>% mutate(r_mypf = 0.0))
     }
 
-    df_asset %>%
+    res <- df_asset %>%
       arrange(기준일) %>%
       group_by(연도 = year(기준일)) %>%
       mutate(총손익_1 = lag(총손익, default = 0)) %>%
@@ -590,8 +592,11 @@ build_asset_bm_data <- function(return_tbl, start, end) {
           as.numeric(일간손익 / lag(평가금액) * 100)
         )
       ) %>%
-      slice(-1) %>%
       select(기준일, r_mypf)
+
+    all_dates_df %>%
+      left_join(res, by = "기준일") %>%
+      mutate(r_mypf = replace_na(r_mypf, 0.0))
   }
 
   # 1) MyPF 일간수익률 수집 (DB) ----
@@ -651,7 +656,7 @@ build_asset_bm_data <- function(return_tbl, start, end) {
     arrange(date)
 
   # 5) BM 일별 수익률 ----
-  bm_daily <- all_data %>%
+  bm_daily_raw <- all_data %>%
     mutate(
       r_선진국 = (`360200.KS` / lag(`360200.KS`) - 1) * 100,
       r_국내   = (`305050.KS` / lag(`305050.KS`) - 1) * 100,
@@ -664,7 +669,11 @@ build_asset_bm_data <- function(return_tbl, start, end) {
     rename(기준일 = date) %>%
     select(기준일, starts_with("r_"))
 
-  # 6) MyPF 일간수익률 + BM 일간수익률 inner join ----
+  bm_daily <- all_dates_df %>%
+    left_join(bm_daily_raw, by = "기준일") %>%
+    mutate(across(starts_with("r_"), ~ replace_na(.x, 0.0)))
+
+  # 6) MyPF 일간수익률 + BM 일간수익률 병합 ----
   calc_cum <- function(r) (cumprod(1 + r / 100) - 1) * 100
   calc_dd  <- function(cum_r) {
     cr   <- 1 + cum_r / 100
@@ -673,15 +682,14 @@ build_asset_bm_data <- function(return_tbl, start, end) {
   }
 
   join_asset <- function(mypf_daily_df, bm_r_col) {
-    if (nrow(mypf_daily_df) == 0) {
-      return(tibble(기준일 = as.Date(character()),
-                    MyPF = numeric(), BM = numeric(), DD = numeric()))
-    }
-
     bm_r <- bm_daily %>% select(기준일, r_bm = !!sym(bm_r_col))
 
     joined <- mypf_daily_df %>%
-      inner_join(bm_r, by = "기준일") %>%
+      left_join(bm_r, by = "기준일") %>%
+      mutate(
+        r_mypf = replace_na(r_mypf, 0.0),
+        r_bm   = replace_na(r_bm, 0.0)
+      ) %>%
       arrange(기준일)
 
     if (nrow(joined) == 0) {

@@ -25,6 +25,10 @@ mod_inv_strategy_ui <- function(id) {
             ns("perf_query"), "조회",
             class = "btn btn-primary w-100 mt-2"
           ),
+          actionButton(
+            ns("perf_ytd"), "연초 이후",
+            class = "btn btn-outline-secondary w-100 btn-sm mt-2"
+          ),
           fluidRow(
             class = "mt-2 g-1",
             column(6, actionButton(ns("perf_1m"), "1M",
@@ -45,19 +49,19 @@ mod_inv_strategy_ui <- function(id) {
           width = 10, class = "col-12 col-md-8 col-lg-10",
           h6(
             class = "text-muted mt-2 mb-0",
-            "선진국 주식 (BM: KODEX 선진국MSCI World, 360200)"
+            "선진국 주식 (BM: ACE 미국S&P500, 360200)"
           ),
           echarts4rOutput(ns("perf_line_선진국"), height = "400px"),
           echarts4rOutput(ns("perf_dd_선진국"), height = "200px"),
           h6(
             class = "text-muted mt-3 mb-0",
-            "국내 주식 (BM: KODEX 코스피, 305050)"
+            "국내 주식 (BM: ACE 코스피, 305050)"
           ),
           echarts4rOutput(ns("perf_line_국내"), height = "400px"),
           echarts4rOutput(ns("perf_dd_국내"), height = "200px"),
           h6(
             class = "text-muted mt-3 mb-0",
-            "실물자산 (BM: KODEX 골드선물(H), 411060)"
+            "실물자산 (BM: ACE KRX금현물, 411060)"
           ),
           echarts4rOutput(ns("perf_line_실물"), height = "400px"),
           echarts4rOutput(ns("perf_dd_실물"), height = "200px"),
@@ -69,7 +73,7 @@ mod_inv_strategy_ui <- function(id) {
           echarts4rOutput(ns("perf_dd_인컴"), height = "200px"),
           h6(
             class = "text-muted mt-3 mb-0",
-            "채권 (BM: 회사채 3년)"
+            "채권 (BM: 회사채 3년(AA-))"
           ),
           echarts4rOutput(ns("perf_line_채권"), height = "400px"),
           echarts4rOutput(ns("perf_dd_채권"), height = "200px")
@@ -215,18 +219,18 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
 
     ## 단축 기간 버튼 핸들러 ----
     perf_set_period <- function(months_back) {
-        showModal(modalDialog(
-          title = NULL,
-          div(
-            class = "text-center my-4",
-            tags$i(class = "fa fa-spinner fa-spin fa-3x text-primary mb-3"),
-            h5("투자성과 및 벤치마크 데이터 산출 중...", class = "mb-2"),
-            p("데이터를 수집하고 지표를 계산하고 있습니다. 잠시만 기다려주세요.", class = "text-muted small mb-0")
-          ),
-          footer = NULL,
-          easyClose = FALSE,
-          size = "m"
-        ))
+      showModal(modalDialog(
+        title = NULL,
+        div(
+          class = "text-center my-4",
+          tags$i(class = "fa fa-spinner fa-spin fa-3x text-primary mb-3"),
+          h5("투자성과 및 벤치마크 데이터 산출 중...", class = "mb-2"),
+          p("데이터를 수집하고 지표를 계산하고 있습니다. 잠시만 기다려주세요.", class = "text-muted small mb-0")
+        ),
+        footer = NULL,
+        easyClose = FALSE,
+        size = "m"
+      ))
       today <- Sys.Date()
       s_date <- today %m-% months(months_back)
       updateAirDateInput(session, "perf_e_date", value = today)
@@ -242,6 +246,33 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
     observeEvent(input$perf_3m, perf_set_period(3), ignoreInit = TRUE)
     observeEvent(input$perf_6m, perf_set_period(6), ignoreInit = TRUE)
     observeEvent(input$perf_12m, perf_set_period(12), ignoreInit = TRUE)
+    observeEvent(input$perf_ytd,
+      {
+        showModal(modalDialog(
+          title = NULL,
+          div(
+            class = "text-center my-4",
+            tags$i(class = "fa fa-spinner fa-spin fa-3x text-primary mb-3"),
+            h5("투자성과 및 벤치마크 데이터 산출 중...", class = "mb-2"),
+            p("데이터를 수집하고 지표를 계산하고 있습니다. 잠시만 기다려주세요.", class = "text-muted small mb-0")
+          ),
+          footer = NULL,
+          easyClose = FALSE,
+          size = "m"
+        ))
+        today <- Sys.Date()
+        s_date <- as.Date(format(today, "%Y-01-01"))
+        updateAirDateInput(session, "perf_e_date", value = today)
+        updateAirDateInput(session, "perf_s_date", value = s_date)
+        perf_e_rv(today)
+        perf_s_rv(s_date)
+        next_trig <- perf_trigger() + 1
+        later::later(function() {
+          perf_trigger(next_trig)
+        }, delay = 0.1)
+      },
+      ignoreInit = TRUE
+    )
 
     ## BM 데이터 (트리거 발화 시에만 실행) ----
     raw_perf_data <- eventReactive(perf_trigger(),
@@ -353,7 +384,7 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       )
       t_map <- setNames(as.character(tickers_df$종목명), as.character(tickers_df$티커))
       tickers_map_rv(t_map)
-      
+
       suppressWarnings(
         updateSelectizeInput(session, "ticker_select",
           choices = choices_vec, server = FALSE, selected = character(0)
@@ -393,14 +424,17 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
             t_name <- if (t_val %in% names(t_map)) t_map[[t_val]] else t_val
             b_name <- if (b_val == "226490.KS" || b_val == "305050" || b_val == "305050.KS") "코스피" else if (b_val == "SPY") "S&P500" else b_val
 
-            res <- tryCatch({
-              build_ticker_analysis_data(
-                ticker      = t_val,
-                bm_ticker   = b_val,
-                ticker_name = t_name,
-                bm_name     = b_name
-              )
-            }, error = function(e) NULL)
+            res <- tryCatch(
+              {
+                build_ticker_analysis_data(
+                  ticker      = t_val,
+                  bm_ticker   = b_val,
+                  ticker_name = t_name,
+                  bm_name     = b_name
+                )
+              },
+              error = function(e) NULL
+            )
 
             # 계산 완료 후 모달 닫기
             removeModal()

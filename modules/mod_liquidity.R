@@ -14,15 +14,25 @@ mod_liquidity_ui <- function(id) {
     nav_panel(
       title = "자금유출입",
       fluidRow(
-        column(width = 3, class = "col-12 col-md-4 col-lg-3",
+        column(
+          width = 12,
+          card(
+            class = "mb-3 border-info",
+            card_header("평가금액 추이", class = "bg-info text-white"),
+            card_body(echarts4rOutput(ns("total_profit_trend"), height = "360px"))
+          )
+        )
+      ),
+      fluidRow(
+        column(width = 2, class = "col-12 col-md-2 col-lg-2",
                card(class = "mb-3 border-info",
                    card_header("입력사항", class = "bg-info text-white"),
                    card_body(uiOutput(ns('manage_inflow'))))),
-        column(width = 5, class = "col-12 col-md-4 col-lg-5",
+        column(width = 5, class = "col-12 col-md-5 col-lg-5",
                card(class = "mb-3 border-info",
                    card_header("유출입 내역", class = "bg-info text-white"),
                    card_body(reactableOutput(ns('inflow_table1'))))),
-        column(width = 4, class = "col-12 col-md-4 col-lg-4",
+        column(width = 5, class = "col-12 col-md-5 col-lg-5",
                card(class = "mb-3 border-info",
                    card_header("만기도래내역", class = "bg-info text-white"),
                    card_body(reactableOutput(ns('maturity_table')))))
@@ -33,9 +43,9 @@ mod_liquidity_ui <- function(id) {
     nav_panel(
       title = "총자산추이",
       fluidRow(
-        card(class = "mb-3 border-info",
+        card(class = "mb-3 border-info", fill = FALSE,
             card_header("총자산현황", class = "bg-info text-white"),
-            card_body(reactableOutput(ns('current_total_asset_table'))))),
+            card_body(fill = FALSE, reactableOutput(ns('current_total_asset_table'))))),
       fluidRow(
         card(class = "mb-3 border-info",
             card_header("총자산추이", class = "bg-info text-white"),
@@ -46,9 +56,9 @@ mod_liquidity_ui <- function(id) {
     nav_panel(
       title = "가용자금추이",
       fluidRow(
-        card(class = "mb-3 border-info",
+        card(class = "mb-3 border-info", fill = FALSE,
             card_header("현금성자산현황", class = "bg-info text-white"),
-            card_body(reactableOutput(ns('current_cash_asset_table'))))),
+            card_body(fill = FALSE, reactableOutput(ns('current_cash_asset_table'))))),
       fluidRow(
         card(class = "mb-3 border-info",
             card_header("가용자금추이", class = "bg-info text-white"),
@@ -64,6 +74,24 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
     liq <- reactiveValues(c = NULL, d = NULL)
 
     # === a. 자금유출입 탭 ===
+
+    ## 평가금액 추이 차트 ----
+    output$total_profit_trend <- renderEcharts4r({
+      req(menu_tabs() == "pf_liquid")
+      ma_obj <- ma_v()
+
+      fig1_df <- ma_obj$eval_trend_data
+
+      fig1_df |>
+        group_by(구분) |>
+        e_charts(기준일) |>
+        e_line(평가금액, name = "평가금액", symbol = "none") |>
+        e_tooltip(trigger = "axis") |>
+        e_datazoom(x_index = 0, type = "slider") |>
+        e_y_axis(position = "right") |>
+        e_grid(right = "15%", left = "3%") |>
+        e_legend(right = 0, top = "center", orient = "vertical")
+    })
 
 ## 메뉴 설정 ----
     output$manage_inflow <- renderUI({
@@ -191,7 +219,7 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       df <- liquidity_data()$current_status %>% filter(구분 == '총자산')
       # Apply integer format to all numeric columns
       int_c <- names(df)[sapply(df, is.numeric)]
-      render_rt(df, int_cols = int_c)
+      render_rt(df, int_cols = int_c, dynamic_height = FALSE)
     })
 
     output$inflow_table3 <- renderReactable({
@@ -207,7 +235,7 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       req(menu_tabs() == "pf_liquid")
       df <- liquidity_data()$current_status %>% filter(구분 == '현금성자산')
       int_c <- names(df)[sapply(df, is.numeric)]
-      render_rt(df, int_cols = int_c)
+      render_rt(df, int_cols = int_c, dynamic_height = FALSE)
     })
 
     output$inflow_table4 <- renderReactable({

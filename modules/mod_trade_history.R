@@ -154,7 +154,20 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       )
     })
 
-    update_new_trade <- reactive({
+    reset_trade_inputs <- function() {
+      updateAirDateInput(session, "trading_date", value = Sys.Date())
+      updateNumericInput(session, "buy_q", value = 0)
+      updateNumericInput(session, "sell_q", value = 0)
+      updateAutonumericInput(session, "buy_p", value = 0)
+      updateAutonumericInput(session, "sell_b", value = 0)
+      updateAutonumericInput(session, "buy_c", value = 0)
+      updateAutonumericInput(session, "sell_p", value = 0)
+      updateAutonumericInput(session, "int_dev", value = 0)
+      updateAutonumericInput(session, "sell_c", value = 0)
+      updateAutonumericInput(session, "in_out_c", value = 0)
+    }
+
+    update_new_trade <- function() {
       updateSelectInput(session, "new2",
         choices = c("신규", rv$trade$행번호),
         selected = "신규"
@@ -168,7 +181,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
             통화 == input$ass_cur2
           ))$종목명
       )
-    })
+    }
 
     # --- 운용구분 변경 ----
     observeEvent(input$type2, {
@@ -206,30 +219,23 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
 
     # --- 신규/수정 선택 ----
     observeEvent(input$new2, {
-      if (input$new2 != "신규") {
+      if (!is.null(input$new2) && input$new2 != "신규") {
         t_rows2 <- filter(rv$trade, 행번호 == input$new2)
-        updateAirDateInput(session, "trading_date", value = t_rows2$거래일자)
-        updateSelectInput(session, "ass_name2", selected = t_rows2$종목명)
-        updateNumericInput(session, "buy_q", value = t_rows2$매입수량)
-        updateNumericInput(session, "sell_q", value = t_rows2$매도수량)
-        updateAutonumericInput(session, "buy_p", value = t_rows2$매입액)
-        updateAutonumericInput(session, "sell_b", value = t_rows2$매도원금)
-        updateAutonumericInput(session, "buy_c", value = t_rows2$현금지출)
-        updateAutonumericInput(session, "sell_p", value = t_rows2$매도액)
-        updateAutonumericInput(session, "int_dev", value = t_rows2$이자배당액)
-        updateAutonumericInput(session, "sell_c", value = t_rows2$현금수입)
-        updateAutonumericInput(session, "in_out_c", value = t_rows2$입출금)
+        if (nrow(t_rows2) > 0) {
+          updateAirDateInput(session, "trading_date", value = t_rows2$거래일자)
+          updateSelectInput(session, "ass_name2", selected = t_rows2$종목명)
+          updateNumericInput(session, "buy_q", value = t_rows2$매입수량)
+          updateNumericInput(session, "sell_q", value = t_rows2$매도수량)
+          updateAutonumericInput(session, "buy_p", value = t_rows2$매입액)
+          updateAutonumericInput(session, "sell_b", value = t_rows2$매도원금)
+          updateAutonumericInput(session, "buy_c", value = t_rows2$현금지출)
+          updateAutonumericInput(session, "sell_p", value = t_rows2$매도액)
+          updateAutonumericInput(session, "int_dev", value = t_rows2$이자배당액)
+          updateAutonumericInput(session, "sell_c", value = t_rows2$현금수입)
+          updateAutonumericInput(session, "in_out_c", value = t_rows2$입출금)
+        }
       } else {
-        updateAirDateInput(session, "trading_date", value = Sys.Date())
-        updateNumericInput(session, "buy_q", value = 0)
-        updateNumericInput(session, "sell_q", value = 0)
-        updateAutonumericInput(session, "buy_p", value = 0)
-        updateAutonumericInput(session, "sell_b", value = 0)
-        updateAutonumericInput(session, "buy_c", value = 0)
-        updateAutonumericInput(session, "sell_p", value = 0)
-        updateAutonumericInput(session, "int_dev", value = 0)
-        updateAutonumericInput(session, "sell_c", value = 0)
-        updateAutonumericInput(session, "in_out_c", value = 0)
+        reset_trade_inputs()
       }
     })
 
@@ -262,6 +268,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
 
     # --- 추가 ----
     observeEvent(input$ass_trade_new, {
+      req(rv$trade_new)
       if (input$type2 == "투자자산") {
         rv$trade_new$행번호 <- ma$assets_daily_last_num + 1
         dbxInsert(pool, "assets_daily", rv$trade_new)
@@ -272,10 +279,12 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       sk_b(!sk_b())
       rv$trade <- reset_trade()
       update_new_trade()
+      reset_trade_inputs()
     })
 
     # --- 수정 ----
     observeEvent(input$ass_trade_mod, {
+      req(rv$trade_new)
       rv$trade_new$행번호 <- input$new2
       if (input$type2 == "투자자산") {
         dbxUpdate(pool, "assets_daily", rv$trade_new,
@@ -289,10 +298,12 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       sk_b(!sk_b())
       rv$trade <- reset_trade()
       update_new_trade()
+      reset_trade_inputs()
     })
 
     # --- 삭제 ----
     observeEvent(input$ass_trade_del, {
+      req(rv$trade_new)
       rv$trade_new$행번호 <- input$new2
       if (input$type2 == "투자자산") {
         dbxDelete(pool, "assets_daily", rv$trade_new)
@@ -302,6 +313,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       sk_b(!sk_b())
       rv$trade <- reset_trade()
       update_new_trade()
+      reset_trade_inputs()
     })
   })
 }

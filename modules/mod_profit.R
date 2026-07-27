@@ -53,10 +53,6 @@ mod_profit_ui <- function(id) {
           fluidRow(
             column(6, echarts4rOutput(ns("chart_채권"), height = "300px")),
             column(6, echarts4rOutput(ns("chart_현금성"), height = "300px"))
-          ),
-          # [Row 5] 평가금액 추이 차트
-          fluidRow(
-            column(12, echarts4rOutput(ns("total_profit_trend"), height = "360px"))
           )
         )
       )
@@ -140,7 +136,11 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
         return_tbl  = ma_obj$read_obj("return"),
         start       = input$total_s_date,
         end         = input$total_e_date
-      )
+      ) |>
+        mutate(
+          일간손익 = round(일간손익),
+          손익누계 = round(손익누계)
+        )
     })
 
     ## 자산군별 손익누계 그래프 데이터 ----
@@ -149,11 +149,15 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       input$total_e_date
       ma_obj <- ma_v()
 
-      build_asset_profit_data(
+      res <- build_asset_profit_data(
         return_tbl = ma_obj$read_obj("return"),
         start      = input$total_s_date,
         end        = input$total_e_date
       )
+
+      lapply(res, function(df) {
+        mutate(df, 손익누계 = round(손익누계))
+      })
     })
 
     ## [위] 손익 콤보 차트 — 일간손익(막대) + 손익누계(꺾은선) ----
@@ -165,25 +169,6 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
         e_charts(기준일) |>
         e_bar(일간손익, name = "일간손익") |>
         e_line(손익누계, name = "손익누계", symbol = "none") |>
-        e_tooltip(trigger = "axis") |>
-        e_datazoom(x_index = 0, type = "slider") |>
-        e_y_axis(position = "right") |>
-        e_grid(right = "15%", left = "3%") |>
-        e_legend(right = 0, top = "center", orient = "vertical")
-    })
-
-    ## [아래] 평가금액 추이 차트 — 원금 라인 제거, 평가금액만 표시 ----
-    output$total_profit_trend <- renderEcharts4r({
-      req(menu_tabs() == "pf_bs_pl")
-      ma_obj <- ma_v()
-
-      # build_eval_trend_data: 평가금액만 반환 (원금 제거됨)
-      fig1_df <- ma_obj$eval_trend_data
-
-      fig1_df |>
-        group_by(구분) |>
-        e_charts(기준일) |>
-        e_line(평가금액, name = "평가금액", symbol = "none") |>
         e_tooltip(trigger = "axis") |>
         e_datazoom(x_index = 0, type = "slider") |>
         e_y_axis(position = "right") |>
