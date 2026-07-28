@@ -414,6 +414,90 @@ calc_maturity_analysis <- function(bs_pl_mkt_a, bs_pl_mkt_p,
 }
 
 
+# 5-1. 평가금액 추이 차트 데이터 계산====
+#'
+#' @param return_tbl return dbplyr tbl (또는 tibble)
+#' @param inflow_df 자금유출입 tibble
+#' @param today 오늘 날짜 (Date)
+#' @param t_comm2 상품별/계좌별 보유현황 tibble
+#' @param acct_order 계좌 순서 벡터
+#' @return tibble
+calc_eval_trend_data <- function(return_tbl, inflow_df, today,
+                                 t_comm2 = NULL, acct_order = NULL) {
+  days1 <- today %m-% years(1)
+
+  # 과거 1년 평가금액 (원금 제거, 반올림)
+  df2 <- return_tbl %>%
+    filter(자산군 == "<합계>") %>%
+    transmute(기준일 = as.Date(기준일), 평가금액 = round(평가금액 / 10000, 0)) %>%
+    filter(기준일 >= days1) %>%
+    arrange(기준일) %>%
+    collect() %>%
+    mutate(구분 = "과거평가액")
+
+  # 기준일(today) 기준 자산 초기값 계산 (단위: 만원)
+  init_investable   <- 0
+  init_withdrawable  <- 0
+  init_liquidatable  <- 0
+
+  if (!is.null(t_comm2) && nrow(t_comm2) > 0) {
+    # 1) 투자가능자산: 현금성자산 합계 / 10000
+    init_investable <- sum(
+      t_comm2 %>% filter(자산군 == "현금성") %>% pull(평가금액),
+      na.rm = TRUE
+    ) / 10000
+
+    # 2) 인출가능현금: 현금성자산 & 계좌=='한투' / 10000
+    init_withdrawable <- sum(
+      t_comm2 %>% filter(자산군 == "현금성", 계좌 == "한투") %>% pull(평가금액),
+      na.rm = TRUE
+    ) / 10000
+
+    # 3) 현금화가능자산: 총자산(자산군 == "" | is.na(자산군)) & 계좌 %in% c("한투", "금현물") / 10000
+    init_liquidatable <- sum(
+      t_comm2 %>% filter((자산군 == "" | is.na(자산군)), 계좌 %in% c("한투", "금현물")) %>% pull(평가금액),
+      na.rm = TRUE
+    ) / 10000
+  }
+
+  # 일별 자금유출입 집계 (단위: 만원)
+  inflow_all <- inflow_df %>%
+    transmute(기준일 = as.Date(거래일자), 자금유출입 = 자금유출입 / 10000) %>%
+    group_by(기준일) %>%
+    summarise(변동액_전체 = sum(자금유출입, na.rm = TRUE), .groups = "drop")
+
+  inflow_hantu <- inflow_df %>%
+    filter(계좌 == "한투") %>%
+    transmute(기준일 = as.Date(거래일자), 자금유출입 = 자금유출입 / 10000) %>%
+    group_by(기준일) %>%
+    summarise(변동액_한투 = sum(자금유출입, na.rm = TRUE), .groups = "drop")
+
+  last_eval <- if (nrow(df2) > 0) last(df2$평가금액) else 0
+
+  # 미래 1년 예상 데이터 (today부터 시작, 소수점 제거 반올림)
+  df3 <- tibble(기준일 = seq(today, today %m+% years(1), by = 1)) %>%
+    left_join(inflow_all, by = "기준일") %>%
+    left_join(inflow_hantu, by = "기준일") %>%
+    mutate(
+      변동액_전체 = if_else(is.na(변동액_전체), 0, 변동액_전체),
+      변동액_한투 = if_else(is.na(변동액_한투), 0, 변동액_한투),
+      누적_전체 = cumsum(if_else(기준일 == today, 0, 변동액_전체)),
+      누적_한투 = cumsum(if_else(기준일 == today, 0, 변동액_한투)),
+      평가금액       = round(last_eval + 누적_전체, 0),
+      투자가능자산   = round(init_investable + 누적_전체, 0),
+      현금화가능자산 = round(init_liquidatable + 누적_한투, 0),
+      인출가능현금   = round(init_withdrawable + 누적_한투, 0)
+    ) %>%
+    select(기준일, 평가금액, 투자가능자산, 현금화가능자산, 인출가능현금) %>%
+    mutate(구분 = "예상평가액(점선)")
+
+  bind_rows(df2, df3)
+}
+
+compute_eval_trend_data <- calc_eval_trend_data
+
+
+
 # 6. 가용자금 분석====
 #'
 #' @param t_comm2 상품별/계좌별 보유현황 tibble

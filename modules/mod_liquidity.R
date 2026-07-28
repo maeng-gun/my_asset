@@ -80,12 +80,33 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       req(menu_tabs() == "pf_liquid")
       ma_obj <- ma_v()
 
-      fig1_df <- ma_obj$eval_trend_data
+      trend_df <- calc_eval_trend_data(
+        return_tbl = ma_obj$read_obj("return"),
+        inflow_df  = ma_obj$inflow,
+        today      = ma_obj$today,
+        t_comm2    = ma_obj$t_comm2,
+        acct_order = ma_obj$acct_order
+      )
 
-      fig1_df |>
-        group_by(구분) |>
+      df_past <- trend_df %>%
+        filter(구분 == "과거평가액") %>%
+        select(기준일, 과거평가액 = 평가금액)
+
+      df_future <- trend_df %>%
+        filter(구분 == "예상평가액(점선)") %>%
+        select(기준일, 예상평가액 = 평가금액, 투자가능자산, 현금화가능자산, 인출가능현금)
+
+      df_chart <- full_join(df_past, df_future, by = "기준일") %>%
+        arrange(기준일)
+
+      df_chart |>
         e_charts(기준일) |>
-        e_line(평가금액, name = "평가금액", symbol = "none") |>
+        e_line(과거평가액, name = "과거평가액", symbol = "none") |>
+        e_line(예상평가액, name = "예상평가액(점선)", symbol = "none", lineStyle = list(type = "dashed")) |>
+        e_line(투자가능자산, name = "투자가능자산", symbol = "none") |>
+        e_line(현금화가능자산, name = "현금화가능자산", symbol = "none") |>
+        e_line(인출가능현금, name = "인출가능현금", symbol = "none") |>
+        e_color(c("#2b5c8f", "#4682b4", "#28a745", "#fd7e14", "#dc3545")) |>
         e_tooltip(trigger = "axis") |>
         e_datazoom(x_index = 0, type = "slider") |>
         e_y_axis(position = "right") |>

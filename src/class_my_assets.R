@@ -24,7 +24,7 @@ MyAssets <- R6Class(
     class3_order = NULL, t_allocation = NULL, account_allocation = NULL,
     y_num = NULL, grid = NULL, future_eval = NULL, closing_prices = NULL,
     account_allocation2 = NULL, comm_profit2 = NULL, t_comm10 = NULL,
-    total_profit = NULL, eval_trend_data = NULL, profit_variation = NULL,
+    total_profit = NULL, profit_variation = NULL,
 
     ## 1. 속성 초기화 ====
     initialize = function(pool) {
@@ -813,42 +813,6 @@ MyAssets <- R6Class(
         )
     },
 
-    ## 13 (평가및손익) 평가금액 추이 차트 데이터 계산====
-    compute_eval_trend_data = function() {
-      days1 <- self$today %m-% years(1)
-
-      # 과거 1년 평가금액 (원금 제거)
-      df2 <- self$read_obj("return") %>%
-        filter(자산군 == "<합계>") %>%
-        transmute(기준일 = as.Date(기준일), 평가금액 = 평가금액 / 10000) %>%
-        filter(기준일 >= days1) %>%
-        arrange(기준일) %>%
-        collect() %>%
-        mutate(구분 = "과거평가액")
-
-      # 미래 1년 예상 평가금액 (자금유출입 가정, 원금 제거)
-      df3 <- tibble(기준일 = seq(self$today + 1, self$today %m+% years(1), 1)) %>%
-        left_join(
-          self$inflow %>%
-            transmute(기준일 = 거래일자, 자금유출입 = 자금유출입 / 10000) %>%
-            group_by(기준일) %>%
-            summarise(변동액 = sum(자금유출입)),
-          by = "기준일"
-        ) %>%
-        mutate(
-          변동액 = if_else(is.na(변동액), 0, 변동액),
-          평가금액 = if_else(기준일 == self$today + 1,
-            변동액 + last(df2$평가금액),
-            변동액
-          ),
-          평가금액 = cumsum(평가금액)
-        ) %>%
-        select(기준일, 평가금액) %>%
-        mutate(구분 = "예상평가액(점선)")
-
-      self$eval_trend_data <- bind_rows(df2, df3)
-    },
-
     ## 14 (평가및손익) 손익변동 계산====
     compute_profit_variation = function() {
       dates <- self$read_obj("return") %>%
@@ -1011,7 +975,6 @@ MyAssets <- R6Class(
       self$compute_comm_profit()
 
       self$compute_total_profit()
-      self$compute_eval_trend_data()
       self$compute_profit_variation()
     },
 
