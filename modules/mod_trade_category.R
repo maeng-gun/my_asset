@@ -1,10 +1,10 @@
 # =============================================================================
-# mod_trade_category — 구분항목 관리 모듈
+# mod_trade_category.R — 구분항목 관리 모듈
 # =============================================================================
-# (구 mod_category.R에서 이름 변경)
 # DB CRUD는 pool 객체 직접 주입받아 사용
 # =============================================================================
 
+# 1. 구분항목 관리 UI ----
 mod_trade_category_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
@@ -45,6 +45,7 @@ mod_trade_category_ui <- function(id) {
   )
 }
 
+# 2. 구분항목 관리 서버 ----
 mod_trade_category_server <- function(id, pool, ma, sk_c, ctg) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -58,8 +59,8 @@ mod_trade_category_server <- function(id, pool, ma, sk_c, ctg) {
       "자산군", "세부자산군", "세부자산군2"
     )
 
-    purrr::map2(ass_ctg, ctg_kor, function(i, j) {
-      output[[paste0(i, "_list")]] <<- renderUI({
+    purrr::walk2(ass_ctg, ctg_kor, function(i, j) {
+      output[[paste0(i, "_list")]] <- renderUI({
         tagList(
           textInput(ns(paste0("add_", i)), label = j, value = ""),
           selectInput(ns(paste0("select_", i)), NULL, ctg()[[i]]),

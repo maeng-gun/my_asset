@@ -1,10 +1,10 @@
 # =============================================================================
-# mod_trade_total — 종합거래내역 모듈
+# mod_trade_total.R — 종합거래내역 모듈
 # =============================================================================
-# (구 mod_total_trade.R에서 이름 변경)
 # 순수 함수 calc_total_trading() 사용
 # =============================================================================
 
+# 1. 종합거래내역 UI ----
 mod_trade_total_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
@@ -77,6 +77,7 @@ mod_trade_total_ui <- function(id) {
   )
 }
 
+# 2. 종합거래내역 서버 ----
 mod_trade_total_server <- function(id, pool, ma_b) {
   moduleServer(id, function(input, output, session) {
     output$total_trade_table <- renderReactable({
@@ -89,7 +90,6 @@ mod_trade_total_server <- function(id, pool, ma_b) {
       if (!is.null(input$total_trade_date)) {
         ma_obj <- ma_b()
 
-        # calc_total_trading 순수 함수 호출
         df <- calc_total_trading(
           assets_df         = ma_obj$assets,
           pension_df        = ma_obj$pension,

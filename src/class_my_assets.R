@@ -1,8 +1,8 @@
 # =============================================================================
 # MyAssets R6 클래스 — 포트폴리오 DB 동기화 & 상태 관리 전용
 # =============================================================================
-# MyData를 상속하며, 장부금액·평가금액·손익·배분 등 DB 연동 로직만 보유
-# 순수 계산/시각화 로직은 src/utils_analytics.R로 분리됨
+# MyData를 상속하며, 장부금액·평가금액·손익·배분 등 DB 연동 로직 관리
+# 순수 계산/시각화 로직은 src/utils_analytics.R에서 수행
 # pool 객체는 외부(app.R)에서 생성하여 주입받음
 # =============================================================================
 
@@ -14,19 +14,17 @@ MyAssets <- R6Class(
     assets = NULL, pension = NULL, ex_usd = NULL, ex_jpy = NULL,
     bs_pl_mkt_a = NULL, bs_pl_mkt_p = NULL,
     bl = NULL, my = NULL, ks = NULL,
-    t_class = NULL, t_comm = NULL, t_comm2 = NULL,
-    t_comm3 = NULL, t_comm4 = NULL, t_comm5 = NULL, comm_profit = NULL,
+    t_comm = NULL, t_comm2 = NULL, t_comm3 = NULL, comm_profit = NULL,
     inflow = NULL, book_info = NULL, bs_pl_a = NULL, bs_pl_p = NULL,
     assets_last_num = NULL, assets_daily_last_num = NULL,
     pension_last_num = NULL, pension_daily_last_num = NULL,
     inflow_last_num = NULL, cash_in_out = NULL, acct_order = NULL,
     cur_order = NULL, class_order = NULL, class2_order = NULL,
-    class3_order = NULL, t_allocation = NULL, account_allocation = NULL,
-    y_num = NULL, grid = NULL, future_eval = NULL, closing_prices = NULL,
-    account_allocation2 = NULL, comm_profit2 = NULL, t_comm10 = NULL,
+    class3_order = NULL, account_allocation = NULL,
+    closing_prices = NULL, comm_profit2 = NULL, t_comm10 = NULL,
     total_profit = NULL, profit_variation = NULL,
 
-    ## 1. 속성 초기화 ====
+    ## 1. 속성 초기화 ----
     initialize = function(pool) {
       super$initialize(pool)
       self$today <- today()
@@ -41,9 +39,7 @@ MyAssets <- R6Class(
             )
           }
         },
-        error = function(e) {
-          # 테이블이 없거나 권한 문제 등 에러 발생 시 무시하고 진행
-        }
+        error = function(e) {}
       )
 
       self$days <- seq(make_date(2024, 1, 1),
@@ -81,23 +77,13 @@ MyAssets <- R6Class(
       )
     },
 
-    ## 2.(장부금액) 거래내역 기록 테이블 ====
+    ## 2. 거래내역 기록 테이블 조회 ----
     get_trading_record = function(table, acct, cur, limit_n) {
-      if (table == "투자자산") {
-        table_name <- "assets"
-      } else {
-        table_name <- "pension"
-      }
-
-      if (table == "투자자산") {
-        table <- "assets"
-      } else {
-        table <- "pension"
-      }
+      table_name <- if (table == "투자자산") "assets" else "pension"
 
       suppressWarnings({
-        df1 <- self$read_obj(table)
-        df2 <- self$read_obj(paste0(table, "_daily"))
+        df1 <- self$read_obj(table_name)
+        df2 <- self$read_obj(paste0(table_name, "_daily"))
       })
 
       df2 %>%
@@ -126,7 +112,7 @@ MyAssets <- R6Class(
         collect()
     },
 
-    ## 3.(장부금액) 계좌거래 내역 전처리 ====
+    ## 3. 계좌거래 내역 전처리 ----
     get_daily_trading = function(ast_info, trade) {
       dt_info <- as.data.table(ast_info)
       dt_trade <- as.data.table(trade)
@@ -174,15 +160,11 @@ MyAssets <- R6Class(
       )]
     },
 
-    ## 4.(장부금액) 운용자산 잔액-손익 테이블 생성 ====
+    ## 4. 운용자산 잔액-손익 테이블 생성 ----
     get_bs_pl = function(mode = "assets", trade_tbl) {
       trade <- copy(trade_tbl)
+      codes <- if (mode == "assets") as.data.table(self$assets) else as.data.table(self$pension)
 
-      if (mode == "assets") {
-        codes <- as.data.table(self$assets)
-      } else {
-        codes <- as.data.table(self$pension)
-      }
       setkey(trade, 계좌, 종목코드, 거래일자)
 
       trade[, `:=`(
@@ -218,7 +200,6 @@ MyAssets <- R6Class(
 
       setkey(bs_pl, 계좌, 종목코드, 거래일자)
 
-      # 예수금 & 평잔 처리 (dcast 사용)
       if (mode == "assets") {
         calc_cash_flow <- function(target_cur) {
           cash_dt <- trade[통화 == target_cur,
@@ -230,14 +211,10 @@ MyAssets <- R6Class(
             cash_wide <- dcast(cash_dt, 거래일자 ~ 계좌, value.var = "현금", fill = 0)
             acct_cols <- setdiff(names(cash_wide), "거래일자")
             cash_b <- copy(cash_wide)
-            cash_b[, (acct_cols) := lapply(.SD, cumsum),
-              .SDcols = acct_cols
-            ]
+            cash_b[, (acct_cols) := lapply(.SD, cumsum), .SDcols = acct_cols]
             cash_e <- copy(cash_b)
             cash_e[, 연도 := year(거래일자)]
-            cash_e[, (acct_cols) := lapply(.SD, dplyr::cummean),
-              by = .(연도), .SDcols = acct_cols
-            ]
+            cash_e[, (acct_cols) := lapply(.SD, dplyr::cummean), by = .(연도), .SDcols = acct_cols]
             cash_e[, 연도 := NULL]
             return(list(b = cash_b, e = cash_e))
           } else {
@@ -245,53 +222,43 @@ MyAssets <- R6Class(
           }
         }
 
-        cw <- calc_cash_flow("원화")
-        cd <- calc_cash_flow("달러")
-        cy <- calc_cash_flow("엔화")
-
-        if (!is.null(cw)) {
-          map_w <- list(
+        # 현금성 예수금 맵핑 설정
+        cash_mappings <- list(
+          "원화" = list(
             "엔투ISA예수금" = "엔투ISA",
             "한투예수금" = "한투",
             "한투ISA예수금" = "한투ISA",
             "금현물계좌현금" = "금현물"
-          )
-          for (nm in names(map_w)) {
-            if (map_w[[nm]] %in% names(cw$b)) {
-              bs_pl[
-                종목명 == nm,
-                장부금액 := cw$b[.SD, get(map_w[[nm]]), on = "거래일자"]
-              ]
-              bs_pl[종목명 == nm, 평잔 := cw$e[.SD, get(map_w[[nm]]), on = "거래일자"]]
-            }
-          }
-        }
-
-        if (!is.null(cd)) {
-          map_d <- list(
+          ),
+          "달러" = list(
             "불리오달러" = "불리오",
             "직접운용달러" = "한투"
+          ),
+          "엔화" = list(
+            "직접운용엔" = "한투"
           )
-          for (nm in names(map_d)) {
-            if (map_d[[nm]] %in% names(cd$b)) {
-              bs_pl[종목명 == nm, 장부금액 := cd$b[.SD, get(map_d[[nm]]), on = "거래일자"]]
-              bs_pl[종목명 == nm, 평잔 := cd$e[.SD, get(map_d[[nm]]), on = "거래일자"]]
+        )
+
+        for (cur in names(cash_mappings)) {
+          c_res <- calc_cash_flow(cur)
+          if (!is.null(c_res)) {
+            cmap <- cash_mappings[[cur]]
+            for (item_name in names(cmap)) {
+              acct_target <- cmap[[item_name]]
+              if (acct_target %in% names(c_res$b)) {
+                bs_pl[종목명 == item_name, 장부금액 := c_res$b[.SD, get(acct_target), on = "거래일자"]]
+                bs_pl[종목명 == item_name, 평잔 := c_res$e[.SD, get(acct_target), on = "거래일자"]]
+              }
             }
           }
-        }
-
-        if (!is.null(cy) && "한투" %in% names(cy$b)) {
-          bs_pl[종목명 == "직접운용엔", 장부금액 := cy$b[.SD, 한투, on = "거래일자"]]
-          bs_pl[종목명 == "직접운용엔", 평잔 := cy$e[.SD, 한투, on = "거래일자"]]
         }
       }
 
       return(bs_pl)
     },
 
-    ## 5.(장부금액) 장부금액 자료 산출 ====
+    ## 5. 장부금액 자료 산출 ----
     run_book = function() {
-      # DB 원자료 캐싱 (data.table 형식 변환)
       self$assets <- as.data.table(self$read("assets"))
       self$pension <- as.data.table(self$read("pension"))
       self$inflow <- as.data.table(self$read("inflow"))
@@ -299,7 +266,6 @@ MyAssets <- R6Class(
       assets_daily_raw <- as.data.table(self$read("assets_daily"))
       pension_daily_raw <- as.data.table(self$read("pension_daily"))
 
-      # DB 행번호 (DB 쿼리 중복 제거, 메모리상의 데이터에서 max 활용)
       self$assets_last_num <- if (nrow(self$assets) > 0) max(self$assets$행번호, na.rm = TRUE) else 0
       self$assets_daily_last_num <- if (nrow(assets_daily_raw) > 0) max(assets_daily_raw$행번호, na.rm = TRUE) else 0
 
@@ -314,7 +280,6 @@ MyAssets <- R6Class(
       pension_daily <- self$get_daily_trading(self$pension, pension_daily_raw)
       bs_pl_book_p <- self$get_bs_pl("pension", pension_daily)
 
-      # cash_in_out (현금 입출금) 산출 최적화 - data.table의 rbindlist 활용
       dt_comb <- rbindlist(list(pension_daily, assets_daily), use.names = TRUE, fill = TRUE)
       self$cash_in_out <- dt_comb[통화 == "원화", .(입출금 = sum(입출금, na.rm = TRUE)), by = .(기준일 = 거래일자)]
       self$cash_in_out <- as_tibble(self$cash_in_out[order(기준일)])
@@ -322,12 +287,11 @@ MyAssets <- R6Class(
       self$bs_pl_a <- bs_pl_book_a[거래일자 == self$today]
       self$bs_pl_p <- bs_pl_book_p[거래일자 == self$today]
 
-      # book_info (장부금액) 산출 최적화 - data.table 기반 필터링 및 집계
       dt_b_a <- bs_pl_book_a[통화 == "원화" & ((month(거래일자) == 12 & day(거래일자) == 31) | 거래일자 == self$today)]
       dt_b_p <- bs_pl_book_p[(month(거래일자) == 12 & day(거래일자) == 31) | 거래일자 == self$today]
-      
+
       dt_b_comb <- rbindlist(list(dt_b_a, dt_b_p), use.names = TRUE, fill = TRUE)
-      
+
       self$book_info <- dt_b_comb[, .(장부금액 = sum(장부금액, na.rm = TRUE),
                                       평잔 = sum(평잔, na.rm = TRUE),
                                       실현손익 = sum(실현손익, na.rm = TRUE)),
@@ -335,19 +299,14 @@ MyAssets <- R6Class(
         as_tibble()
     },
 
-    ## 6.(평가및손익) 가격 업데이트 ====
+    ## 6. 가격 업데이트 ----
     update_new_price = function() {
-
-      # 1) 환율 (AutoInvest에서 병렬 수집)
       rates <- self$bl$get_exchange_rate()
       self$ex_usd <- rates$USD
       self$ex_jpy <- rates$JPY
 
-      # 2) 국내주식 종목/ETF 종가 (AutoInvest에서 병렬 수집)
       all_codes <- tibble(self$bs_pl_a) %>%
-        bind_rows(
-          tibble(self$bs_pl_p)
-        ) %>%
+        bind_rows(tibble(self$bs_pl_p)) %>%
         filter(보유수량 != 0) %>%
         .$종목코드
 
@@ -356,41 +315,29 @@ MyAssets <- R6Class(
         "^\\d[a-zA-Z0-9]{4}\\d$"
       )])
 
-      closing_prices <-
-        tibble(
-          종목코드 = target_codes,
-          종가 = self$bl$get_current_price(target_codes)
-        )
+      closing_prices <- tibble(
+        종목코드 = target_codes,
+        종가 = self$bl$get_current_price(target_codes)
+      )
 
-      # 3) 금가격 종가 (AutoInvest 수집)
       gold <- self$bl$get_gold_price()
 
-      # 4) 펀드 기준가 (AutoInvest에서 병렬 수집)
       fund_codes <- all_codes[(str_sub(all_codes, 1, 2) == "K5")]
-      if (length(fund_codes) > 0) {
-        fund_prices <- self$bl$get_fund_price(fund_codes)
-      } else {
-        fund_prices <- tibble()
-      }
+      fund_prices <- if (length(fund_codes) > 0) self$bl$get_fund_price(fund_codes) else tibble()
 
-      # 5) 결합
-      self$closing_prices <-
-        bind_rows(closing_prices, gold, fund_prices)
+      self$closing_prices <- bind_rows(closing_prices, gold, fund_prices)
     },
 
-    ## 7.(평가및손익) 투자자산 평가반영 잔액-손익 테이블 생성 ====
+    ## 7. 투자자산 평가반영 잔액-손익 테이블 생성 ----
     evaluate_bs_pl_assets = function() {
       price <- self$assets %>%
         select(계좌, 종목코드, 상품명, 평가금액) %>%
         filter(평가금액 != 0) %>%
-        bind_rows(
-          mutate(self$bl$inquire_balance_ovs(), 계좌 = "불리오")
-        ) %>%
+        bind_rows(mutate(self$bl$inquire_balance_ovs(), 계좌 = "불리오")) %>%
         select(계좌, 종목코드, 평가금액) %>%
         as.data.table()
 
       bs_pl <- self$bs_pl_a
-
       last_eval <- self$assets %>%
         select(계좌, 종목코드, 기초평가손익) %>%
         as.data.table()
@@ -422,7 +369,7 @@ MyAssets <- R6Class(
       return(as_tibble(bs_pl))
     },
 
-    ## 8.(평가및손익) 연금 평가반영 잔액-손익 테이블 생성 ====
+    ## 8. 연금 평가반영 잔액-손익 테이블 생성 ----
     evaluate_bs_pl_pension = function() {
       price <- self$pension %>%
         select(계좌, 종목코드, 평가금액) %>%
@@ -430,7 +377,6 @@ MyAssets <- R6Class(
         as.data.table()
 
       bs_pl <- self$bs_pl_p
-
       last_eval <- self$pension %>%
         select(계좌, 종목코드, 기초평가손익) %>%
         as.data.table()
@@ -441,7 +387,6 @@ MyAssets <- R6Class(
 
       bs_pl <- bs_pl[평잔 > 0.02]
       bs_pl[, 장부금액 := fifelse(장부금액 < 1, 0, 장부금액)]
-
       bs_pl[, 기초평가손익 := fifelse(is.na(기초평가손익), 0, 기초평가손익)]
       bs_pl[, 평가금액 := fcase(
         !is.na(평가금액), 평가금액,
@@ -457,7 +402,7 @@ MyAssets <- R6Class(
       return(as_tibble(bs_pl))
     },
 
-    ## 9.(평가및손익) 자산군별/상품별 보유현황 생성 ====
+    ## 9. 자산군별/상품별 보유현황 생성 ----
     compute_total = function() {
       df <- self$bs_pl_mkt_a
       usd_bs <- round(filter(df, 통화 == "달러")$장부금액 * self$ex_usd, 0)
@@ -465,7 +410,6 @@ MyAssets <- R6Class(
       usd_eval <- round(filter(df, 통화 == "달러")$평가금액 * self$ex_usd, 0)
       jpy_eval <- round(filter(df, 통화 == "엔화")$평가금액 * self$ex_jpy, 0)
 
-      # 1) 계좌/자산군/상품까지 원재료
       df00 <- self$assets %>%
         bind_rows(self$pension) %>%
         distinct(통화, 계좌, 종목코드, 자산군, 세부자산군, 세부자산군2, 상품명) %>%
@@ -506,7 +450,6 @@ MyAssets <- R6Class(
         filter(평가손익 != 0) %>%
         self$upsert("eval_profit", c("연도", "계좌", "종목코드"))
 
-      # 1) 계좌없는 자산군~상품까지
       df0 <- df00 %>%
         group_by(종목코드) %>%
         summarise(
@@ -522,7 +465,6 @@ MyAssets <- R6Class(
         ) %>%
         select(-종목코드)
 
-      # 3) 합계
       df2 <- df0 %>%
         filter(통화 == "원화") %>%
         select(-통화) %>%
@@ -533,12 +475,10 @@ MyAssets <- R6Class(
           평가금액 = sum(평가금액), .groups = "drop"
         )
 
-      # 4) 상품까지(외화빼고)
       df1 <- df0 %>%
         select(-통화) %>%
         filter(자산군 != "외화자산")
 
-      # 5) 자산군 소계
       df3 <- df1 %>%
         group_by(자산군) %>%
         summarise(
@@ -547,7 +487,6 @@ MyAssets <- R6Class(
           평가금액 = sum(평가금액)
         )
 
-      # 6) 세부자산군 소계
       df4 <- df1 %>%
         group_by(자산군, 세부자산군) %>%
         summarise(
@@ -556,7 +495,6 @@ MyAssets <- R6Class(
           평가금액 = sum(평가금액), .groups = "drop"
         )
 
-      # 7) 세부자산군2 소계
       df5 <- df1 %>%
         group_by(자산군, 세부자산군, 세부자산군2) %>%
         summarise(
@@ -564,7 +502,6 @@ MyAssets <- R6Class(
           평가금액 = sum(평가금액), .groups = "drop"
         )
 
-      # 8) 환차손익 계산
       df6 <- tibble_row(
         자산군 = "환차손익", 세부자산군 = "", 세부자산군2 = "",
         보유수량 = 0,
@@ -573,19 +510,6 @@ MyAssets <- R6Class(
         평가수익률 = round(평가손익 / df2$장부금액 * 100, 2)
       )
 
-      # 합치기(df2,3,4,5,6)
-      df7 <- bind_rows(df2, df3, df4, df5) %>%
-        select(-보유수량) %>%
-        arrange(자산군, 세부자산군, 세부자산군2, desc(평가금액)) %>%
-        mutate(
-          평가손익 = round(평가금액 - 장부금액, 0),
-          평가수익률 = round(평가손익 / 장부금액 * 100, 2)
-        ) %>%
-        select(!c(상품명, 장부금액)) %>%
-        bind_rows(df6 %>%
-          select(-보유수량))
-
-      # 상품별 보유현황테이블1 최종
       self$t_comm <- bind_rows(df1, df2, df3, df4, df5) %>%
         mutate(
           자산군 = factor(자산군, levels = self$class_order),
@@ -603,7 +527,6 @@ MyAssets <- R6Class(
         ) %>%
         bind_rows(df6)
 
-      # 상품별/계좌별 보유현황테이블2 최종
       self$t_comm2 <- df00 %>%
         select(
           계좌, 자산군, 세부자산군, 세부자산군2, 통화, 상품명, 보유수량,
@@ -634,7 +557,6 @@ MyAssets <- R6Class(
         ) %>%
         filter(자산군 != "외화자산")
 
-      # 상품별 보유현황테이블3 최종
       self$t_comm10 <- df00 %>%
         select(자산군, 세부자산군, 세부자산군2, 상품명, 평가금액, 계좌) %>%
         filter(자산군 != "외화자산") %>%
@@ -647,9 +569,8 @@ MyAssets <- R6Class(
         arrange(자산군, 세부자산군, 세부자산군2, 계좌)
     },
 
-    ## 10.(평가및손익) 자산배분 생성 ====
+    ## 10. 자산배분 생성 ----
     compute_total_allocation = function() {
-      # 1. 대상 데이터 집계 및 피벗
       df_pivoted <- self$t_comm2 %>%
         select(계좌, 자산군, 세부자산군, 세부자산군2, 평가금액) %>%
         mutate(자산군 = if_else(자산군 == "" | is.na(자산군), "합계", as.character(자산군))) %>%
@@ -657,26 +578,23 @@ MyAssets <- R6Class(
         summarise(평가금액 = sum(평가금액), .groups = "drop") %>%
         pivot_wider(names_from = 계좌, values_from = 평가금액)
 
-      # 2. UI단에서 고정 인덱스(4:15)로 접근하므로, 누락된 계좌가 있더라도 더미(NA) 컬럼을 생성하여 개수 보장
       accts <- c("한투연금저축", "엔투저축연금", "미래DC", "엔투IRP", "농협IRP",
                  "엔투ISA", "한투ISA", "엔투하영", "불리오", "금현물", "한투")
-      
+
       for (a in accts) {
         if (!a %in% names(df_pivoted)) df_pivoted[[a]] <- NA_real_
       }
 
-      # 3. 지정된 순서로 컬럼 정렬 후 합계 산출
       df_pivoted <- df_pivoted %>%
         select(자산군, 세부자산군, 세부자산군2, all_of(accts)) %>%
         mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE))
 
-      # 4. groups 메타데이터와 조인하여 최종 데이터 생성
       self$account_allocation <- self$read("groups") %>%
         left_join(df_pivoted, by = c("자산군", "세부자산군", "세부자산군2")) %>%
         mutate(비중 = 합계 / last(합계) * 100)
     },
 
-    ## 11.(평가및손익) 자산군별/계좌별 손익현황 생성 ====
+    ## 11. 자산군별/계좌별 손익현황 생성 ----
     compute_asset_profit = function() {
       df1 <- self$bs_pl_mkt_a %>%
         filter(통화 == "원화") %>%
@@ -704,25 +622,11 @@ MyAssets <- R6Class(
           )
       }
 
-      df2 <- df1 %>%
-        group_by(자산군, 세부자산군, 세부자산군2) %>%
-        summ_fun()
+      df2 <- df1 %>% group_by(자산군, 세부자산군, 세부자산군2) %>% summ_fun()
+      df3 <- df1 %>% group_by(자산군, 세부자산군) %>% summ_fun() %>% mutate(세부자산군2 = "", .after = 2)
+      df4 <- df1 %>% group_by(자산군) %>% summ_fun() %>% mutate(세부자산군 = "", 세부자산군2 = "", .after = 1)
+      df5 <- df1 %>% summ_fun() %>% mutate(자산군 = "<합계>", 세부자산군 = "", 세부자산군2 = "", .before = 1)
 
-      df3 <- df1 %>%
-        group_by(자산군, 세부자산군) %>%
-        summ_fun() %>%
-        mutate(세부자산군2 = "", .after = 2)
-
-      df4 <- df1 %>%
-        group_by(자산군) %>%
-        summ_fun() %>%
-        mutate(세부자산군 = "", 세부자산군2 = "", .after = 1)
-
-      df5 <- df1 %>%
-        summ_fun() %>%
-        mutate(자산군 = "<합계>", 세부자산군 = "", 세부자산군2 = "", .before = 1)
-
-      # 자산군별 손익현황
       self$t_comm3 <- bind_rows(df2, df3, df4, df5) %>%
         mutate(
           자산군 = factor(자산군, levels = self$class_order),
@@ -736,7 +640,6 @@ MyAssets <- R6Class(
         select(-비용) %>%
         arrange(자산군, 세부자산군, 세부자산군2)
 
-      # 자산군별 손익현황 DB 업로드
       tryCatch(
         {
           if (dbExistsTable(self$con, "return")) {
@@ -751,30 +654,11 @@ MyAssets <- R6Class(
         mutate(기준일 = self$today, .before = 1) %>%
         self$upsert("return", c("기준일", "자산군", "세부자산군", "세부자산군2"))
 
-      df7 <- df1 %>%
-        group_by(계좌, 자산군) %>%
-        summ_fun()
-
-      df8 <- df1 %>%
-        group_by(계좌) %>%
-        summ_fun() %>%
-        mutate(자산군 = "", .after = 1)
-
-      # 계좌별 손익현황
-      self$t_comm4 <- bind_rows(df7, df8) %>%
-        mutate(
-          계좌 = factor(계좌, levels = self$acct_order),
-          자산군 = factor(자산군, levels = self$class_order),
-          비용률 = if_else(평잔 != 0, 비용 / 평잔 * 100, 0),
-          실현수익률 = if_else(평잔 != 0, 실현손익 / 평잔 * 100, 0),
-          평가증감률 = if_else(평잔 != 0, 평가손익증감 / 평잔 * 100, 0),
-          총수익률 = 실현수익률 + 평가증감률
-        ) %>%
-        select(-비용) %>%
-        arrange(계좌, 자산군)
+      df7 <- df1 %>% group_by(계좌, 자산군) %>% summ_fun()
+      df8 <- df1 %>% group_by(계좌) %>% summ_fun() %>% mutate(자산군 = "", .after = 1)
     },
 
-    ## 12 (평가및손익) 종합손익 테이블 계산====
+    ## 12. 종합손익 테이블 계산 ----
     compute_total_profit = function() {
       self$total_profit <- tibble(
         연도 = 2023,
@@ -813,7 +697,7 @@ MyAssets <- R6Class(
         )
     },
 
-    ## 14 (평가및손익) 손익변동 계산====
+    ## 13. 손익변동 계산 ----
     compute_profit_variation = function() {
       dates <- self$read_obj("return") %>%
         distinct(기준일) %>%
@@ -875,8 +759,7 @@ MyAssets <- R6Class(
         rename(`ly_` = `ly`, `1d_` = `1d`, `1m_` = `1m`, `3m_` = `3m`, `6m_` = `6m`, `1y_` = `1y`)
 
       if (ly %in% c(d1, dm, d3m, d6m, dy)) {
-        past_value1 <-
-          past_value1 %>%
+        past_value1 <- past_value1 %>%
           left_join(
             self$read_obj("return") %>%
               filter(기준일 == ly) %>%
@@ -886,8 +769,7 @@ MyAssets <- R6Class(
             by = c("자산군", "세부자산군", "세부자산군2")
           )
 
-        past_value2 <-
-          past_value2 %>%
+        past_value2 <- past_value2 %>%
           left_join(
             self$read_obj("return") %>%
               filter(기준일 == ly) %>%
@@ -920,7 +802,7 @@ MyAssets <- R6Class(
         select(자산군:총수익률, "1d", "1d_", "1m", "1m_", "3m", "3m_", "6m", "6m_", "1y", "1y_")
     },
 
-    ## 15.(평가및손익) 상품별 손익현황 계산 ====
+    ## 14. 상품별 손익현황 계산 ----
     compute_comm_profit = function() {
       df_a <- self$bs_pl_mkt_a
       df_p <- self$bs_pl_mkt_p
@@ -964,7 +846,7 @@ MyAssets <- R6Class(
         )
     },
 
-    ## 16.(평가및손익) 평가금액 계산 ====
+    ## 15. 평가금액 전체 계산 실행 ----
     run_valuation = function() {
       self$update_new_price()
       self$bs_pl_mkt_a <- self$evaluate_bs_pl_assets()
@@ -978,7 +860,7 @@ MyAssets <- R6Class(
       self$compute_profit_variation()
     },
 
-    ## 17.(연초갱신) 기초평가손익 갱신 ====
+    ## 16. 기초평가손익 갱신 ----
     renew_last_eval_profit = function() {
       self$assets %>%
         select(-기초평가손익) %>%

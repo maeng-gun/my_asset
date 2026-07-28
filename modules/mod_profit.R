@@ -1,23 +1,23 @@
 # =============================================================================
-# mod_profit — 손익현황 모듈 (종합손익, 손익변동, 자산군별, 계좌별, 상품별)
+# mod_profit.R — 손익현황 모듈 (종합손익, 손익변동, 자산군별, 계좌별, 상품별)
 # =============================================================================
 # 순수 함수(utils_analytics.R)를 호출하여 계산 수행
-# R6 인스턴스의 특정 속성만 reactive()로 참조
 # =============================================================================
 
+# 1. 손익현황 모듈 UI ----
 mod_profit_ui <- function(id) {
   ns <- NS(id)
   navset_card_tab(
     id = ns("pf_box1"),
 
-    ## a. 종합손익 ----
+    # 1.1 종합손익 ----
     nav_panel(
       title = "종합손익",
       fluidRow(reactableOutput(ns("t_profit1"))),
       fluidRow(reactableOutput(ns("profit_var")))
     ),
 
-    ## b. 손익변동 ----
+    # 1.2 손익변동 ----
     nav_panel(
       title = "손익변동",
       fluidRow(
@@ -35,21 +35,17 @@ mod_profit_ui <- function(id) {
         ),
         column(
           width = 10, class = "col-12 col-md-8 col-lg-10",
-          # [Row 1] 총손익 콤보 차트 (일간손익 막대 + 손익누계 꺾은선)
           fluidRow(
             column(12, echarts4rOutput(ns("total_profit_bar"), height = "360px"))
           ),
-          # [Row 2] 선진국 | 신흥국
           fluidRow(
             column(6, echarts4rOutput(ns("chart_선진국"), height = "300px")),
             column(6, echarts4rOutput(ns("chart_신흥국"), height = "300px"))
           ),
-          # [Row 3] 실물자산 | 인컴자산
           fluidRow(
             column(6, echarts4rOutput(ns("chart_실물자산"), height = "300px")),
             column(6, echarts4rOutput(ns("chart_인컴자산"), height = "300px"))
           ),
-          # [Row 4] 채권 | 현금성
           fluidRow(
             column(6, echarts4rOutput(ns("chart_채권"), height = "300px")),
             column(6, echarts4rOutput(ns("chart_현금성"), height = "300px"))
@@ -58,25 +54,25 @@ mod_profit_ui <- function(id) {
       )
     ),
 
-    ## c. 자산군별 손익현황 ----
+    # 1.3 자산군별 손익현황 ----
     nav_panel(
       title = "자산군별",
       fluidRow(reactableOutput(ns("total_accounts1")))
     ),
 
-    ## d. 계좌별 손익현황 ----
+    # 1.4 계좌별 손익현황 ----
     nav_panel(
       title = "계좌별",
       fluidRow(reactableOutput(ns("total_accounts2")))
     ),
 
-    ## e. 계좌별상품 손익현황 ----
+    # 1.5 계좌별상품 손익현황 ----
     nav_panel(
       title = "계좌별상품",
       fluidRow(reactableOutput(ns("bs_pl_mkt_a")))
     ),
 
-    ## f. 자산군별상품 손익현황 ----
+    # 1.6 자산군별상품 손익현황 ----
     nav_panel(
       title = "자산군별상품",
       fluidRow(reactableOutput(ns("bs_pl_mkt_a2")))
@@ -84,11 +80,12 @@ mod_profit_ui <- function(id) {
   )
 }
 
+# 2. 손익현황 모듈 서버 ----
 mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
   moduleServer(id, function(input, output, session) {
     initial_done <- reactiveVal(FALSE)
 
-    ## a. 종합손익 테이블 ----
+    # 2.1 종합손익 ----
     output$t_profit1 <- renderReactable({
       req(menu_tabs() == "pf_bs_pl")
       ma_obj <- ma_v()
@@ -110,7 +107,6 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
 
       df <- ma_obj$profit_variation
 
-      # 최초 로딩 완료 콜백
       isolate({
         if (!initial_done()) {
           on_initial_load()
@@ -125,8 +121,7 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       )
     })
 
-    ## b. 손익변동 ----
-    ## 손익 그래프 데이터 (일간손익 + 손익누계) ----
+    # 2.2 손익변동 차트 ----
     df_graph <- reactive({
       input$total_s_date
       input$total_e_date
@@ -143,7 +138,6 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
         )
     })
 
-    ## 자산군별 손익누계 그래프 데이터 ----
     df_asset_graph <- reactive({
       input$total_s_date
       input$total_e_date
@@ -160,10 +154,8 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       })
     })
 
-    ## [위] 손익 콤보 차트 — 일간손익(막대) + 손익누계(꺾은선) ----
     output$total_profit_bar <- renderEcharts4r({
       req(menu_tabs() == "pf_bs_pl")
-
 
       df_graph() |>
         e_charts(기준일) |>
@@ -176,8 +168,6 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
         e_legend(right = 0, top = "center", orient = "vertical")
     })
 
-
-    ## b-1. 자산군별 손익누계 차트 (선진국, 신흥국, 실물자산, 인컴자산, 채권, 현금성) ----
     make_asset_chart <- function(df, title) {
       if (nrow(df) == 0) {
         return(
@@ -226,8 +216,7 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       make_asset_chart(df_asset_graph()$현금성, "현금성")
     })
 
-
-    ## c. 자산군별 손익현황 ----
+    # 2.3 자산군별 손익현황 ----
     output$total_accounts1 <- renderReactable({
       req(menu_tabs() == "pf_bs_pl")
       df <- ma_v()$t_comm3 %>% arrange(자산군, 세부자산군)
@@ -238,7 +227,7 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       )
     })
 
-    ## d. 계좌별 손익현황 ----
+    # 2.4 계좌별 손익현황 ----
     output$total_accounts2 <- renderReactable({
       req(menu_tabs() == "pf_bs_pl")
       df <- ma_v()$t_comm4 %>% arrange(계좌)
@@ -249,7 +238,7 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       )
     })
 
-    ## e. 계좌별상품 손익현황 ----
+    # 2.5 계좌별상품 손익현황 ----
     output$bs_pl_mkt_a <- renderReactable({
       req(menu_tabs() == "pf_bs_pl")
       df <- ma_v()$comm_profit %>%
@@ -261,7 +250,7 @@ mod_profit_server <- function(id, ma_v, menu_tabs, on_initial_load) {
       )
     })
 
-    ## f. 자산군별상품 손익현황 ----
+    # 2.6 자산군별상품 손익현황 ----
     output$bs_pl_mkt_a2 <- renderReactable({
       req(menu_tabs() == "pf_bs_pl")
       df <- ma_v()$comm_profit2 %>%

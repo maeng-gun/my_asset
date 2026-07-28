@@ -1,10 +1,10 @@
 # =============================================================================
-# mod_trade_ticker — 투자종목 관리 모듈
+# mod_trade_ticker.R — 투자종목 관리 모듈
 # =============================================================================
-# (구 mod_ticker.R에서 이름 변경)
 # DB CRUD는 pool 객체 직접 주입받아 사용
 # =============================================================================
 
+# 1. 투자종목 관리 UI ----
 mod_trade_ticker_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
@@ -31,12 +31,13 @@ mod_trade_ticker_ui <- function(id) {
   )
 }
 
+# 2. 투자종목 관리 서버 ----
 mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     rv <- reactiveValues(tickers = NULL, ticker_new = NULL)
 
-    # --- 메뉴 설정 ----
+    # --- 2.1 메뉴 UI 동적 렌더링 ----
     output$manage_ticker <- renderUI({
       fluidRow(
         column(
@@ -78,13 +79,14 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
       )
     })
 
-    # --- 테이블 렌더링 ----
+    # --- 2.2 테이블 렌더링 ----
     output$ticker_table <- renderReactable({
       if (!is.null(rv$tickers)) {
         render_rt(rv$tickers |> arrange(desc(행번호)))
       }
     })
 
+    # --- 2.3 데이터 리셋 및 카테고리 갱신 ----
     reset_ticker <- reactive({
       input$ticker_new
       input$ticker_mod
@@ -110,7 +112,7 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
       updateSelectInput(session, "ass_cur", choices = ctg()$ass_cur)
     })
 
-    # --- 운용구분 변경 ----
+    # --- 2.4 반응형 이벤트 핸들러 ----
     observeEvent(input$type1, {
       mode <- if (input$type1 == "투자자산") "ass_account" else "pen_account"
       updateSelectInput(session, "ass_account", choices = ctg()[[mode]])
@@ -125,7 +127,6 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
       update_categories()
     })
 
-    # --- 신규/수정 선택 ----
     observeEvent(input$new1, {
       if (input$new1 != "신규") {
         t_rows <- filter(rv$tickers, 행번호 == input$new1)
@@ -149,11 +150,11 @@ mod_trade_ticker_server <- function(id, pool, ma, ma_b, sk_b, ctg) {
         updateSelectInput(session, "ass_class2", selected = "")
         updateSelectInput(session, "ass_cur", selected = NULL)
         updateAutonumericInput(session, "eval_price", value = 0)
-        updateAutonumericInput(session, "maturity_date", value = Sys.Date)
+        updateAutonumericInput(session, "maturity_date", value = Sys.Date())
       }
     })
 
-    # --- 레코드 조립 ----
+    # --- 2.5 레코드 조립 및 CRUD 처리 ----
     observe({
       rv$ticker_new <- tibble::tibble_row(
         행번호 = 0, 계좌 = input$ass_account,

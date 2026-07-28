@@ -11,7 +11,7 @@ source("global.R", encoding = "UTF-8")
 options(shiny.autoreload.legacy_warning = FALSE)
 
 
-# <User Interface> ====
+# 1. User Interface ----
 
 ui <- page_navbar(
   id = "menu_tabs",
@@ -78,6 +78,8 @@ ui <- page_navbar(
     useSweetAlert(),
     useWaiter()
   ),
+
+  # --- 1.1 운용기록 탭 ----
   nav_panel(
     title = "운용기록",
     value = "trading_record",
@@ -90,26 +92,38 @@ ui <- page_navbar(
       mod_trade_total_ui("total_trade")
     )
   ),
+
+  # --- 1.2 보유현황 탭 ----
   nav_panel(
     title = "보유현황", value = "pf_total", icon = icon("sack-dollar"),
     mod_holdings_ui("holdings")
   ),
+
+  # --- 1.3 손익현황 탭 ----
   nav_panel(
     title = "손익현황", value = "pf_bs_pl", icon = icon("sack-dollar"),
     mod_profit_ui("profit")
   ),
+
+  # --- 1.4 투자전략 탭 ----
   nav_panel(
     title = "투자전략", value = "pf_inv_strategy", icon = icon("lightbulb"),
     mod_inv_strategy_ui("inv_strategy")
   ),
+
+  # --- 1.5 배분전략 탭 ----
   nav_panel(
     title = "배분전략", value = "pf_allo_strategy", icon = icon("chess-board"),
     mod_allo_strategy_ui("allo_strategy")
   ),
+
+  # --- 1.6 유동성 관리 탭 ----
   nav_panel(
     title = "유동성 관리", value = "pf_liquid", icon = icon("chart-line"),
     mod_liquidity_ui("liquidity")
   ),
+
+  # --- Navbar 우측 메뉴 ----
   nav_spacer(),
   nav_item(actionButton("reval", "평가금액 재계산", class = "btn-info btn-sm", style = "margin-top: 8px; margin-right: 5px;")),
   nav_item(actionButton("renew_last_eval_profit", "기초평가손익갱신", class = "btn-primary btn-sm", style = "margin-top: 8px; margin-right: 5px;")),
@@ -118,10 +132,10 @@ ui <- page_navbar(
 )
 
 
-# <Server> ====
+# 2. Server ----
 
 server <- function(input, output, session) {
-  # --- Waiter 초기화 ----
+  # --- 2.1 Waiter & 알림 초기화 ----
   w1 <- Waiter$new(
     html = tagList(spin_loader(), "로딩중..."),
     color = transparent(.5)
@@ -131,17 +145,16 @@ server <- function(input, output, session) {
     show_alert(title = text, type = type)
   }
 
-  # --- 인증 모듈 호출 ----
+  # --- 2.2 인증 모듈 ----
   auth_rv <- mod_auth_server("auth", is_local = is_local)
 
-  # --- 인증 성공 후 메인 로직 초기화 ----
+  # --- 2.3 인증 성공 후 메인 데이터 및 모듈 초기화 ----
   observeEvent(auth_rv$authenticated,
     {
       req(auth_rv$authenticated == TRUE)
 
       show_delay("앱 구동중...", "info")
 
-      # --- DB Pool 생성 (외부 관리) ----
       cfg <- yaml::read_yaml(file = "ccc.yaml", readLines.warn = FALSE)
       db_pool <- dbPool(
         drv = RPostgres::Postgres(),
@@ -152,41 +165,36 @@ server <- function(input, output, session) {
         password = auth_rv$pg_pass
       )
 
-      # 갱신 트리거 (토글 방식)
       sk_b <- reactiveVal(TRUE)
       sk_v <- reactiveVal(TRUE)
       sk_c <- reactiveVal(TRUE)
 
-      # MyAssets R6 인스턴스 생성 (pool 주입)
       ma <- MyAssets$new(pool = db_pool)
 
-      # 장부금액 반응성 데이터
       ma_b <- reactive({
         ma$run_book()
         ma
       }) %>% bindEvent(sk_b())
 
-      # 평가금액 재계산
       observeEvent(input$reval, {
         w1$show()
         sk_v(!sk_v())
         w1$hide()
       })
 
-      # 평가금액 반응성 데이터
       ma_v <- reactive({
         ma$run_valuation()
         ma
       }) %>% bindEvent(sk_v())
 
-      # 카테고리 반응성 데이터
       ctg <- reactive({
         sk_c()
         df <- ma$read("categories")
         split(df$value, df$key)
       })
 
-      # --- 모듈 서버 호출 (pool 주입) ----
+      # --- 2.4 모듈 서버 호출 (화면 메뉴 탭 순서와 1:1 일치) ----
+      # (1) 운용기록 하위 모듈들
       mod_trade_history_server("trading",
         pool = db_pool, ma = ma, ma_b = ma_b, sk_b = sk_b,
         menu_tabs = reactive(input$menu_tabs)
@@ -200,40 +208,49 @@ server <- function(input, output, session) {
       mod_trade_total_server("total_trade",
         pool = db_pool, ma_b = ma_b
       )
+
+      # (2) 보유현황 모듈
       mod_holdings_server("holdings",
         ma_v = ma_v,
         menu_tabs = reactive(input$menu_tabs)
       )
+
+      # (3) 손익현황 모듈
       mod_profit_server("profit",
         ma_v = ma_v,
         menu_tabs = reactive(input$menu_tabs),
         on_initial_load = function() show_delay("완료!", "success")
       )
+
+      # (4) 투자전략 모듈
       mod_inv_strategy_server("inv_strategy",
         ma_v = ma_v,
         pool = db_pool
       )
+
+      # (5) 배분전략 모듈
       mod_allo_strategy_server("allo_strategy",
         pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b,
         menu_tabs = reactive(input$menu_tabs)
       )
+
+      # (6) 유동성 관리 모듈
       mod_liquidity_server("liquidity",
         pool = db_pool, ma = ma, ma_b = ma_b, ma_v = ma_v, sk_b = sk_b,
         menu_tabs = reactive(input$menu_tabs)
       )
 
-      # --- 프로그램 종료 ----
+      # --- 2.5 상단 헤더 액션 핸들러 ----
       observeEvent(input$close_win, {
         js$closeWindow()
         stopApp()
       })
 
-      # --- 기초평가손익 갱신 ----
       observeEvent(input$renew_last_eval_profit, {
         ma$renew_last_eval_profit()
       })
 
-      # --- 세션 종료 시 pool 안전 종료 ----
+      # --- 2.6 세션 종료 시 pool 해제 ----
       session$onSessionEnded(function() {
         tryCatch(
           {
@@ -251,7 +268,6 @@ server <- function(input, output, session) {
     ignoreInit = FALSE
   )
 
-  # --- 앱 전체 종료 시 안전장치 ----
   onStop(function() {
     message("[INFO] 앱 종료 — 자원 정리 완료")
   })

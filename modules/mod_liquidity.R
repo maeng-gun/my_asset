@@ -1,16 +1,17 @@
 # =============================================================================
-# mod_liquidity — 유동성 관리 모듈 (자금유출입 + 총자산추이 + 가용자금추이)
+# mod_liquidity.R — 유동성 관리 모듈 (자금유출입 + 총자산추이 + 가용자금추이)
 # =============================================================================
 # DB CRUD는 pool 객체 직접 주입
 # 분석 로직은 순수 함수(calc_maturity_analysis, calc_liquidity_analysis) 호출
 # =============================================================================
 
+# 1. 유동성 관리 모듈 UI ----
 mod_liquidity_ui <- function(id) {
   ns <- NS(id)
   navset_card_tab(
-    id = ns('liquid_tabs'),
+    id = ns("liquid_tabs"),
 
-## a. 자금유출입 탭 ----
+    # 1.1 자금유출입 탭 ----
     nav_panel(
       title = "자금유출입",
       fluidRow(
@@ -27,55 +28,55 @@ mod_liquidity_ui <- function(id) {
         column(width = 2, class = "col-12 col-md-2 col-lg-2",
                card(class = "mb-3 border-info",
                    card_header("입력사항", class = "bg-info text-white"),
-                   card_body(uiOutput(ns('manage_inflow'))))),
+                   card_body(uiOutput(ns("manage_inflow"))))),
         column(width = 5, class = "col-12 col-md-5 col-lg-5",
                card(class = "mb-3 border-info",
                    card_header("유출입 내역", class = "bg-info text-white"),
-                   card_body(reactableOutput(ns('inflow_table1'))))),
+                   card_body(reactableOutput(ns("inflow_table1"))))),
         column(width = 5, class = "col-12 col-md-5 col-lg-5",
                card(class = "mb-3 border-info",
                    card_header("만기도래내역", class = "bg-info text-white"),
-                   card_body(reactableOutput(ns('maturity_table')))))
+                   card_body(reactableOutput(ns("maturity_table")))))
       )
     ),
 
-## b. 총자산추이 탭 ----
+    # 1.2 총자산추이 탭 ----
     nav_panel(
       title = "총자산추이",
       fluidRow(
         card(class = "mb-3 border-info", fill = FALSE,
             card_header("총자산현황", class = "bg-info text-white"),
-            card_body(fill = FALSE, reactableOutput(ns('current_total_asset_table'))))),
+            card_body(fill = FALSE, reactableOutput(ns("current_total_asset_table"))))),
       fluidRow(
         card(class = "mb-3 border-info",
             card_header("총자산추이", class = "bg-info text-white"),
-            card_body(reactableOutput(ns('inflow_table3')))))
+            card_body(reactableOutput(ns("inflow_table3")))))
     ),
 
-## c. 가용자금추이 탭 ----
+    # 1.3 가용자금추이 탭 ----
     nav_panel(
       title = "가용자금추이",
       fluidRow(
         card(class = "mb-3 border-info", fill = FALSE,
             card_header("현금성자산현황", class = "bg-info text-white"),
-            card_body(fill = FALSE, reactableOutput(ns('current_cash_asset_table'))))),
+            card_body(fill = FALSE, reactableOutput(ns("current_cash_asset_table"))))),
       fluidRow(
         card(class = "mb-3 border-info",
             card_header("가용자금추이", class = "bg-info text-white"),
-            card_body(reactableOutput(ns('inflow_table4')))))
+            card_body(reactableOutput(ns("inflow_table4")))))
     )
   )
 }
 
+# 2. 유동성 관리 모듈 서버 ----
 mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
     liq <- reactiveValues(c = NULL, d = NULL)
 
-    # === a. 자금유출입 탭 ===
+    # --- 2.1 자금유출입 탭 ----
 
-    ## 평가금액 추이 차트 ----
     output$total_profit_trend <- renderEcharts4r({
       req(menu_tabs() == "pf_liquid")
       ma_obj <- ma_v()
@@ -114,28 +115,26 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
         e_legend(right = 0, top = "center", orient = "vertical")
     })
 
-## 메뉴 설정 ----
     output$manage_inflow <- renderUI({
       acct_list <- unique(c(ma_b()$assets$계좌, ma_b()$pension$계좌))
       fluidRow(
-        selectInput(ns('new3'), label = "신규/수정", choices = "신규", width = '100%'),
-        airDatepickerInput(ns('trading_date2'), label = "거래일자",
-                           addon = "none", value = Sys.Date(), width = '100%'),
-        selectInput(ns('inflow_acct'), label = "계좌",
-                    choices = acct_list, width = '100%'),
-        autonumericInput(ns('payment'), label = "자금유출입", value = 0, width = '100%'),
+        selectInput(ns("new3"), label = "신규/수정", choices = "신규", width = "100%"),
+        airDatepickerInput(ns("trading_date2"), label = "거래일자",
+                           addon = "none", value = Sys.Date(), width = "100%"),
+        selectInput(ns("inflow_acct"), label = "계좌",
+                    choices = acct_list, width = "100%"),
+        autonumericInput(ns("payment"), label = "자금유출입", value = 0, width = "100%"),
         br(),
-        actionButton(ns("inflow_new"), label = "추가", class = "btn btn-info", width = '100%'),
+        actionButton(ns("inflow_new"), label = "추가", class = "btn btn-info", width = "100%"),
         br(), br(),
-        actionButton(ns("inflow_mod"), label = "수정", class = "btn btn-success", width = '100%'),
+        actionButton(ns("inflow_mod"), label = "수정", class = "btn btn-success", width = "100%"),
         br(), br(),
-        actionButton(ns("inflow_del"), label = "삭제", class = "btn btn-primary", width = '100%')
+        actionButton(ns("inflow_del"), label = "삭제", class = "btn btn-primary", width = "100%")
       )
     })
 
-## 유출입 내역 조회 ----
     reset_inflow <- reactive({
-      ma_b()[['inflow']] %>%
+      ma_b()[["inflow"]] %>%
         filter(거래일자 >= ma$today) %>%
         select(행번호, 거래일자, 계좌, 자금유출입) %>%
         arrange(거래일자)
@@ -150,27 +149,25 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
     })
 
     update_manage_inflow <- reactive({
-      updateSelectInput(session, 'new3',
-                        choices = c('신규', liq$c$행번호),
-                        selected = '신규')
+      updateSelectInput(session, "new3",
+                        choices = c("신규", liq$c$행번호),
+                        selected = "신규")
     })
 
-## 신규/구분 선택 ----
     observeEvent(input$new3, {
       if (input$new3 != "신규") {
         t_rows <- filter(liq$c, 행번호 == input$new3)
-        updateAirDateInput(session, 'trading_date2', value = t_rows$거래일자)
-        updateSelectInput(session, 'inflow_acct', selected = t_rows$계좌)
-        updateAutonumericInput(session, 'payment', value = t_rows$자금유출입)
+        updateAirDateInput(session, "trading_date2", value = t_rows$거래일자)
+        updateSelectInput(session, "inflow_acct", selected = t_rows$계좌)
+        updateAutonumericInput(session, "payment", value = t_rows$자금유출입)
       } else {
         update_manage_inflow()
-        updateAirDateInput(session, 'trading_date2', value = Sys.Date())
-        updateSelectInput(session, 'inflow_acct', selected = NULL)
-        updateAutonumericInput(session, 'payment', value = 0)
+        updateAirDateInput(session, "trading_date2", value = Sys.Date())
+        updateSelectInput(session, "inflow_acct", selected = NULL)
+        updateAutonumericInput(session, "payment", value = 0)
       }
     })
 
-## 레코드 조립 ----
     observe({
       liq$d <- tibble::tibble_row(
         행번호 = 0,
@@ -182,7 +179,7 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
 
     observeEvent(input$inflow_new, {
       liq$d$행번호 <- ma$inflow_last_num + 1
-      dbxInsert(pool, 'inflow', liq$d)
+      dbxInsert(pool, "inflow", liq$d)
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
@@ -190,23 +187,21 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
 
     observeEvent(input$inflow_mod, {
       liq$d$행번호 <- input$new3
-      dbxUpdate(pool, 'inflow', liq$d, where_cols = c("행번호"))
+      dbxUpdate(pool, "inflow", liq$d, where_cols = c("행번호"))
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
     })
 
     observeEvent(input$inflow_del, {
-      dbxDelete(pool, 'inflow', tibble::tibble_row(행번호 = input$new3))
+      dbxDelete(pool, "inflow", tibble::tibble_row(행번호 = input$new3))
       liq$c <- reset_inflow()
       update_manage_inflow()
       sk_b(!sk_b())
     })
 
-## 만기도래 테이블 ----
     maturity_data <- reactive({
       ma_obj <- ma_v()
-      # calc_maturity_analysis 순수 함수 호출
       calc_maturity_analysis(
         bs_pl_mkt_a = ma_obj$bs_pl_mkt_a,
         bs_pl_mkt_p = ma_obj$bs_pl_mkt_p,
@@ -221,11 +216,10 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       render_rt(maturity_data(), int_cols = 3)
     })
 
-    # === b. 총자산추이 탭 ===
+    # --- 2.2 총자산추이 탭 ----
 
     liquidity_data <- reactive({
       ma_obj <- ma_v()
-      # calc_liquidity_analysis 순수 함수 호출
       calc_liquidity_analysis(
         t_comm2     = ma_obj$t_comm2,
         inflow_df   = ma_obj$inflow,
@@ -237,8 +231,7 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
 
     output$current_total_asset_table <- renderReactable({
       req(menu_tabs() == "pf_liquid")
-      df <- liquidity_data()$current_status %>% filter(구분 == '총자산')
-      # Apply integer format to all numeric columns
+      df <- liquidity_data()$current_status %>% filter(구분 == "총자산")
       int_c <- names(df)[sapply(df, is.numeric)]
       render_rt(df, int_cols = int_c, dynamic_height = FALSE)
     })
@@ -250,11 +243,11 @@ mod_liquidity_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
       render_rt(df, int_cols = int_c)
     })
 
-    # === c. 가용자금추이 탭 ===
+    # --- 2.3 가용자금추이 탭 ----
 
     output$current_cash_asset_table <- renderReactable({
       req(menu_tabs() == "pf_liquid")
-      df <- liquidity_data()$current_status %>% filter(구분 == '현금성자산')
+      df <- liquidity_data()$current_status %>% filter(구분 == "현금성자산")
       int_c <- names(df)[sapply(df, is.numeric)]
       render_rt(df, int_cols = int_c, dynamic_height = FALSE)
     })

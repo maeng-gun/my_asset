@@ -14,12 +14,11 @@ AutoInvest <- R6Class(
   classname = "AutoInvest",
   inherit = MyData,
   public = list(
-    ## 속성 선언 ====
+    ## 1. 속성 선언 및 초기화 ----
     token_tmp = NULL, APP_KEY = NULL, APP_SECRET = NULL, ACCT = NULL,
     URL_BASE = NULL, MY_AGENT = NULL, base_headers = NULL,
     token_headers = NULL,
 
-    ## 속성 초기화 ====
     initialize = function(pool, account = "my") {
       super$initialize(pool)
       cfg <- split(self$config$value, self$config$token)
@@ -47,7 +46,7 @@ AutoInvest <- R6Class(
       )
     },
 
-    ## 메서드(1) — 토큰 저장하기 ====
+    ## 2. 토큰 저장하기 ----
     save_token = function(my_token, my_expired) {
       valid_date <-
         as.POSIXct(my_expired, format = "%Y-%m-%d %H:%M:%S", tz = "Asia/Seoul")
@@ -61,20 +60,16 @@ AutoInvest <- R6Class(
       )
     },
 
-    ## 메서드(2) — 토큰 불러오기 ====
+    ## 3. 토큰 불러오기 ----
     read_token = function() {
       tryCatch(
         {
           tkg_tmp <- self$read(self$token_tmp)
-
-          # 토큰 만료 일,시간
           exp_dt <- as.POSIXct(tkg_tmp$valid_date,
             format = "%Y-%m-%d %H:%M:%S", tz = "Asia/Seoul"
           )
-          # 현재일자,시간
           now_dt <- lubridate::now(tzone = "Asia/Seoul")
 
-          # 저장된 토큰 만료일자 체크 (만료일시 > 현재일시 인경우 보관 토큰 리턴)
           if (exp_dt > now_dt) {
             return(tkg_tmp$token)
           } else {
@@ -88,7 +83,7 @@ AutoInvest <- R6Class(
       )
     },
 
-    ## 메서드(3) — 인증하기 ====
+    ## 4. 인증하기 ----
     auth = function() {
       data <- list(
         "grant_type" = "client_credentials",
@@ -96,7 +91,6 @@ AutoInvest <- R6Class(
         "appsecret" = self$APP_SECRET
       )
 
-      # 기존 발급된 토큰이 있는지 확인
       saved_token <- self$read_token()
 
       if (is.null(saved_token)) {
@@ -118,7 +112,7 @@ AutoInvest <- R6Class(
       return(my_token)
     },
 
-    ## 메서드(4) — 해시키 얻기 ====
+    ## 5. 해시키 얻기 ----
     hashkey = function(data) {
       path <- "uapi/hashkey"
       headers <- list(
@@ -128,7 +122,7 @@ AutoInvest <- R6Class(
       self$POST_json(path, data, headers)$HASH
     },
 
-    ## 메서드(5-1) — GET 명령 (httr2 기반) ====
+    ## 6. GET 명령 (httr2 기반) ----
     GET_tbl = function(path, data, headers) {
       URL <- glue("{self$URL_BASE}/{path}")
 
@@ -153,7 +147,7 @@ AutoInvest <- R6Class(
         fromJSON()
     },
 
-    ## 메서드(5-2) — POST 명령 (httr2 기반) ====
+    ## 7. POST 명령 (httr2 기반) ----
     POST_json = function(path, data, headers = NULL) {
       URL <- glue("{self$URL_BASE}/{path}")
 
@@ -185,7 +179,7 @@ AutoInvest <- R6Class(
       )
     },
 
-    ## 메서드(6) — 자산별 잔고 ====
+    ## 8. 자산별 잔고 ----
     inquire_account_balance = function() {
       path <- "uapi/domestic-stock/v1/trading/inquire-account-balance"
       data <- list(
@@ -217,7 +211,7 @@ AutoInvest <- R6Class(
         filter(비중 != 0)
     },
 
-    ## 메서드(7) — 국내주식 잔고 ====
+    ## 9. 국내주식 잔고 ----
     inquire_balance = function() {
       path <- "/uapi/domestic-stock/v1/trading/inquire-balance"
 
@@ -247,7 +241,7 @@ AutoInvest <- R6Class(
         mutate(평가금액 = as.numeric(평가금액))
     },
 
-    ## 메서드(8) — 해외주식 잔고 ====
+    ## 10. 해외주식 잔고 ----
     inquire_balance_ovs = function(cur = "USD") {
       path <- "uapi/overseas-stock/v1/trading/inquire-balance"
       exc <- list(USD = "NASD", JPY = "TKSE")
@@ -271,7 +265,7 @@ AutoInvest <- R6Class(
         mutate(평가금액 = as.numeric(평가금액))
     },
 
-    ## 메서드(9) — 개별종목 현재가 (순차 처리 + 개별 재시도 로직 추가) ====
+    ## 11. 개별종목 현재가 ----
     get_current_price = function(sym_cd) {
       if (length(sym_cd) == 0) {
         return(numeric(0))
@@ -295,7 +289,6 @@ AutoInvest <- R6Class(
           req_headers(!!!headers) %>%
           req_url_query(!!!data)
 
-        # 응답 지연이나 HTTP 200으로 반환되는 한투 API 내부 에러(트래픽 초과 메시지 등) 방어
         price_val <- NA_real_
         for (attempt in 1:3) {
           parsed <- tryCatch(
@@ -314,23 +307,19 @@ AutoInvest <- R6Class(
 
           if (!is.null(parsed) && !is.null(parsed$output$stck_prpr)) {
             price_val <- as.numeric(parsed$output$stck_prpr)
-            break # 정상 응답 시 재시도 루프 탈출
+            break
           }
-
-          # 값 누락 발생 시 0.5초 대기 후 재시도 (서버가 진정할 시간을 줌)
           Sys.sleep(0.1)
         }
 
         result_prices[i] <- price_val
-
-        # 다음 종목 조회 전 넉넉하게 0.07초 대기
         Sys.sleep(0.05)
       }
 
       return(result_prices)
     },
 
-    ## 메서드(10) — 환율 수집 ====
+    ## 12. 환율 수집 ----
     get_exchange_rate = function() {
       get_rate <- function(cur = "달러") {
         num <- c("달러" = 1, "엔" = 2, "유로" = 3, "위안" = 4)
@@ -355,7 +344,7 @@ AutoInvest <- R6Class(
       )
     },
 
-    ## 메서드(11) — 금 시세 수집 (httr2) ====
+    ## 13. 금 시세 수집 (httr2) ----
     get_gold_price = function() {
       url <- "https://api.stock.naver.com/marketindex/metals/M04020000"
       tryCatch(
@@ -373,7 +362,7 @@ AutoInvest <- R6Class(
       )
     },
 
-    ## 메서드(12) — 펀드 기준가 수집 (httr2 비동기 병렬 - 청크 단위) ====
+    ## 14. 펀드 기준가 수집 ----
     get_fund_price = function(codes) {
       if (length(codes) == 0) {
         return(tibble())

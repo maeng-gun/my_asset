@@ -1,13 +1,14 @@
 # =============================================================================
-# mod_allo_strategy — 배분전략 모듈
+# mod_allo_strategy.R — 배분전략 모듈
 # =============================================================================
 
+# 1. 배분전략 모듈 UI ----
 mod_allo_strategy_ui <- function(id) {
   ns <- NS(id)
   navset_card_tab(
     id = ns("allo_box"),
 
-    ## a. 자산배분====
+    # 1.1 자산배분 탭 ----
     nav_panel(
       title = "자산배분",
       fluidRow(
@@ -35,7 +36,7 @@ mod_allo_strategy_ui <- function(id) {
       )
     ),
 
-    ## b. 배분성과====
+    # 1.2 배분성과 탭 ----
     nav_panel(
       title = "배분성과",
       fluidRow(
@@ -66,15 +67,15 @@ mod_allo_strategy_ui <- function(id) {
   )
 }
 
+# 2. 배분전략 모듈 서버 ----
 mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
     show_delay <- function(text, type) show_alert(title = text, type = type)
 
-    # === a. 자산배분 CRUD ====
+    # --- 2.1 자산배분 CRUD ----
 
-    ## 신규/수정 선택 옵션 동적 생성 ----
     observe({
       sk_b()
       df <- ma_b()$read("allo_table") %>% arrange(행번호)
@@ -89,7 +90,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       })
     })
 
-    ## 신규/수정 선택 시 기존 데이터 불러오기 ----
     observeEvent(input$allo_new, {
       req(input$allo_new)
       if (input$allo_new != "신규") {
@@ -108,7 +108,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       }
     })
 
-    ## 추가 ----
     observeEvent(input$allo_add, {
       df_current <- ma_b()$read("allo_table")
       next_id <- ifelse(nrow(df_current) == 0, 1,
@@ -131,7 +130,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       show_delay("자산배분 내역이 추가되었습니다.", "success")
     })
 
-    ## 수정 ----
     observeEvent(input$allo_modi, {
       if (input$allo_new == "신규") {
         return(show_delay("수정할 행을 선택해주세요.", "warning"))
@@ -156,7 +154,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       show_delay("성공적으로 수정되었습니다.", "success")
     })
 
-    ## 삭제 ----
     observeEvent(input$allo_del, {
       if (input$allo_new == "신규") {
         return(show_delay("삭제할 행을 선택해주세요.", "error"))
@@ -170,7 +167,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       show_delay("자산배분 내역이 삭제되었습니다.", "success")
     })
 
-    ## 입력 UI ----
     output$allo_input <- renderUI({
       column(
         width = 12,
@@ -235,7 +231,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       )
     })
 
-    ## 연도 선택 ----
     output$allo_year <- renderUI({
       sk_b()
       df <- ma_b()$read("allo_table")
@@ -253,7 +248,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       )
     })
 
-    ## 배분 테이블 ----
     output$allo_table_ui <- renderReactable({
       sk_b()
       req(menu_tabs() == "pf_allo_strategy")
@@ -276,7 +270,7 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       render_rt(df, pct_cols = 4:10)
     })
 
-    # === b. 배분성과 ====
+    # --- 2.2 배분성과 ----
     allo_trigger <- reactiveVal(0)
     sel_base_month_rv <- reactiveVal(NULL)
 
@@ -305,7 +299,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       req(sel_base_month_rv())
       ma_obj <- ma_v()
 
-      # calc_benchmark_returns 순수 함수 호출
       res <- calc_benchmark_returns(
         return_tbl    = ma_obj$read_obj("return"),
         cash_in_out   = ma_obj$cash_in_out,
@@ -371,7 +364,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       df |>
         filter(기준일 >= base_date) |>
         select(all_of(cols)) |>
-        # 일간수익률 → 누적수익률로 변환 (각 자산별 독립 계산)
         mutate(across(-기준일, ~ (cumprod(1 + . / 100) - 1) * 100)) |>
         pivot_longer(-기준일) |>
         group_by(name) |>
@@ -379,7 +371,7 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
         e_line(value, symbol = "none") |>
         e_tooltip(trigger = "axis") |>
         e_y_axis(
-          position = "right", # Y축 우측 배치
+          position = "right",
           axisLabel = list(formatter = htmlwidgets::JS(
             "function(v) { return v.toFixed(1) + '%'; }"
           ))
@@ -388,7 +380,6 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
         e_legend(right = 0, top = "center", orient = "vertical") |>
         e_grid(right = "20%", left = "3%")
     }
-
 
     output$plot_mtd_bm <- renderEcharts4r({
       req(menu_tabs() == "pf_allo_strategy")

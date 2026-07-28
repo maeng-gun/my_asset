@@ -1,13 +1,14 @@
 # =============================================================================
-# mod_inv_strategy — 투자전략 모듈
+# mod_inv_strategy.R — 투자전략 모듈
 # =============================================================================
 
+# 1. 투자전략 모듈 UI ----
 mod_inv_strategy_ui <- function(id) {
   ns <- NS(id)
   navset_card_tab(
     id = ns("inv_box"),
 
-    ## 투자성과 탭 ====
+    # 1.1 투자성과 탭 ----
     nav_panel(
       title = "투자성과",
       fluidRow(
@@ -81,21 +82,19 @@ mod_inv_strategy_ui <- function(id) {
       )
     ),
 
-    ## 종목탐색 탭 ====
+    # 1.2 종목탐색 탭 ----
     nav_panel(
       title = "종목탐색",
       fluidRow(
-        # [왼쪽] 검색 위젯
         column(
           width = 2, class = "col-12 col-md-4 col-lg-2",
-          # 위) 종목 검색
           div(
             class = "mb-3",
             tags$label("종목 검색", class = "form-label fw-semibold"),
             selectizeInput(
               ns("ticker_select"),
               label = NULL,
-              choices = character(0), # NULL 대신 빈 벡터 → selectize labelField 정상 초기화
+              choices = character(0),
               options = list(
                 placeholder = "종목명 또는 티커 입력 (예: 삼전, bond ETF)",
                 create = FALSE,
@@ -103,7 +102,6 @@ mod_inv_strategy_ui <- function(id) {
                 labelField = "label",
                 valueField = "value",
                 searchField = list("label"),
-                # 한글: 글자 단위 AND 검색, 영어/비한글: 단어 단위 대소문자 구분없는 AND 검색
                 score = I("function(search) {
                   var query = search.toLowerCase();
                   var tokens = [];
@@ -131,7 +129,6 @@ mod_inv_strategy_ui <- function(id) {
               )
             )
           ),
-          # 가운데) BM 선택
           div(
             class = "mb-3",
             radioButtons(
@@ -141,16 +138,13 @@ mod_inv_strategy_ui <- function(id) {
               selected = "226490.KS"
             )
           ),
-          # 아래) 조회 버튼
           actionButton(
             ns("ticker_query"), "조회",
             class = "btn btn-primary w-100"
           )
         ),
-        # [오른쪽] 분석 결과
         column(
           width = 10, class = "col-12 col-md-8 col-lg-10",
-          # 조회 전 안내 화면
           div(
             id = ns("ticker_init_msg"),
             class = "text-center mt-5 text-muted",
@@ -160,7 +154,6 @@ mod_inv_strategy_ui <- function(id) {
               class = "small"
             )
           ),
-          # 조회 후 차트/테이블 영역
           div(
             id = ns("ticker_result_box"),
             style = "display: none;",
@@ -179,20 +172,17 @@ mod_inv_strategy_ui <- function(id) {
   )
 }
 
+# 2. 투자전략 모듈 서버 ----
 mod_inv_strategy_server <- function(id, ma_v, pool) {
-  force(pool) # lazy eval 방지: moduleServer 클로저 캡처 전 즉시 평가
+  force(pool)
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # === 투자성과 ====
-    # 조회 버튼 클릭 시에만 데이터 산출/렌더링
-    # reactiveVal 트리거 방식: 날짜를 rv에 직접 저장 후 트리거 증가 → 타이밍 문제 없음
+    # --- 2.1 투자성과 서브탭 ----
+    perf_trigger <- reactiveVal(0)
+    perf_s_rv <- reactiveVal(Sys.Date() %m-% years(1))
+    perf_e_rv <- reactiveVal(Sys.Date())
 
-    perf_trigger <- reactiveVal(0) # 조회 실행 트리거
-    perf_s_rv <- reactiveVal(Sys.Date() %m-% years(1)) # 실제 조회에 쓸 시작일
-    perf_e_rv <- reactiveVal(Sys.Date()) # 실제 조회에 쓸 종료일
-
-    ## 조회 버튼 핸들러 ----
     observeEvent(input$perf_query,
       {
         showModal(modalDialog(
@@ -217,7 +207,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       ignoreInit = TRUE
     )
 
-    ## 단축 기간 버튼 핸들러 ----
     perf_set_period <- function(months_back) {
       showModal(modalDialog(
         title = NULL,
@@ -242,6 +231,7 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
         perf_trigger(next_trig)
       }, delay = 0.1)
     }
+
     observeEvent(input$perf_1m, perf_set_period(1), ignoreInit = TRUE)
     observeEvent(input$perf_3m, perf_set_period(3), ignoreInit = TRUE)
     observeEvent(input$perf_6m, perf_set_period(6), ignoreInit = TRUE)
@@ -274,7 +264,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       ignoreInit = TRUE
     )
 
-    ## BM 데이터 (트리거 발화 시에만 실행) ----
     raw_perf_data <- eventReactive(perf_trigger(),
       {
         req(perf_s_rv(), perf_e_rv())
@@ -291,7 +280,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       ignoreInit = TRUE
     )
 
-    ## 그래프 헬퍼 ----
     render_perf_line <- function(df, group_id) {
       req(nrow(df) > 0)
       df %>%
@@ -330,7 +318,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
         e_grid(right = "20%", left = "3%")
     }
 
-    ## 렌더링 (선진국) ----
     output$perf_line_선진국 <- renderEcharts4r({
       render_perf_line(raw_perf_data()$선진국, "perf_선진국")
     })
@@ -338,7 +325,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       render_perf_dd(raw_perf_data()$선진국, "perf_선진국")
     })
 
-    ## 렌더링 (국내) ----
     output$perf_line_국내 <- renderEcharts4r({
       render_perf_line(raw_perf_data()$국내, "perf_국내")
     })
@@ -346,7 +332,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       render_perf_dd(raw_perf_data()$국내, "perf_국내")
     })
 
-    ## 렌더링 (실물자산) ----
     output$perf_line_실물 <- renderEcharts4r({
       render_perf_line(raw_perf_data()$실물자산, "perf_실물")
     })
@@ -354,7 +339,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       render_perf_dd(raw_perf_data()$실물자산, "perf_실물")
     })
 
-    ## 렌더링 (인컴자산) ----
     output$perf_line_인컴 <- renderEcharts4r({
       render_perf_line(raw_perf_data()$인컴자산, "perf_인컴")
     })
@@ -362,7 +346,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       render_perf_dd(raw_perf_data()$인컴자산, "perf_인컴")
     })
 
-    ## 렌더링 (채권) ----
     output$perf_line_채권 <- renderEcharts4r({
       render_perf_line(raw_perf_data()$채권, "perf_채권")
     })
@@ -370,12 +353,9 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       render_perf_dd(raw_perf_data()$채권, "perf_채권")
     })
 
-
-    # === 종목탐색 ====
-
-    ## tickers 테이블 로드 → selectizeInput 초기화 ----
-    .pool <- pool # 로컬 바인딩으로 reactive 클로저 내 안전한 참조 보장
-    tickers_map_rv <- reactiveVal(list()) # 티커 -> 종목명 매핑
+    # --- 2.2 종목탐색 서브탭 ----
+    .pool <- pool
+    tickers_map_rv <- reactiveVal(list())
     observe({
       tickers_df <- DBI::dbReadTable(.pool, "tickers") |> as_tibble()
       choices_vec <- setNames(
@@ -392,7 +372,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       )
     })
 
-    ## 조회 상태 및 데이터 관리 ----
     ticker_data <- reactiveVal(NULL)
     is_queried <- reactiveVal(FALSE)
 
@@ -400,7 +379,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       {
         req(input$ticker_select, input$bm_select)
 
-        # 1. 조회 -> 팝업 표시
         showModal(modalDialog(
           title = NULL,
           div(
@@ -418,7 +396,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
         b_val <- input$bm_select
         t_map <- tickers_map_rv()
 
-        # 2. 데이터 계산 및 렌더링 준비 (비동기 처리)
         later::later(function() {
           shiny::withReactiveDomain(session, {
             t_name <- if (t_val %in% names(t_map)) t_map[[t_val]] else t_val
@@ -436,7 +413,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
               error = function(e) NULL
             )
 
-            # 계산 완료 후 모달 닫기
             removeModal()
 
             if (is.null(res)) {
@@ -451,14 +427,12 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
               return()
             }
 
-            # 모달 닫힌 안정적 DOM 상태에서 컨테이너 unhide 및 reactiveVal 업데이트
             shinyjs::hide("ticker_init_msg")
             shinyjs::show("ticker_result_box")
 
             is_queried(TRUE)
             ticker_data(res)
 
-            # DOM 변경 후 htmlwidgets/echarts 크기 자동 재계산 트리거
             shinyjs::runjs("setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 100);")
           })
         }, delay = 0.1)
@@ -466,7 +440,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       ignoreInit = TRUE
     )
 
-    ## 오른쪽 패널 상단 제목 ----
     output$ticker_header_ui <- renderUI({
       req(is_queried(), ticker_data())
       d <- ticker_data()
@@ -483,15 +456,12 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       )
     })
 
-    ## 공통 포매터 JS ----
     pct_fmt <- htmlwidgets::JS("function(v){ return (v !== null && v !== undefined && !isNaN(v)) ? Number(v).toFixed(1) + '%' : ''; }")
 
-    ## 성과통계 테이블 ----
     output$stats_table <- renderReactable({
       req(ticker_data())
       df <- ticker_data()$stats_df
       req(nrow(df) > 0)
-      # 지표 열 이름 확보
       num_cols <- setdiff(names(df), "지표")
       render_rt(
         df,
@@ -502,7 +472,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
       )
     })
 
-    ## 누적수익률 선그래프 ----
     output$cum_chart <- renderEcharts4r({
       req(ticker_data())
       d <- ticker_data()
@@ -523,7 +492,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
         e_legend(right = 0, top = "center", orient = "vertical")
     })
 
-    ## DrawDown 영역그래프 ----
     output$dd_chart <- renderEcharts4r({
       req(ticker_data())
       ticker_data()$dd_df %>%
@@ -539,7 +507,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
         e_legend(show = FALSE)
     })
 
-    ## 월별수익률 히트맵 ----
     output$heatmap_chart <- renderEcharts4r({
       req(ticker_data())
       df_heat <- ticker_data()$monthly_ret
@@ -599,7 +566,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
         e_grid(bottom = "80px", top = "40px", left = "5%", right = "5%")
     })
 
-    ## 연도별 수익률 막대그래프 ----
     output$yearly_chart <- renderEcharts4r({
       req(ticker_data())
       d <- ticker_data()
@@ -623,7 +589,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
         e_legend(right = 0, top = "center", orient = "vertical")
     })
 
-    ## 롤링 변동성 선그래프 ----
     output$rolling_vol_chart <- renderEcharts4r({
       req(ticker_data())
       df <- ticker_data()$rolling_vol
@@ -642,7 +607,6 @@ mod_inv_strategy_server <- function(id, ma_v, pool) {
         e_legend(show = FALSE)
     })
 
-    ## 롤링 샤프지수 선그래프 ----
     output$rolling_sharpe_chart <- renderEcharts4r({
       req(ticker_data())
       df <- ticker_data()$rolling_sharpe

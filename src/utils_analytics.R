@@ -7,14 +7,7 @@
 # =============================================================================
 
 
-# 1. 기간별 종합거래내역 생성 ====
-#'
-#' @param assets_df 투자자산 마스터 (tibble)
-#' @param pension_df 연금자산 마스터 (tibble)
-#' @param assets_daily_tbl 투자자산 일별거래 dbplyr tbl
-#' @param pension_daily_tbl 연금자산 일별거래 dbplyr tbl
-#' @param dates 조회 기간 (Date 벡터, 길이 1 또는 2)
-#' @return tibble
+# 1. 기간별 종합거래내역 생성 ----
 calc_total_trading <- function(assets_df, pension_df,
                                assets_daily_tbl, pension_daily_tbl,
                                dates) {
@@ -66,14 +59,7 @@ calc_total_trading <- function(assets_df, pension_df,
 }
 
 
-
-
-# 2.종합손익 그래프용 데이터 생성====
-#'
-#' @param return_tbl return dbplyr tbl
-#' @param start 시작일 (Date)
-#' @param end 종료일 (Date)
-#' @return tibble
+# 2. 종합손익 그래프용 데이터 생성 ----
 build_profit_trend_data <- function(return_tbl, start, end) {
   df <- return_tbl %>%
     filter(자산군 == "<합계>") %>%
@@ -97,14 +83,8 @@ build_profit_trend_data <- function(return_tbl, start, end) {
 }
 
 
-# 2-1. 자산군별 손익누계 그래프용 데이터 생성====
-#'
-#' @param return_tbl return dbplyr tbl
-#' @param start 시작일 (Date)
-#' @param end 종료일 (Date)
-#' @return list(선진국, 신흥국, 실물자산, 인컴자산, 채권, 현금성) — 각 tibble
+# 2-1. 자산군별 손익누계 그래프용 데이터 생성 ----
 build_asset_profit_data <- function(return_tbl, start, end) {
-  # [헬퍼] 필터된 df_raw(기준일, 총손익)로 손익누계 산출
   calc_cumprofit <- function(df_raw, label) {
     df_raw %>%
       arrange(기준일) %>%
@@ -119,19 +99,16 @@ build_asset_profit_data <- function(return_tbl, start, end) {
       transmute(기준일, 손익누계, 구분 = label)
   }
 
-  # DB에서 해당 기간 전체 수집 (한 번만 collect)
   base <- return_tbl %>%
     filter(기준일 >= start, 기준일 <= end) %>%
     collect() %>%
     mutate(기준일 = as.Date(기준일))
 
-  # 선진국: 자산군=주식, 세부자산군=선진국, 세부자산군2=""
   df_선진국 <- base %>%
     filter(자산군 == "주식", 세부자산군 == "선진국", 세부자산군2 == "") %>%
     transmute(기준일, 총손익) %>%
     calc_cumprofit("선진국")
 
-  # 신흥국: 자산군=주식, 세부자산군 in(국내, 신흥국), 세부자산군2="" → 기준일별 합산
   df_신흥국 <- base %>%
     filter(
       자산군 == "주식",
@@ -142,25 +119,21 @@ build_asset_profit_data <- function(return_tbl, start, end) {
     summarise(총손익 = sum(총손익, na.rm = TRUE), .groups = "drop") %>%
     calc_cumprofit("신흥국")
 
-  # 실물자산: 자산군=대체자산, 세부자산군=실물자산, 세부자산군2=""
   df_실물 <- base %>%
     filter(자산군 == "대체자산", 세부자산군 == "실물자산", 세부자산군2 == "") %>%
     transmute(기준일, 총손익) %>%
     calc_cumprofit("실물자산")
 
-  # 인컴자산: 자산군=대체자산, 세부자산군=인컴자산, 세부자산군2=""
   df_인컴 <- base %>%
     filter(자산군 == "대체자산", 세부자산군 == "인컴자산", 세부자산군2 == "") %>%
     transmute(기준일, 총손익) %>%
     calc_cumprofit("인컴자산")
 
-  # 채권: 자산군=채권, 세부자산군="", 세부자산군2=""
   df_채권 <- base %>%
     filter(자산군 == "채권", 세부자산군 == "", 세부자산군2 == "") %>%
     transmute(기준일, 총손익) %>%
     calc_cumprofit("채권")
 
-  # 현금성: 자산군=현금성, 세부자산군="", 세부자산군2=""
   df_현금성 <- base %>%
     filter(자산군 == "현금성", 세부자산군 == "", 세부자산군2 == "") %>%
     transmute(기준일, 총손익) %>%
@@ -177,12 +150,7 @@ build_asset_profit_data <- function(return_tbl, start, end) {
 }
 
 
-# 3. 벤치마크 타겟 일자 반환====
-## 1) ㅇㅇ ====
-#'
-#' @param base_month 기준월 (Date)
-#' @param today 오늘 날짜 (Date)
-#' @return Date
+# 3. 벤치마크 타겟 일자 반환 ----
 get_target_date <- function(base_month, today) {
   sel_date <- as.Date(paste0(format(base_month, "%Y-%m"), "-01"))
   if (year(sel_date) == year(today) && month(sel_date) == month(today)) {
@@ -193,17 +161,9 @@ get_target_date <- function(base_month, today) {
 }
 
 
-# 4. 벤치마크 수익률 종합 데이터 산출====
-#'
-#' @param return_tbl return dbplyr tbl
-#' @param cash_in_out 입출금 tibble
-#' @param allo_table_df 자산배분 테이블 (tibble)
-#' @param base_month 기준월 (Date)
-#' @param today 오늘 날짜 (Date)
-#' @return tibble (wide format)
+# 4. 벤치마크 수익률 종합 데이터 산출 ----
 calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
                                    base_month, today) {
-  # [지역 헬퍼 함수] 네이버 회사채 금리 크롤링====
   get_naver_bond_yield <- function(start_date, end_date) {
     base_url <- "https://finance.naver.com/marketindex/interestDailyQuote.naver?marketindexCd=IRR_CORP03Y&page="
     page <- 1
@@ -241,7 +201,6 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
   s_ytd <- floor_date(t_date, "year") - days(1)
   fetch_start <- s_ytd - days(7)
 
-  ## _1) 내 포트폴리오 ----
   pf_return <- return_tbl %>%
     filter(자산군 == "<합계>", 기준일 >= s_ytd, 기준일 <= t_date) %>%
     select(기준일, 평가금액, 총손익) %>%
@@ -256,7 +215,6 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
     transmute(기준일, MyPF = 일간손익 / lag(평가금액) * 100) %>%
     filter(!is.na(MyPF))
 
-  ## _2) 야후 파이낸스 벤치마크 ----
   tickers <- c("360200.KS", "278530.KS", "411060.KS", "329200.KS", "356540.KS")
   prices <- suppressWarnings(
     tidyquant::tq_get(tickers, get = "stock.prices", from = fetch_start, to = t_date)
@@ -267,15 +225,12 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
     pivot_wider(names_from = symbol, values_from = adjusted) %>%
     arrange(date)
 
-  ## _3) 네이버 회사채 크롤링 ----
   bond_yields <- get_naver_bond_yield(fetch_start, t_date)
 
-  ## _4) 결측치 보간 ----
   merged_prices <- prices %>%
     left_join(bond_yields, by = "date") %>%
     fill(everything(), .direction = "downup")
 
-  ## _5) 주식/실물 자산군 일별 수익률 ----
   bm_returns_long <- merged_prices %>%
     select(date, `360200.KS`, `278530.KS`, `411060.KS`, `329200.KS`, `356540.KS`) %>%
     pivot_longer(cols = -date, names_to = "symbol", values_to = "price") %>%
@@ -296,7 +251,6 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
     )) %>%
     select(date, Asset, daily.returns)
 
-  ## _6) 회사채 및 현금성 자산 생성 ----
   bond_returns_long <- merged_prices %>%
     filter(date >= fetch_start) %>%
     mutate(
@@ -320,7 +274,6 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
   ret_xts <- suppressWarnings(timetk::tk_xts(all_bm_returns_wide, date_var = date, silent = TRUE))
   asset_cols <- colnames(ret_xts)
 
-  ## _7) SAA, TAA1, TAA2 포트폴리오 수익률 계산 ----
   weight_df <- allo_table_df %>%
     mutate(
       배분일자 = as.Date(배분일자),
@@ -385,14 +338,7 @@ calc_benchmark_returns <- function(return_tbl, cash_in_out, allo_table_df,
 }
 
 
-# 5. 만기도래자금 분석====
-#'
-#' @param bs_pl_mkt_a 투자자산 평가 tibble
-#' @param bs_pl_mkt_p 연금자산 평가 tibble
-#' @param assets_df 투자자산 마스터 tibble
-#' @param pension_df 연금자산 마스터 tibble
-#' @param today 오늘 날짜 (Date)
-#' @return tibble
+# 5. 만기도래자금 분석 ----
 calc_maturity_analysis <- function(bs_pl_mkt_a, bs_pl_mkt_p,
                                    assets_df, pension_df, today) {
   bs_pl_mkt_a %>%
@@ -414,19 +360,11 @@ calc_maturity_analysis <- function(bs_pl_mkt_a, bs_pl_mkt_p,
 }
 
 
-# 5-1. 평가금액 추이 차트 데이터 계산====
-#'
-#' @param return_tbl return dbplyr tbl (또는 tibble)
-#' @param inflow_df 자금유출입 tibble
-#' @param today 오늘 날짜 (Date)
-#' @param t_comm2 상품별/계좌별 보유현황 tibble
-#' @param acct_order 계좌 순서 벡터
-#' @return tibble
+# 5-1. 평가금액 추이 차트 데이터 계산 ----
 calc_eval_trend_data <- function(return_tbl, inflow_df, today,
                                  t_comm2 = NULL, acct_order = NULL) {
   days1 <- today %m-% years(1)
 
-  # 과거 1년 평가금액 (원금 제거, 반올림)
   df2 <- return_tbl %>%
     filter(자산군 == "<합계>") %>%
     transmute(기준일 = as.Date(기준일), 평가금액 = round(평가금액 / 10000, 0)) %>%
@@ -435,32 +373,27 @@ calc_eval_trend_data <- function(return_tbl, inflow_df, today,
     collect() %>%
     mutate(구분 = "과거평가액")
 
-  # 기준일(today) 기준 자산 초기값 계산 (단위: 만원)
   init_investable   <- 0
   init_withdrawable  <- 0
   init_liquidatable  <- 0
 
   if (!is.null(t_comm2) && nrow(t_comm2) > 0) {
-    # 1) 투자가능자산: 현금성자산 합계 / 10000
     init_investable <- sum(
       t_comm2 %>% filter(자산군 == "현금성") %>% pull(평가금액),
       na.rm = TRUE
     ) / 10000
 
-    # 2) 인출가능현금: 현금성자산 & 계좌=='한투' / 10000
     init_withdrawable <- sum(
       t_comm2 %>% filter(자산군 == "현금성", 계좌 == "한투") %>% pull(평가금액),
       na.rm = TRUE
     ) / 10000
 
-    # 3) 현금화가능자산: 총자산(자산군 == "" | is.na(자산군)) & 계좌 %in% c("한투", "금현물") / 10000
     init_liquidatable <- sum(
       t_comm2 %>% filter((자산군 == "" | is.na(자산군)), 계좌 %in% c("한투", "금현물")) %>% pull(평가금액),
       na.rm = TRUE
     ) / 10000
   }
 
-  # 일별 자금유출입 집계 (단위: 만원)
   inflow_all <- inflow_df %>%
     transmute(기준일 = as.Date(거래일자), 자금유출입 = 자금유출입 / 10000) %>%
     group_by(기준일) %>%
@@ -474,7 +407,6 @@ calc_eval_trend_data <- function(return_tbl, inflow_df, today,
 
   last_eval <- if (nrow(df2) > 0) last(df2$평가금액) else 0
 
-  # 미래 1년 예상 데이터 (today부터 시작, 소수점 제거 반올림)
   df3 <- tibble(기준일 = seq(today, today %m+% years(1), by = 1)) %>%
     left_join(inflow_all, by = "기준일") %>%
     left_join(inflow_hantu, by = "기준일") %>%
@@ -494,29 +426,15 @@ calc_eval_trend_data <- function(return_tbl, inflow_df, today,
   bind_rows(df2, df3)
 }
 
-compute_eval_trend_data <- calc_eval_trend_data
 
-
-
-# 6. 가용자금 분석====
-#'
-#' @param t_comm2 상품별/계좌별 보유현황 tibble
-#' @param inflow_df 자금유출입 tibble
-#' @param maturity_df 만기도래자금 tibble
-#' @param today 오늘 날짜 (Date)
-#' @param acct_order 계좌 순서 벡터
-#' @return list(current_status, total_projection, cash_projection)
+# 6. 가용자금 분석 ----
 calc_liquidity_analysis <- function(t_comm2, inflow_df, maturity_df,
                                     today, acct_order) {
-  # [Step 1] 현재 시점 계좌별 총자산/현금성자산 현황
-
-  # 1-1. 계좌별 총자산
   df_total <- t_comm2 %>%
     filter(자산군 == "" | is.na(자산군)) %>%
     select(계좌, 평가금액) %>%
     rename(총자산 = 평가금액)
 
-  # 1-2. 계좌별 현금성자산
   df_cash <- t_comm2 %>%
     filter(자산군 == "현금성") %>%
     group_by(계좌, 자산군) %>%
@@ -524,7 +442,6 @@ calc_liquidity_analysis <- function(t_comm2, inflow_df, maturity_df,
     select(계좌, 평가금액) %>%
     rename(현금성자산 = 평가금액)
 
-  # 1-3. 모든 계좌 리스트 확보
   all_accts <- factor(
     unique(c(df_total$계좌, df_cash$계좌)),
     levels = acct_order
@@ -539,22 +456,17 @@ calc_liquidity_analysis <- function(t_comm2, inflow_df, maturity_df,
     mutate(합계 = rowSums(select(., where(is.numeric)), na.rm = TRUE)) %>%
     arrange(구분)
 
-  # [Step 2] 공통 데이터 준비 (월별 피벗)
-
-  # 2-1. 자금유출입 월별 집계
   inflow_monthly <- inflow_df %>%
     mutate(거래월 = format(as.Date(거래일자), "%Y-%m")) %>%
     filter(as.Date(거래일자) >= floor_date(today, "month")) %>%
     group_by(거래월, 계좌) %>%
     summarise(금액 = sum(자금유출입, na.rm = TRUE), .groups = "drop")
 
-  # 2-2. 만기 자산 월별 집계
   maturity_data <- maturity_df %>%
     mutate(거래월 = format(as.Date(만기일), "%Y-%m")) %>%
     group_by(거래월, 계좌) %>%
     summarise(금액 = sum(평가금액, na.rm = TRUE), .groups = "drop")
 
-  # 2-3. 미래 월 리스트 생성
   future_months <- sort(unique(c(inflow_monthly$거래월, maturity_data$거래월)))
   current_month <- format(today, "%Y-%m")
 
@@ -566,7 +478,6 @@ calc_liquidity_analysis <- function(t_comm2, inflow_df, maturity_df,
 
   base_proj <- tibble(거래월 = future_months)
 
-  # [Step 3] 향후 총자산 추이 (누적)
   init_total <- df_total %>%
     pivot_wider(names_from = 계좌, values_from = 총자산) %>%
     mutate(거래월 = current_month)
@@ -582,7 +493,6 @@ calc_liquidity_analysis <- function(t_comm2, inflow_df, maturity_df,
     mutate(across(any_of(all_accts), ~ cumsum(tidyr::replace_na(., 0)))) %>%
     mutate(합계 = rowSums(select(., -거래월), na.rm = TRUE))
 
-  # [Step 4] 향후 가용자금 추이
   init_cash <- df_cash %>%
     pivot_wider(names_from = 계좌, values_from = 현금성자산) %>%
     mutate(거래월 = current_month)
@@ -611,20 +521,13 @@ calc_liquidity_analysis <- function(t_comm2, inflow_df, maturity_df,
 }
 
 
-# 7. 자산군별 수익률 vs BM 데이터 생성 ====
-#'
-#' @param return_tbl return dbplyr tbl
-#' @param start 시작일 (Date) — 누적수익률 기준점(0%)
-#' @param end   종료일 (Date)
-#' @return list(선진국, 국내, 실물자산, 인컴자산, 채권)
-#'         각 요소: tibble(기준일, MyPF, BM, DD)
+# 7. 자산군별 수익률 vs BM 데이터 생성 ----
 build_asset_bm_data <- function(return_tbl, start, end) {
   start <- as.Date(start)
   end   <- as.Date(end)
 
   all_dates_df <- tibble(기준일 = seq.Date(start, end, by = "day"))
 
-  # [헬퍼] 네이버 회사채 금리 크롤링 ----
   get_bond_yield_local <- function(start_date, end_date) {
     base_url <- paste0(
       "https://finance.naver.com/marketindex/",
@@ -655,7 +558,6 @@ build_asset_bm_data <- function(return_tbl, start, end) {
       distinct(date, .keep_all = TRUE)
   }
 
-  # [헬퍼] 자산군별 MyPF 일간수익률 반환 ----
   calc_mypf_daily <- function(df_asset) {
     if (nrow(df_asset) == 0) {
       return(all_dates_df %>% mutate(r_mypf = 0.0))
@@ -683,7 +585,6 @@ build_asset_bm_data <- function(return_tbl, start, end) {
       mutate(r_mypf = replace_na(r_mypf, 0.0))
   }
 
-  # 1) MyPF 일간수익률 수집 (DB) ----
   base <- return_tbl %>%
     filter(기준일 >= start, 기준일 <= end) %>%
     collect() %>%
@@ -714,7 +615,6 @@ build_asset_bm_data <- function(return_tbl, start, end) {
     select(기준일, 총손익, 평가금액) %>%
     calc_mypf_daily()
 
-  # 2) BM 가격 수집 (야후 파이낸스) ----
   bm_fetch_start <- start - days(7)
   tickers <- c("360200.KS", "305050.KS", "411060.KS", "329200.KS")
 
@@ -730,16 +630,13 @@ build_asset_bm_data <- function(return_tbl, start, end) {
     pivot_wider(names_from = symbol, values_from = adjusted) %>%
     arrange(date)
 
-  # 3) 네이버 회사채 금리 ----
   bond_yields <- get_bond_yield_local(bm_fetch_start, end)
 
-  # 4) 병합 및 결측 보간 ----
   all_data <- prices %>%
     left_join(bond_yields, by = "date") %>%
     fill(everything(), .direction = "downup") %>%
     arrange(date)
 
-  # 5) BM 일별 수익률 ----
   bm_daily_raw <- all_data %>%
     mutate(
       r_선진국 = (`360200.KS` / lag(`360200.KS`) - 1) * 100,
@@ -757,7 +654,6 @@ build_asset_bm_data <- function(return_tbl, start, end) {
     left_join(bm_daily_raw, by = "기준일") %>%
     mutate(across(starts_with("r_"), ~ replace_na(.x, 0.0)))
 
-  # 6) MyPF 일간수익률 + BM 일간수익률 병합 ----
   calc_cum <- function(r) (cumprod(1 + r / 100) - 1) * 100
   calc_dd  <- function(cum_r) {
     cr   <- 1 + cum_r / 100
@@ -806,16 +702,7 @@ build_asset_bm_data <- function(return_tbl, start, end) {
 }
 
 
-# 8. 개별 종목 분석 데이터 생성 ====
-#'
-#' @param ticker 분석 대상 티커 (한국: "005930", 미국: "SPY")
-#' @param bm_ticker 벤치마크 티커 ("226490.KS" or "SPY")
-#' @param today 기준일 (Date). 기본값 Sys.Date()
-#' @param ticker_name 한국어 종목명
-#' @param bm_name 한국어 벤치마크명
-#' @return list(cum_df, dd_df, monthly_ret, yearly_ret,
-#'              rolling_vol, rolling_sharpe, stats_df,
-#'              ticker_label, bm_label)
+# 8. 개별 종목 분석 데이터 생성 ----
 build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ticker_name = NULL, bm_name = NULL) {
   today <- as.Date(today)
 
@@ -878,7 +765,6 @@ build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ti
 
   if (nrow(joined) < 2) return(NULL)
 
-  # 1) 누적수익률
   cum_df <- joined %>%
     mutate(
       ticker = (cumprod(1 + ret_t) - 1) * 100,
@@ -890,7 +776,6 @@ build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ti
     ) %>%
     select(date, ticker, bm)
 
-  # 2) DrawDown
   dd_df <- joined %>%
     mutate(
       wealth = cumprod(1 + ret_t),
@@ -900,7 +785,6 @@ build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ti
     mutate(dd = ifelse(!is.finite(dd), 0, dd)) %>%
     select(date, dd)
 
-  # 3) 월별 수익률 히트맵용
   monthly_ret <- target_analysis %>%
     tq_transmute(
       select     = returns,
@@ -910,7 +794,6 @@ build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ti
     ) %>%
     mutate(year = year(date), month = month(date))
 
-  # 4) 연도별 수익률
   yearly_ret <- joined %>%
     group_by(year = year(date)) %>%
     summarise(
@@ -919,7 +802,6 @@ build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ti
       .groups = "drop"
     )
 
-  # 5) 롤링 변동성
   rolling_vol_df <- target_ret %>%
     mutate(
       rolling_sd  = as.numeric(zoo::rollapplyr(returns, width = actual_window, FUN = sd, fill = NA, na.rm = TRUE)),
@@ -928,7 +810,6 @@ build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ti
     filter(!is.na(rolling_vol), date >= analysis_start) %>%
     select(date, rolling_vol)
 
-  # 6) 롤링 샤프
   rolling_sharpe_fn <- function(x) {
     x <- x[!is.na(x)]
     if (length(x) < 2) return(NA_real_)
@@ -945,7 +826,6 @@ build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ti
     filter(!is.na(rolling_sharpe), date >= analysis_start) %>%
     select(date, rolling_sharpe)
 
-  # 7) 성과 통계 테이블
   stats_df <- calc_single_stats(joined, t_label, b_label)
 
   list(
@@ -962,12 +842,7 @@ build_ticker_analysis_data <- function(ticker, bm_ticker, today = Sys.Date(), ti
 }
 
 
-# 8-1. 단일 종목 성과통계 계산 ====
-#'
-#' @param joined_df inner_join된 일별수익률 tibble (date, ret_t, ret_b)
-#' @param ticker_label 종목 레이블 (열 이름에 사용)
-#' @param bm_label BM 레이블 (열 이름에 사용)
-#' @return tibble(지표, <ticker_label>, <bm_label>)
+# 8-1. 단일 종목 성과통계 계산 ----
 calc_single_stats <- function(joined_df, ticker_label, bm_label) {
   if (nrow(joined_df) < 10) {
     return(tibble(지표 = character(), .rows = 0))

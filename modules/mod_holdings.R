@@ -1,32 +1,33 @@
 # =============================================================================
-# mod_holdings — 보유현황 모듈 (자산배분 + 상품별 보유현황 1/2/3)
+# mod_holdings.R — 보유현황 모듈 (자산배분 + 상품별 보유현황 1/2/3)
 # =============================================================================
 
+# 1. 보유현황 모듈 UI ----
 mod_holdings_ui <- function(id) {
   ns <- NS(id)
   tagList(
     navset_card_tab(
       id = ns("pf_box2"),
 
-      ## 계좌별 자산배분 ----
+      # 1.1 계좌별 자산배분 ----
       nav_panel(
         title = "계좌별 자산배분",
         fluidRow(reactableOutput(ns("account_allocation_table")))
       ),
 
-      ## 상품별 보유현황1 ----
+      # 1.2 상품별 보유현황1 ----
       nav_panel(
         title = "상품별 보유현황1",
         fluidRow(reactableOutput(ns("t_commodity1")))
       ),
 
-      ## 상품별 보유현황2 ----
+      # 1.3 상품별 보유현황2 ----
       nav_panel(
         title = "상품별 보유현황2",
         fluidRow(reactableOutput(ns("t_commodity2")))
       ),
 
-      ## 상품별 보유현황3 ----
+      # 1.4 상품별 보유현황3 ----
       nav_panel(
         title = "상품별 보유현황3",
         div(style = "text-align: left; margin-bottom: 10px;",
@@ -38,9 +39,11 @@ mod_holdings_ui <- function(id) {
   )
 }
 
+# 2. 보유현황 모듈 서버 ----
 mod_holdings_server <- function(id, ma_v, menu_tabs) {
   moduleServer(id, function(input, output, session) {
-    ## 계좌별 자산배분 ----
+
+    # 2.1 계좌별 자산배분 ----
     output$account_allocation_table <- renderReactable({
       req(menu_tabs() == "pf_total")
       req(ma_v())
@@ -50,11 +53,11 @@ mod_holdings_server <- function(id, ma_v, menu_tabs) {
         df,
         int_cols    = 4:15,
         pct_cols    = 16,
-        sticky_cols = names(df)[1:3] # 앞 3개 컬럼(자산군, 세부자산군, 계좌 등) 좌측 고정
+        sticky_cols = names(df)[1:3]
       )
     })
 
-    ## 상품별 보유현황1 ----
+    # 2.2 상품별 보유현황1 ----
     output$t_commodity1 <- renderReactable({
       req(menu_tabs() == "pf_total")
       req(ma_v())
@@ -68,7 +71,7 @@ mod_holdings_server <- function(id, ma_v, menu_tabs) {
       )
     })
 
-    ## 상품별 보유현황2 ----
+    # 2.3 상품별 보유현황2 ----
     output$t_commodity2 <- renderReactable({
       req(menu_tabs() == "pf_total")
       req(ma_v())
@@ -82,7 +85,7 @@ mod_holdings_server <- function(id, ma_v, menu_tabs) {
       )
     })
 
-    ## 상품별 보유현황3 ----
+    # 2.4 상품별 보유현황3 ----
     output$t_commodity3 <- renderReactable({
       req(menu_tabs() == "pf_total")
       req(ma_v())
@@ -95,18 +98,17 @@ mod_holdings_server <- function(id, ma_v, menu_tabs) {
       )
     })
 
-    ## 엑셀 복사 버튼 UI 렌더링 (동기식 복사를 위한 hidden textarea 활용) ----
+    # 2.5 엑셀 복사 버튼 UI 렌더링 ----
     output$copy_btn_ui <- renderUI({
       req(ma_v())
       df <- ma_v()$t_comm10
       req(nrow(df) > 0)
-      
-      # TSV(탭 구분) 형식의 문자열로 변환
+
       con <- textConnection("tsv_out", "w")
       write.table(df, con, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE, na = "")
       close(con)
       tsv_str <- paste(tsv_out, collapse = "\n")
-      
+
       tagList(
         tags$textarea(id = session$ns("hidden_tsv_3"), style = "display:none;", tsv_str),
         tags$button(

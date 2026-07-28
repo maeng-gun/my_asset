@@ -1,12 +1,10 @@
 # =============================================================================
-# mod_trade_history — 거래내역 기록 모듈
+# mod_trade_history.R — 거래내역 기록 모듈
 # =============================================================================
-# (구 mod_trading.R에서 이름 변경)
 # DB CRUD는 pool 객체 직접 주입받아 사용
 # =============================================================================
 
-#' 거래내역 기록 탭 UI
-#' @param id 모듈 네임스페이스 ID
+# 1. 거래내역 기록 탭 UI ----
 mod_trade_history_ui <- function(id) {
   ns <- NS(id)
   nav_panel(
@@ -84,26 +82,17 @@ mod_trade_history_ui <- function(id) {
   )
 }
 
-#' 거래내역 기록 탭 서버
-#' @param id 모듈 네임스페이스 ID
-#' @param pool DB 커넥션 풀
-#' @param ma MyAssets R6 인스턴스 (상태 참조용)
-#' @param ma_b reactive — 장부금액 데이터
-#' @param sk_b reactiveVal — 장부금액 갱신 트리거
-#' @param menu_tabs reactive - 선택된 탭 정보
+# 2. 거래내역 기록 탭 서버 ----
 mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
   moduleServer(id, function(input, output, session) {
-    # 모듈 내부 반응성 값
     rv <- reactiveValues(
       type2 = NULL,
       trade = NULL,
       trade_new = NULL
     )
 
-    # --- 통화별 숫자 컬럼 포맷 결정 헬퍼 ----
-    # USD/JPY는 소수점 2자리, 원화는 정수(0자리)
+    # --- 2.1 통화별 컬럼 포맷 결정 헬퍼 ----
     build_trade_col_defs <- function(cur) {
-      # 수량 컬럼은 항상 정수(또는 소수 2자리)
       qty_cols <- c("매입수량", "매도수량")
       money_cols <- c(
         "매입액", "매입비용", "매도원금", "현금지출", "매도액", "매매수익",
@@ -111,18 +100,16 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       )
 
       if (cur %in% c("달러", "엔화")) {
-        # 외화: 소수점 2자리, 천단위 쉼표
         dec_cols_use <- money_cols
         int_cols_use <- qty_cols
       } else {
-        # 원화: 소수점 0자리, 천단위 쉼표
         dec_cols_use <- character(0)
         int_cols_use <- c(qty_cols, money_cols)
       }
       list(int_cols = int_cols_use, dec_cols = dec_cols_use)
     }
 
-    # --- 테이블 렌더링 ----
+    # --- 2.2 테이블 렌더링 ----
     output$trade_table <- renderReactable({
       req(menu_tabs() == "trading_record")
       if (!is.null(rv$trade) && nrow(rv$trade) > 0) {
@@ -132,15 +119,13 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
           rv$trade,
           int_cols      = fmt$int_cols,
           dec_cols      = fmt$dec_cols,
-          # 앞 5개 컬럼(행번호~종목코드) 좌측 고정
           sticky_cols   = names(rv$trade)[1:5],
-          # 종목명/상품명 컬럼은 말줄임 + 호버 툴팁
           long_str_cols = intersect(c("종목명", "종목코드"), names(rv$trade))
         )
       }
     })
 
-    # --- 거래내역 조회 ----
+    # --- 2.3 거래내역 리셋 및 입력필드 초기화 ----
     reset_trade <- reactive({
       input$ass_trade_new
       input$ass_trade_mod
@@ -183,13 +168,9 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       )
     }
 
-    # --- 운용구분 변경 ----
+    # --- 2.4 드롭다운 연동 이벤트 ----
     observeEvent(input$type2, {
-      if (input$type2 == "투자자산") {
-        rv$type2 <- "assets"
-      } else {
-        rv$type2 <- "pension"
-      }
+      rv$type2 <- if (input$type2 == "투자자산") "assets" else "pension"
       updateSelectInput(session, "ass_account2",
         choices = unique(ma_b()[[rv$type2]]$계좌)
       )
@@ -217,7 +198,6 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       update_new_trade()
     })
 
-    # --- 신규/수정 선택 ----
     observeEvent(input$new2, {
       if (!is.null(input$new2) && input$new2 != "신규") {
         t_rows2 <- filter(rv$trade, 행번호 == input$new2)
@@ -239,7 +219,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       }
     })
 
-    # --- 거래 레코드 조립 ----
+    # --- 2.5 거래 레코드 조립 ----
     observe({
       if (!is.null(input$ass_name2)) {
         trade_ticker <-
@@ -266,7 +246,7 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       }
     })
 
-    # --- 추가 ----
+    # --- 2.6 CRUD 액션 핸들러 ----
     observeEvent(input$ass_trade_new, {
       req(rv$trade_new)
       if (input$type2 == "투자자산") {
@@ -282,18 +262,13 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       reset_trade_inputs()
     })
 
-    # --- 수정 ----
     observeEvent(input$ass_trade_mod, {
       req(rv$trade_new)
       rv$trade_new$행번호 <- input$new2
       if (input$type2 == "투자자산") {
-        dbxUpdate(pool, "assets_daily", rv$trade_new,
-          where_cols = c("행번호")
-        )
+        dbxUpdate(pool, "assets_daily", rv$trade_new, where_cols = c("행번호"))
       } else {
-        dbxUpdate(pool, "pension_daily", rv$trade_new,
-          where_cols = c("행번호")
-        )
+        dbxUpdate(pool, "pension_daily", rv$trade_new, where_cols = c("행번호"))
       }
       sk_b(!sk_b())
       rv$trade <- reset_trade()
@@ -301,7 +276,6 @@ mod_trade_history_server <- function(id, pool, ma, ma_b, sk_b, menu_tabs) {
       reset_trade_inputs()
     })
 
-    # --- 삭제 ----
     observeEvent(input$ass_trade_del, {
       req(rv$trade_new)
       rv$trade_new$행번호 <- input$new2

@@ -50,6 +50,17 @@ r_files <- c(
 purrr::walk(r_files, source, encoding = "UTF-8")
 
 
-# --- 4. modules/ 디렉토리 소싱 (Shiny 모듈) ----
-module_files <- list.files("modules", pattern = "\\.R$", full.names = TRUE)
+# --- 4. modules/ 디렉토리 소싱 (Shiny 모듈: 화면 탭 순서와 1:1 일치) ----
+module_files <- c(
+  "modules/mod_auth.R",
+  "modules/mod_trade_history.R",
+  "modules/mod_trade_ticker.R",
+  "modules/mod_trade_category.R",
+  "modules/mod_trade_total.R",
+  "modules/mod_holdings.R",
+  "modules/mod_profit.R",
+  "modules/mod_inv_strategy.R",
+  "modules/mod_allo_strategy.R",
+  "modules/mod_liquidity.R"
+)
 purrr::walk(module_files, source, encoding = "UTF-8")
