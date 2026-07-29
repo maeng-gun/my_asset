@@ -558,7 +558,11 @@ MyAssets <- R6Class(
         filter(자산군 != "외화자산")
 
       self$t_comm10 <- df00 %>%
-        select(자산군, 세부자산군, 세부자산군2, 상품명, 평가금액, 계좌) %>%
+        mutate(
+          평가손익 = round(평가금액 - 장부금액, 0),
+          평가수익률 = round(평가손익 / 장부금액 * 100, 2)
+        ) %>%
+        select(자산군, 세부자산군, 세부자산군2, 상품명, 평가금액, 평가손익, 평가수익률, 계좌) %>%
         filter(자산군 != "외화자산") %>%
         mutate(
           자산군 = factor(자산군, levels = self$class_order),

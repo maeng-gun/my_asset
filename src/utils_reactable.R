@@ -69,6 +69,10 @@ render_rt <- function(df,
       col_args$format <- fmt_percent(2)
     }
 
+    if (col %in% int_cols || col %in% dec_cols || col %in% pct_cols || is.numeric(df[[col]])) {
+      col_args$align <- "right"
+    }
+
     if (col %in% sticky_cols) {
       col_args$sticky <- "left"
     }

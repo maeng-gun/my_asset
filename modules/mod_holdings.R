@@ -93,7 +93,8 @@ mod_holdings_server <- function(id, ma_v, menu_tabs) {
       df <- ma_v()$t_comm10
       render_rt(
         df,
-        int_cols = 5,
+        int_cols = 5:6,
+        pct_cols = 7,
         sticky_cols = names(df)[1:3]
       )
     })
