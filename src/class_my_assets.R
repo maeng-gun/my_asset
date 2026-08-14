@@ -527,6 +527,58 @@ MyAssets <- R6Class(
         ) %>%
         bind_rows(df6)
 
+      tryCatch(
+        {
+          holdings_df <- self$t_comm %>%
+            filter(!is.na(상품명) & 상품명 != "") %>%
+            mutate(across(where(is.factor), as.character)) %>%
+            group_by(자산군, 세부자산군, 세부자산군2, 상품명) %>%
+            summarise(
+              보유수량 = sum(보유수량, na.rm = TRUE),
+              장부금액 = sum(장부금액, na.rm = TRUE),
+              평가금액 = sum(평가금액, na.rm = TRUE),
+              .groups = "drop"
+            ) %>%
+            mutate(
+              평단가 = round(장부금액 / 보유수량, 0),
+              평단가 = replace(평단가, is.infinite(평단가) | is.nan(평단가), 0),
+              현재가 = round(평가금액 / 보유수량, 0),
+              현재가 = replace(현재가, is.infinite(현재가) | is.nan(현재가), 0),
+              평가손익 = round(평가금액 - 장부금액, 0),
+              평가수익률 = round(평가손익 / 장부금액 * 100, 2),
+              평가수익률 = replace(평가수익률, is.infinite(평가수익률) | is.nan(평가수익률), 0)
+            )
+
+          if (dbExistsTable(self$con, "holdings")) {
+            dbExecute(self$con, "DELETE FROM holdings")
+            if (nrow(holdings_df) > 0) {
+              dbWriteTable(self$con, "holdings", holdings_df, append = TRUE)
+            }
+          }
+
+          if (dbExistsTable(self$con, "asset_ratio")) {
+            dbExecute(self$con, "DELETE FROM asset_ratio")
+            asset_ratio_df <- holdings_df %>%
+              group_by(자산군, 세부자산군, 세부자산군2) %>%
+              summarise(
+                평가금액 = sum(평가금액, na.rm = TRUE),
+                .groups = "drop"
+              ) %>%
+              mutate(
+                비중 = round(평가금액 / sum(평가금액, na.rm = TRUE) * 100, 2),
+                비중 = replace_na(비중, 0),
+                비중 = replace(비중, is.infinite(비중) | is.nan(비중), 0)
+              )
+            if (nrow(asset_ratio_df) > 0) {
+              dbWriteTable(self$con, "asset_ratio", asset_ratio_df, append = TRUE)
+            }
+          }
+        },
+        error = function(e) {
+          warning("DB Sync Error (holdings / asset_ratio): ", e$message)
+        }
+      )
+
       self$t_comm2 <- df00 %>%
         select(
           계좌, 자산군, 세부자산군, 세부자산군2, 통화, 상품명, 보유수량,

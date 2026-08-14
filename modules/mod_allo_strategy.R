@@ -273,6 +273,7 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
     # --- 2.2 배분성과 ----
     allo_trigger <- reactiveVal(0)
     sel_base_month_rv <- reactiveVal(NULL)
+    raw_bm_data <- reactiveVal(NULL)
 
     observeEvent(input$allo_query, {
       req(input$base_month)
@@ -295,23 +296,34 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
       }, delay = 0.1)
     }, ignoreInit = TRUE)
 
-    raw_bm_data <- eventReactive(allo_trigger(), {
+    observeEvent(allo_trigger(), {
+      req(allo_trigger() > 0)
       req(sel_base_month_rv())
-      ma_obj <- ma_v()
 
-      res <- calc_benchmark_returns(
-        return_tbl    = ma_obj$read_obj("return"),
-        cash_in_out   = ma_obj$cash_in_out,
-        allo_table_df = ma_obj$read("allo_table"),
-        base_month    = sel_base_month_rv(),
-        today         = ma_obj$today
-      )
-      removeModal()
-      res
-    }, ignoreNULL = TRUE, ignoreInit = TRUE)
+      on.exit(removeModal(), add = TRUE)
+
+      tryCatch({
+        ma_obj <- ma_v()
+        res <- calc_benchmark_returns(
+          return_tbl    = ma_obj$read_obj("return"),
+          cash_in_out   = ma_obj$cash_in_out,
+          allo_table_df = ma_obj$read("allo_table"),
+          base_month    = sel_base_month_rv(),
+          today         = ma_obj$today
+        )
+        raw_bm_data(res)
+      }, error = function(e) {
+        show_alert(
+          title = "산출 오류",
+          text  = paste0("배분성과 데이터 산출 중 오류가 발생했습니다: ", e$message),
+          type  = "error"
+        )
+        raw_bm_data(NULL)
+      })
+    }, ignoreInit = TRUE)
 
     output$dynamic_boxes <- renderUI({
-      if (allo_trigger() == 0) {
+      if (is.null(raw_bm_data())) {
         return(
           div(
             class = "text-center mt-5 text-muted",
@@ -361,6 +373,7 @@ mod_allo_strategy_server <- function(id, pool, ma, ma_b, ma_v, sk_b, menu_tabs) 
     cols_pf <- c("기준일", "MyPF", "SAA", "TAA1", "TAA2")
 
     render_pf_echart <- function(df, cols, base_date) {
+      req(df, nrow(df) > 0)
       df |>
         filter(기준일 >= base_date) |>
         select(all_of(cols)) |>
